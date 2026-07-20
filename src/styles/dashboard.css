@@ -1,0 +1,53 @@
+body {
+  margin: 0;
+  background: #f4f8f5;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 24px;
+}
+
+.span-12 {
+  grid-column: span 12;
+}
+
+.span-8 {
+  grid-column: span 8;
+}
+
+.span-6 {
+  grid-column: span 6;
+}
+
+.span-4 {
+  grid-column: span 4;
+}
+
+.span-3 {
+  grid-column: span 3;
+}
+
+.card {
+  background: white;
+  border-radius: 22px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.06);
+}
+
+@media (max-width:1100px){
+
+.dashboard-grid{
+grid-template-columns:1fr;
+}
+
+.span-12,
+.span-8,
+.span-6,
+.span-4,
+.span-3{
+grid-column:span 1;
+}
+
+}
