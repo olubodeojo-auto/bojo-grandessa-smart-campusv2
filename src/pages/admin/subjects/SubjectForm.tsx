@@ -1,6 +1,8 @@
-import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createSubject, updateSubject } from "../../../services/subjectService";
 import type { Subject, SubjectAcademicLevel, SubjectDepartment, SubjectStatus } from "../../../types/subject";
+import FormField, { inputStyle } from "../../../components/forms/FormField";
+import Button from "../../../components/ui/Button";
 
 type Props = {
   mode: "add" | "edit";
@@ -96,32 +98,18 @@ export default function SubjectForm({ mode, subject, onClose, onSaved }: Props) 
     }
   }
 
-  const inputStyle: CSSProperties = {
-    width: "100%",
-    padding: "12px",
-    border: "1px solid #d1d5db",
-    borderRadius: "8px",
-    fontSize: "14px",
-    boxSizing: "border-box",
-  };
-
   return (
     <form onSubmit={save}>
-      <h2 id="subject-form-title" style={{ marginBottom: 20 }}>{mode === "edit" ? "Edit Subject" : "Create Subject"}</h2>
-
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 16 }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <span>Subject Name</span>
+        <FormField label="Subject Name">
           <input style={inputStyle} placeholder="Subject Name" value={form.subject_name} onChange={(event) => update("subject_name", event.target.value)} aria-label="Subject name" />
-        </label>
+        </FormField>
 
-        <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <span>Subject Code</span>
+        <FormField label="Subject Code">
           <input style={inputStyle} placeholder="Subject Code" value={form.subject_code} onChange={(event) => update("subject_code", event.target.value)} aria-label="Subject code" />
-        </label>
+        </FormField>
 
-        <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <span>Department</span>
+        <FormField label="Department">
           <select style={inputStyle} value={form.department} onChange={(event) => update("department", event.target.value as SubjectDepartment)} aria-label="Subject department">
             <option value="General">General</option>
             <option value="Science">Science</option>
@@ -132,10 +120,9 @@ export default function SubjectForm({ mode, subject, onClose, onSaved }: Props) 
             <option value="ICT">ICT</option>
             <option value="Creative Arts">Creative Arts</option>
           </select>
-        </label>
+        </FormField>
 
-        <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <span>Academic Level</span>
+        <FormField label="Academic Level">
           <select style={inputStyle} value={form.academic_level} onChange={(event) => update("academic_level", event.target.value as SubjectAcademicLevel)} aria-label="Academic level">
             <option value="Creche">Creche</option>
             <option value="Nursery">Nursery</option>
@@ -143,29 +130,27 @@ export default function SubjectForm({ mode, subject, onClose, onSaved }: Props) 
             <option value="Junior Secondary">Junior Secondary</option>
             <option value="Senior Secondary">Senior Secondary</option>
           </select>
-        </label>
+        </FormField>
 
-        <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <span>Status</span>
+        <FormField label="Status">
           <select style={inputStyle} value={form.status} onChange={(event) => update("status", event.target.value as SubjectStatus)} aria-label="Subject status">
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
           </select>
-        </label>
+        </FormField>
 
-        <label style={{ display: "flex", flexDirection: "column", gap: 8, gridColumn: "1 / -1" }}>
-          <span>Description</span>
+        <FormField label="Description" fullWidth>
           <textarea style={{ ...inputStyle, minHeight: 96, resize: "vertical" }} placeholder="Description" value={form.description} onChange={(event) => update("description", event.target.value)} aria-label="Subject description" />
-        </label>
+        </FormField>
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 24 }}>
-        <button type="button" onClick={onClose}>
+        <Button type="button" variant="secondary" onClick={onClose}>
           Cancel
-        </button>
-        <button type="submit" disabled={loading}>
+        </Button>
+        <Button type="submit" disabled={loading}>
           {loading ? "Saving..." : mode === "edit" ? "Save Changes" : "Save Subject"}
-        </button>
+        </Button>
       </div>
     </form>
   );

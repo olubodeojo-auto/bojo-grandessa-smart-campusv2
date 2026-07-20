@@ -7,12 +7,14 @@ type AppLayoutProps = {
 };
 
 export default function AppLayout({ children }: AppLayoutProps) {
+  const theme = grandessaIdentity.branding;
+
   return (
     <main
       style={{
         minHeight: "100vh",
         background:
-          "linear-gradient(180deg, #EAF8EA 0%, #F8FBF7 40%, #FFFFFF 100%)",
+          `linear-gradient(180deg, ${theme.backgroundColor} 0%, #F8FBF7 40%, #FFFFFF 100%)`,
         position: "relative",
         overflow: "hidden",
         padding: "40px 20px",

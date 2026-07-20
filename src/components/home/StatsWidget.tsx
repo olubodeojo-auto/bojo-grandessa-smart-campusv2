@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Users,
   GraduationCap,
@@ -11,7 +11,7 @@ import Card from "../ui/Card";
 interface StatItem {
   title: string;
   value: string;
-  icon: JSX.Element;
+  icon: ReactNode;
 }
 
 interface StatsState {
@@ -101,6 +101,22 @@ function isPresentValue(value: unknown): boolean {
   return false;
 }
 
+async function fetchTableCount(table: string): Promise<{ count: number | null; error: Error | null }> {
+  try {
+    const { count, error } = await supabase.from(table).select("*", { count: "exact", head: true });
+
+    return {
+      count: count ?? null,
+      error: error ? new Error(error.message) : null,
+    };
+  } catch (error) {
+    return {
+      count: null,
+      error: error instanceof Error ? error : new Error("Unable to load count"),
+    };
+  }
+}
+
 async function fetchAttendancePercentage(): Promise<number | null> {
   try {
     const { data, error } = await supabase
@@ -149,21 +165,9 @@ export default function StatsWidget() {
       try {
         const [studentsResult, teachersResult, classesResult, attendanceResult] =
           await Promise.all([
-            supabase
-              .from("students")
-              .select("*", { count: "exact", head: true })
-              .then(({ count, error }) => ({ count: count ?? null, error }))
-              .catch((error: Error) => ({ count: null, error })),
-            supabase
-              .from("teachers")
-              .select("*", { count: "exact", head: true })
-              .then(({ count, error }) => ({ count: count ?? null, error }))
-              .catch((error: Error) => ({ count: null, error })),
-            supabase
-              .from("classes")
-              .select("*", { count: "exact", head: true })
-              .then(({ count, error }) => ({ count: count ?? null, error }))
-              .catch((error: Error) => ({ count: null, error })),
+            fetchTableCount("students"),
+            fetchTableCount("teachers"),
+            fetchTableCount("classes"),
             fetchAttendancePercentage(),
           ]);
 

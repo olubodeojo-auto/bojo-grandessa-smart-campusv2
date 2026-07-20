@@ -2,32 +2,15 @@ import { motion } from "framer-motion";
 import { BookOpen } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import Button from "../../components/ui/Button";
-import PageHeader from "../../components/layout/PageHeader";
+import Button from "../../../components/ui/Button";
+import PageHeader from "../../../components/layout/PageHeader";
+import AppModal from "../../../components/modals/AppModal";
 import { archiveSubject, getSubjects } from "../../../services/subjectService";
 import type { Subject } from "../../../types/subject";
 import SubjectFilters from "./SubjectFilters";
 import SubjectForm from "./SubjectForm";
 import SubjectProfile from "./SubjectProfile";
 import SubjectTable from "./SubjectTable";
-
-const MODAL_OVERLAY_STYLE = {
-  position: "fixed" as const,
-  inset: 0,
-  background: "rgba(0,0,0,.45)",
-  display: "flex" as const,
-  justifyContent: "center" as const,
-  alignItems: "center" as const,
-  zIndex: 999,
-};
-
-const MODAL_PANEL_STYLE = {
-  width: 760,
-  maxWidth: "95%",
-  background: "#fff",
-  borderRadius: 16,
-  padding: 24,
-};
 
 export default function SubjectsPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -148,24 +131,13 @@ export default function SubjectsPage() {
         </div>
       </motion.div>
 
-      {isFormOpen ? (
-        <div role="dialog" aria-modal="true" aria-labelledby="subject-form-title" style={MODAL_OVERLAY_STYLE}>
-          <div style={MODAL_PANEL_STYLE}>
-            <SubjectForm mode={formMode} subject={selectedSubject} onClose={closeFormModal} onSaved={loadSubjects} />
-          </div>
-        </div>
-      ) : null}
+      <AppModal open={isFormOpen} title={formMode === "edit" ? "Edit Subject" : "Create Subject"} size="lg" onClose={closeFormModal}>
+        <SubjectForm mode={formMode} subject={selectedSubject} onClose={closeFormModal} onSaved={loadSubjects} />
+      </AppModal>
 
-      {isProfileOpen && selectedSubject ? (
-        <div role="dialog" aria-modal="true" aria-labelledby="subject-profile-title" style={MODAL_OVERLAY_STYLE}>
-          <div style={MODAL_PANEL_STYLE}>
-            <SubjectProfile subject={selectedSubject} />
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-              <button type="button" onClick={closeProfileModal}>Close</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <AppModal open={isProfileOpen && Boolean(selectedSubject)} title="Subject Details" size="md" onClose={closeProfileModal} footer={<Button type="button" onClick={closeProfileModal}>Close</Button>}>
+        <SubjectProfile subject={selectedSubject} />
+      </AppModal>
     </>
   );
 }

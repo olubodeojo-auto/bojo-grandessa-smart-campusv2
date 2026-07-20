@@ -1,4 +1,5 @@
 import { Search } from "lucide-react";
+import SectionCard from "../../../components/ui/SectionCard";
 
 interface SubjectFiltersProps {
   search: string;
@@ -45,7 +46,7 @@ export default function SubjectFilters({
   onStatusChange,
 }: SubjectFiltersProps) {
   return (
-    <div className="card" style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+    <SectionCard style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
       <div style={{ flex: 1, minWidth: 260, display: "flex", alignItems: "center", gap: 10, border: "1px solid #E5E7EB", borderRadius: 12, padding: "12px 16px" }}>
         <Search size={18} color="#6B7280" />
         <input
@@ -81,6 +82,6 @@ export default function SubjectFilters({
           </option>
         ))}
       </select>
-    </div>
+    </SectionCard>
   );
 }
