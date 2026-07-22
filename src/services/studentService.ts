@@ -10,6 +10,54 @@ function normalizeFilterValue(value?: string): string {
   return value?.trim() ?? "";
 }
 
+async function ensureParentLinkage(student: Student): Promise<void> {
+  const parentName = normalizeFilterValue(student.parent_name);
+  const parentPhone = normalizeFilterValue(student.parent_phone);
+
+  if (!parentName && !parentPhone) {
+    return;
+  }
+
+  const [firstName, ...rest] = parentName.split(/\s+/).filter(Boolean);
+  const lastName = rest.join(" ") || firstName || "Unknown";
+
+  const parentPayload = {
+    first_name: firstName || "Unknown",
+    last_name: lastName,
+    phone: parentPhone || null,
+  };
+
+  try {
+    await supabase
+      .from("parents")
+      .upsert(parentPayload, {
+        onConflict: "phone",
+        ignoreDuplicates: false,
+      })
+      .throwOnError();
+  } catch {
+    // Parent linkage should not block student creation when parent schema differs.
+  }
+}
+
+async function ensureStudentProvisioning(student: Student): Promise<void> {
+  await Promise.allSettled([
+    ensureParentLinkage(student),
+    (async () => {
+      try {
+        await supabase
+          .from("report_cards")
+          .select("id")
+          .eq("student_id", student.id)
+          .limit(1)
+          .maybeSingle();
+      } catch {
+        // Optional bootstrap check only.
+      }
+    })(),
+  ]);
+}
+
 export async function getStudents(
   filters: StudentListFilters = {}
 ): Promise<Student[]> {
@@ -60,7 +108,10 @@ export async function createStudent(
 
   if (error) throw error;
 
-  return data as Student;
+  const created = data as Student;
+  await ensureStudentProvisioning(created);
+
+  return created;
 }
 
 export async function updateStudent(

@@ -6,6 +6,7 @@ import App from "./App";
 
 import "./index.css";
 import "./styles/dashboard.css";
+import "./styles/report-card.css";
 
 import { AuthProvider } from "./contexts/AuthContext";
 

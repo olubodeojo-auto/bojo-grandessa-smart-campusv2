@@ -17,18 +17,20 @@ import {
 import { NavLink } from "react-router-dom";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/admin" },
-  { icon: Users, label: "Students", path: "/admin/students" },
-  { icon: GraduationCap, label: "Teachers", path: "/admin/teachers" },
-  { icon: School, label: "Classes", path: "/admin/classes" },
-  { icon: BookOpen, label: "Subjects", path: "/admin/subjects" },
-  { icon: ClipboardCheck, label: "Attendance", path: "/admin/attendance" },
-  { icon: FileSpreadsheet, label: "Results", path: "/admin/results" },
-  { icon: House, label: "Parents", path: "/admin/parents" },
-  { icon: Megaphone, label: "Announcements", path: "/admin/announcements" },
-  { icon: Image, label: "Gallery", path: "/admin/gallery" },
-  { icon: Settings, label: "Settings", path: "/admin/settings" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/admin", implemented: true },
+  { icon: Users, label: "Students", path: "/admin/students", implemented: true },
+  { icon: GraduationCap, label: "Teachers", path: "/admin/teachers", implemented: true },
+  { icon: School, label: "Classes", path: "/admin/classes", implemented: true },
+  { icon: BookOpen, label: "Subjects", path: "/admin/subjects", implemented: true },
+  { icon: ClipboardCheck, label: "Attendance", path: "/admin/attendance", implemented: false },
+  { icon: FileSpreadsheet, label: "Results", path: "/admin/results", implemented: true },
+  { icon: House, label: "Parents", path: "/admin/parents", implemented: false },
+  { icon: Megaphone, label: "Announcements", path: "/admin/announcements", implemented: false },
+  { icon: Image, label: "Gallery", path: "/admin/gallery", implemented: false },
+  { icon: Settings, label: "Settings", path: "/admin/settings", implemented: false },
 ];
+
+const visibleMenuItems = menuItems.filter((item) => item.implemented);
 
 export default function Sidebar() {
   return (
@@ -92,7 +94,7 @@ export default function Sidebar() {
           flex: 1,
         }}
       >
-        {menuItems.map((item) => {
+        {visibleMenuItems.map((item) => {
           const Icon = item.icon;
 
           return (
