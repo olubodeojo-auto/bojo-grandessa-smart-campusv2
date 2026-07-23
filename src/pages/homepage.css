@@ -378,6 +378,78 @@
   color: #fff;
 }
 
+.public-footer {
+  background: #0f2f1e;
+  color: #dce5de;
+}
+
+.public-footer__grid {
+  padding: 42px 0 30px;
+  display: grid;
+  gap: 20px;
+}
+
+.public-footer h2,
+.public-footer h3 {
+  margin: 0 0 10px;
+  color: #ffffff;
+}
+
+.public-footer h2 {
+  font-size: 1.2rem;
+}
+
+.public-footer h3 {
+  font-size: 1rem;
+}
+
+.public-footer p {
+  margin: 0 0 8px;
+  line-height: 1.65;
+}
+
+.public-footer__motto {
+  color: #f3dc99;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.public-footer a {
+  color: #eaf4ed;
+  text-decoration: none;
+}
+
+.public-footer a:hover,
+.public-footer a:focus-visible {
+  color: #f3dc99;
+}
+
+.public-footer__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 7px;
+}
+
+.public-footer__bottom {
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  background: #0b2517;
+}
+
+.public-footer__bottom-inner {
+  padding: 13px 0 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.public-footer__bottom-inner p {
+  margin: 0;
+  color: #c8d6cc;
+  font-size: 0.88rem;
+}
+
 .homepage-whatsapp-fab {
   position: fixed;
   right: 16px;
@@ -453,6 +525,17 @@
   .homepage-contact-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .public-footer__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px;
+  }
+
+  .public-footer__bottom-inner {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
 }
 
 @media (min-width: 980px) {
@@ -468,5 +551,10 @@
 
   .homepage-gallery {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .public-footer__grid {
+    grid-template-columns: 1.4fr 0.8fr 0.95fr 0.8fr 1.2fr 0.7fr;
+    gap: 20px;
   }
 }

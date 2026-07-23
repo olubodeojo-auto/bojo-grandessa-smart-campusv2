@@ -1,11 +1,11 @@
 import FeatureCard from "../components/homepage/FeatureCard";
+import PublicFooter from "../components/homepage/PublicFooter";
+import PublicNavigation from "../components/homepage/PublicNavigation";
 import PublicWhatsAppButton from "../components/homepage/PublicWhatsAppButton";
 import SectionHeading from "../components/homepage/SectionHeading";
 import "./homepage.css";
 
 const assetsBase = "/client-resources";
-
-const logoPath = `${assetsBase}/branding/grandessa-logo-primary.png`;
 
 const heroImage = `${assetsBase}/photos/homepage/hero-homepage-grandessa-school.jpg`;
 const storyImage = `${assetsBase}/photos/classroom/teacher-guiding-student.jpg`;
@@ -62,29 +62,7 @@ const lifeHighlights = [
 function Home() {
     return (
         <main className="homepage">
-            <nav className="homepage-nav" aria-label="Primary">
-                <div className="homepage-container homepage-nav__inner">
-                    <a href="/" className="homepage-brand">
-                        <img src={logoPath} alt="Grandessa School logo" loading="eager" />
-                        <span className="homepage-brand__text">
-                            <span className="homepage-brand__name">Grandessa School</span>
-                            <span className="homepage-brand__motto">Learn To Be Great</span>
-                        </span>
-                    </a>
-
-                    <ul className="homepage-nav__links">
-                        <li><a href="/">Home</a></li>
-                        <li><a href="/about">About</a></li>
-                        <li><a href="#why-grandessa">Why Grandessa</a></li>
-                        <li><a href="#our-story">Our Story</a></li>
-                        <li><a href="#learning-experience">Learning Experience</a></li>
-                        <li><a href="/#admissions">Admissions</a></li>
-                        <li><a href="/#contact">Contact</a></li>
-                    </ul>
-
-                    <a className="homepage-nav__cta" href="/#admissions">Apply for Admission</a>
-                </div>
-            </nav>
+            <PublicNavigation active="home" />
 
             <section className="homepage-hero" id="top">
                 <div className="homepage-container homepage-hero__grid">
@@ -101,8 +79,8 @@ function Home() {
                             teaching, meaningful learning experiences and strong partnerships with parents.
                         </p>
                         <div className="homepage-hero__buttons">
-                            <a className="homepage-button homepage-button--primary" href="#admissions">Apply for Admission</a>
-                            <a className="homepage-button homepage-button--secondary" href="#contact">Book a School Visit</a>
+                            <a className="homepage-button homepage-button--primary" href="/admissions">Apply for Admission</a>
+                            <a className="homepage-button homepage-button--secondary" href="/contact">Book a School Visit</a>
                         </div>
                     </article>
 
@@ -220,8 +198,8 @@ function Home() {
                             description="Our Admissions Team is available to guide you through every stage of the enrolment process."
                         />
                         <div className="homepage-hero__buttons">
-                            <a className="homepage-button homepage-button--primary" href="#contact">Apply for Admission</a>
-                            <a className="homepage-button homepage-button--secondary" href="#contact">Contact Admissions</a>
+                            <a className="homepage-button homepage-button--primary" href="/admissions">Apply for Admission</a>
+                            <a className="homepage-button homepage-button--secondary" href="/contact">Contact Admissions</a>
                         </div>
                     </article>
 
@@ -263,13 +241,7 @@ function Home() {
                 </div>
             </section>
 
-            <footer className="homepage-footer">
-                <div className="homepage-container">
-                    <p><strong>Give Your Child the Best Start</strong></p>
-                    <p>Join a community where every child is inspired to learn, grow and succeed.</p>
-                    <p><strong>Grandessa School</strong> · Learn To Be Great</p>
-                </div>
-            </footer>
+            <PublicFooter />
 
             <PublicWhatsAppButton />
         </main>

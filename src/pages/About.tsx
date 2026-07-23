@@ -1,12 +1,12 @@
 import FeatureCard from "../components/homepage/FeatureCard";
+import PublicFooter from "../components/homepage/PublicFooter";
+import PublicNavigation from "../components/homepage/PublicNavigation";
 import PublicWhatsAppButton from "../components/homepage/PublicWhatsAppButton";
 import SectionHeading from "../components/homepage/SectionHeading";
 import "./homepage.css";
 import "./about.css";
 
 const assetsBase = "/client-resources";
-
-const logoPath = `${assetsBase}/branding/grandessa-logo-primary.png`;
 const heroImage = `${assetsBase}/photos/homepage/hero-homepage-grandessa-school.jpg`;
 const storyImage = `${assetsBase}/photos/classroom/teacher-guiding-student.jpg`;
 const leadershipImage = `${assetsBase}/photos/staff/proprietress-with-graduate.jpg`;
@@ -92,26 +92,7 @@ const philosophyPoints = [
 function About() {
   return (
     <main className="about-page">
-      <nav className="homepage-nav" aria-label="Primary">
-        <div className="homepage-container homepage-nav__inner">
-          <a href="/" className="homepage-brand">
-            <img src={logoPath} alt="Grandessa School logo" loading="eager" />
-            <span className="homepage-brand__text">
-              <span className="homepage-brand__name">Grandessa School</span>
-              <span className="homepage-brand__motto">Learn To Be Great</span>
-            </span>
-          </a>
-
-          <ul className="homepage-nav__links">
-            <li><a href="/">Home</a></li>
-            <li><a href="/about">About</a></li>
-            <li><a href="/#admissions">Admissions</a></li>
-            <li><a href="/#contact">Contact</a></li>
-          </ul>
-
-          <a className="homepage-nav__cta" href="/#admissions">Apply for Admission</a>
-        </div>
-      </nav>
+      <PublicNavigation active="about" />
 
       <section className="homepage-section about-hero" id="top">
         <div className="homepage-container about-hero__grid">
@@ -285,15 +266,17 @@ function About() {
           />
 
           <div className="homepage-hero__buttons about-cta__buttons">
-            <a className="homepage-button homepage-button--primary" href="/#admissions">
+            <a className="homepage-button homepage-button--primary" href="/admissions">
               Apply for Admission
             </a>
-            <a className="homepage-button homepage-button--secondary" href="/#contact">
+            <a className="homepage-button homepage-button--secondary" href="/contact">
               Book a School Visit
             </a>
           </div>
         </div>
       </section>
+
+      <PublicFooter />
 
       <PublicWhatsAppButton />
     </main>
