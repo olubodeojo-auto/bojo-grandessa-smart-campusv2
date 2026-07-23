@@ -158,7 +158,7 @@ export default function Admissions() {
         <div className="homepage-container admissions-cta">
           <div>
             <SectionHeading
-              eyebrow="Call To Action"
+              eyebrow="Ready to Begin?"
               title="Ready to apply? Speak with our Admissions Team today."
               description="We are available to guide you through every stage of the enrolment process."
             />

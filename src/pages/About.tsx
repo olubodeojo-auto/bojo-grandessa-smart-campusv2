@@ -259,7 +259,7 @@ function About() {
       <section className="homepage-section" id="about-cta">
         <div className="homepage-container about-cta">
           <SectionHeading
-            eyebrow="Call To Action"
+            eyebrow="Let's Get Started"
             title="Visit Grandessa School and experience a caring environment built to help every child thrive."
             description="Our admissions team is ready to guide you through the next step for your family."
             align="center"

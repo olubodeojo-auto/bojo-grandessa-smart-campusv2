@@ -87,7 +87,7 @@ export default function Contact() {
         </div>
       </section>
 
-      <section className="homepage-section" id="contact-form">
+      <section className="homepage-section" id="why-visit-grandessa">
         <div className="homepage-container">
           <SectionHeading
             eyebrow="Why Visit Grandessa?"
