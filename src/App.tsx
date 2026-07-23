@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 
 import Home from "./pages/Home";
+import About from "./pages/About";
 import LoginPage from "./pages/auth/LoginPage";
 
 import ProtectedRoute from "./components/auth/ProtectedRoute";
@@ -20,6 +21,7 @@ export default function App() {
     <Routes>
       {/* Public Pages */}
       <Route path="/" element={<Home />} />
+      <Route path="/about" element={<About />} />
       <Route path="/login" element={<LoginPage />} />
 
       {/* Admin Dashboard */}

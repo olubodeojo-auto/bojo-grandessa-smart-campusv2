@@ -1,0 +1,149 @@
+.about-page {
+  color: var(--grandessa-ink);
+  background: linear-gradient(180deg, #f5f8f2 0%, #ffffff 38%);
+}
+
+.about-hero {
+  padding-top: 56px;
+}
+
+.about-hero__grid {
+  display: grid;
+  gap: 26px;
+  align-items: center;
+}
+
+.about-hero__copy h1 {
+  margin: 8px 0 12px;
+  color: #102f1d;
+  font-size: clamp(2rem, 5.5vw, 3.5rem);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+}
+
+.about-hero__copy p {
+  margin: 0 0 12px;
+  color: var(--grandessa-muted);
+  font-size: 1.03rem;
+  line-height: 1.75;
+}
+
+.about-hero__image {
+  margin: 0;
+  overflow: hidden;
+  border-radius: 24px;
+  box-shadow: 0 20px 45px rgba(20, 47, 30, 0.2);
+}
+
+.about-hero__image img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.about-story__layout {
+  display: grid;
+  gap: 18px;
+}
+
+.about-story__image {
+  margin: 0;
+}
+
+.about-story__cards {
+  display: grid;
+  gap: 14px;
+}
+
+.about-card-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.about-card-grid--five,
+.about-card-grid--parents,
+.about-card-grid--philosophy {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.about-philosophy {
+  display: grid;
+  gap: 14px;
+}
+
+.about-leadership-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.about-leadership-card {
+  display: grid;
+  gap: 14px;
+}
+
+.about-leadership-card__image {
+  margin: 0;
+}
+
+.about-leadership-card h3 {
+  margin: 0;
+  font-size: 1.08rem;
+}
+
+.about-leadership-card p {
+  margin: 0;
+  color: var(--grandessa-muted);
+  line-height: 1.7;
+}
+
+.about-cta {
+  text-align: center;
+}
+
+.about-cta__buttons {
+  justify-content: center;
+}
+
+@media (min-width: 760px) {
+  .about-hero__grid {
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: 34px;
+  }
+
+  .about-story__layout {
+    grid-template-columns: 0.9fr 1.1fr;
+    align-items: start;
+    gap: 22px;
+  }
+
+  .about-card-grid--five,
+  .about-card-grid--parents {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .about-card-grid--philosophy {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .about-leadership-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 980px) {
+  .about-hero {
+    padding-top: 68px;
+  }
+
+  .about-card-grid--five {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .about-card-grid--parents {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .about-card-grid--philosophy {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

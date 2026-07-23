@@ -64,7 +64,7 @@ function Home() {
         <main className="homepage">
             <nav className="homepage-nav" aria-label="Primary">
                 <div className="homepage-container homepage-nav__inner">
-                    <a href="#top" className="homepage-brand">
+                    <a href="/" className="homepage-brand">
                         <img src={logoPath} alt="Grandessa School logo" loading="eager" />
                         <span className="homepage-brand__text">
                             <span className="homepage-brand__name">Grandessa School</span>
@@ -73,14 +73,16 @@ function Home() {
                     </a>
 
                     <ul className="homepage-nav__links">
+                        <li><a href="/">Home</a></li>
+                        <li><a href="/about">About</a></li>
                         <li><a href="#why-grandessa">Why Grandessa</a></li>
                         <li><a href="#our-story">Our Story</a></li>
                         <li><a href="#learning-experience">Learning Experience</a></li>
-                        <li><a href="#admissions">Admissions</a></li>
-                        <li><a href="#contact">Contact</a></li>
+                        <li><a href="/#admissions">Admissions</a></li>
+                        <li><a href="/#contact">Contact</a></li>
                     </ul>
 
-                    <a className="homepage-nav__cta" href="#admissions">Apply for Admission</a>
+                    <a className="homepage-nav__cta" href="/#admissions">Apply for Admission</a>
                 </div>
             </nav>
 
