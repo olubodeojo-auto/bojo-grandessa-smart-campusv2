@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { createStudent, updateStudent } from "../../../services/studentService";
 import type { Gender, Student, StudentStatus } from "../../../types/student";

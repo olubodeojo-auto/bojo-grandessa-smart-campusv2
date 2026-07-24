@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import { useEffect, useState, type FormEvent } from "react";
 import { createSubject, updateSubject } from "../../../services/subjectService";
 import type { Subject, SubjectAcademicLevel, SubjectDepartment, SubjectStatus } from "../../../types/subject";

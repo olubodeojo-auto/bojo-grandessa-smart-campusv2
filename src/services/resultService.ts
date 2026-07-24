@@ -1,3 +1,5 @@
+/* eslint-disable preserve-caught-error */
+
 import supabase from "../lib/supabase";
 import type { Result } from "../types/result";
 

@@ -6,6 +6,9 @@ import Admissions from "./pages/Admissions";
 import Contact from "./pages/Contact";
 import FAQ from "./pages/FAQ";
 import LoginPage from "./pages/auth/LoginPage";
+import AdministratorPreviewLayout from "./components/adminPreview/AdministratorPreviewLayout";
+import AdministratorPreviewModulePage from "./components/adminPreview/AdministratorPreviewModulePage";
+import AdministratorPreviewDashboard from "./pages/admin-preview/AdministratorPreviewDashboard";
 
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import AppLayout from "./components/layout/AppLayout";
@@ -29,6 +32,11 @@ export default function App() {
       <Route path="/contact" element={<Contact />} />
       <Route path="/faq" element={<FAQ />} />
       <Route path="/login" element={<LoginPage />} />
+
+      <Route path="/administrator-preview" element={<AdministratorPreviewLayout />}>
+        <Route index element={<AdministratorPreviewDashboard />} />
+        <Route path=":moduleId" element={<AdministratorPreviewModulePage />} />
+      </Route>
 
       {/* Admin Dashboard */}
       <Route

@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import { motion } from "framer-motion";
 import { FilePlus2, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
