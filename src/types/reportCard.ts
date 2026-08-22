@@ -22,6 +22,7 @@ export interface SubjectReportLine {
   totalScore: number;
   grade: string;
   teacherRemark: string;
+  teacherName?: string;
 }
 
 export interface AttendanceSummary {

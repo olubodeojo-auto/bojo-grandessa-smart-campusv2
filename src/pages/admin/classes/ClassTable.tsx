@@ -34,9 +34,6 @@ export default function ClassTable({ classes, loading, onView, onEdit, onArchive
         <thead>
           <tr>
             <th style={th}>Class</th>
-            <th style={th}>Section</th>
-            <th style={th}>Capacity</th>
-            <th style={th}>Class Teacher</th>
             <th style={th}>Status</th>
             <th style={th}>Actions</th>
           </tr>
@@ -46,9 +43,6 @@ export default function ClassTable({ classes, loading, onView, onEdit, onArchive
           {classes.map((schoolClass) => (
             <tr key={schoolClass.id}>
               <td style={td}>{schoolClass.class_name}</td>
-              <td style={td}>{schoolClass.section ?? "—"}</td>
-              <td style={td}>{schoolClass.capacity}</td>
-              <td style={td}>{schoolClass.class_teacher ?? "—"}</td>
               <td style={td}>{schoolClass.status}</td>
               <td style={td}>
                 <div style={{ display: "flex", gap: 10 }}>

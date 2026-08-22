@@ -7,7 +7,6 @@ import { getResults } from "./resultService";
 import { getAcademicCalendarByYear, getSchoolSettings } from "./schoolSettingsService";
 import { getStudents } from "./studentService";
 import { getSubjects } from "./subjectService";
-import { getTeachers } from "./teacherService";
 import { computeTotal, gradeFromTotal, remarkFromGrade } from "../utils/resultCalculations";
 import { resolveTemplateForClass } from "./reportTemplateEngine";
 import type { ReportCardData, ReportHistoryBySession, ReportHistoryItem, ReportTerm, SubjectReportLine } from "../types/reportCard";
@@ -27,7 +26,6 @@ type ReportDependencies = {
   students: Awaited<ReturnType<typeof getStudents>>;
   classes: Awaited<ReturnType<typeof getClasses>>;
   subjects: Awaited<ReturnType<typeof getSubjects>>;
-  teachers: Awaited<ReturnType<typeof getTeachers>>;
   results: Awaited<ReturnType<typeof getResults>>;
 };
 
@@ -39,13 +37,11 @@ function loadReportDependencies(): Promise<ReportDependencies> {
       getStudents(),
       getClasses(),
       getSubjects(),
-      getTeachers(),
       getResults(),
-    ]).then(([students, classes, subjects, teachers, results]) => ({
+    ]).then(([students, classes, subjects, results]) => ({
       students,
       classes,
       subjects,
-      teachers,
       results,
     }));
   }
@@ -61,14 +57,14 @@ function normalizeTerm(term: string): ReportTerm {
   return "First";
 }
 
-function classLabel(result: Result, classMap: Map<string, { class_name: string; section: string | null }>): string {
-  const value = classMap.get(result.class_id);
+function classLabel(result: Result, classMap: Map<string, { class_name: string }>): string {
+  const value = result.class_id ? classMap.get(result.class_id) : undefined;
 
   if (!value) {
-    return "Unknown Class";
+    return result.class_name?.trim() || "Unknown Class";
   }
 
-  return value.section ? `${value.class_name} - ${value.section}` : value.class_name;
+  return value.class_name;
 }
 
 function inTermWindow(dateText: string, termConfig: { startDate: string; endDate: string }): boolean {
@@ -142,7 +138,7 @@ async function getReportCardRecord(
 
 export async function getReportHistoryByStudent(studentId: string): Promise<ReportHistoryBySession[]> {
   const { results: allResults, classes } = await loadReportDependencies();
-  const classMap = new Map(classes.map((item) => [item.id, { class_name: item.class_name, section: item.section }]));
+  const classMap = new Map(classes.map((item) => [item.id, { class_name: item.class_name }]));
 
   const rows = allResults
     .filter((result) => result.student_id === studentId)
@@ -160,7 +156,7 @@ export async function getReportHistoryByStudent(studentId: string): Promise<Repo
         acc.set(key, {
           academicYear: row.academic_year,
           term: normalizeTerm(row.term),
-          classId: row.class_id,
+          classId: row.class_id ?? row.class_name ?? "",
           className: classLabel(row, classMap),
           resultCount: 1,
           publishedCount: row.status === "Published" ? 1 : 0,
@@ -219,9 +215,13 @@ export async function buildStudentReportCard(
   const classById = new Map(classes.map((item) => [item.id, item]));
   const subjectById = new Map(subjects.map((item) => [item.id, item]));
 
-  const classId = scopedResults[0].class_id;
-  const classEntity = classById.get(classId);
-  const className = classEntity ? `${classEntity.class_name}${classEntity.section ? ` - ${classEntity.section}` : ""}` : student.class_name ?? "Unknown Class";
+  const classId = scopedResults[0]?.class_id ?? "";
+  const classEntity = classId ? classById.get(classId) : undefined;
+  const resultClassName = scopedResults.find((result) => {
+    const value = result.class_name?.trim();
+    return value && value.toLowerCase() !== "unknown" && value.toLowerCase() !== "unknown class";
+  })?.class_name?.trim();
+  const className = classEntity?.class_name?.trim() || student.class_name?.trim() || resultClassName || "";
   const reportCardRecord = await getReportCardRecord(studentId, academicYear, term, classId);
 
   const cohortRows = allResults.filter(
@@ -230,18 +230,19 @@ export async function buildStudentReportCard(
 
   const lines: SubjectReportLine[] = scopedResults
     .map((result) => {
-      const subject = subjectById.get(result.subject_id);
+      const subject = result.subject_id ? subjectById.get(result.subject_id) : undefined;
 
       return {
         resultId: result.id,
-        subjectId: result.subject_id,
-        subjectName: subject?.subject_name ?? "Unknown Subject",
+        subjectId: result.subject_id ?? result.subject_name ?? "",
+        subjectName: subject?.subject_name ?? result.subject_name ?? "Unknown Subject",
         subjectCode: subject?.subject_code ?? "",
         continuousAssessment: result.continuous_assessment,
         examination: result.examination,
         totalScore: result.total_score,
         grade: result.grade,
         teacherRemark: result.remark,
+        teacherName: result.teacher_name,
       };
     })
     .sort((a, b) => a.subjectName.localeCompare(b.subjectName));

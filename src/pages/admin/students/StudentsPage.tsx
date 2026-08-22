@@ -188,11 +188,18 @@ export default function StudentsPage() {
         >
           <div
             style={{
-              width: 700,
-              maxWidth: "95%",
+              width: 760,
+              maxWidth: "92vw",
+              maxHeight: "90vh",
+              height: "auto",
               background: "#fff",
               borderRadius: 16,
               padding: 24,
+              boxSizing: "border-box",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
             }}
           >
             <StudentForm

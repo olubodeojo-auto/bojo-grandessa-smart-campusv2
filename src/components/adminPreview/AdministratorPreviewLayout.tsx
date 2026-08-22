@@ -1,8 +1,7 @@
 import { Bell, ChevronDown, Menu, Search, X } from "lucide-react";
 import { type CSSProperties, useMemo, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
-
-import { previewNavigation } from "../../data/administratorPreview";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useAuthContext } from "../../contexts/AuthContext";
 import "../../styles/admin-preview.css";
 
 const activeLinkStyle: CSSProperties = {
@@ -14,19 +13,27 @@ const activeLinkStyle: CSSProperties = {
 export default function AdministratorPreviewLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { signOut } = useAuthContext();
 
-  const currentItem = useMemo(
-    () => previewNavigation.find((item) => item.path === location.pathname) ?? previewNavigation[0],
-    [location.pathname]
-  );
+  const adminNavigation = [
+    { key: "dashboard", label: "Dashboard", path: "/admin", searchPlaceholder: "Search dashboard" },
+    { key: "students", label: "Students", path: "/admin/students", searchPlaceholder: "Search students" },
+    { key: "results", label: "Results", path: "/admin/results", searchPlaceholder: "Search results" },
+    { key: "gallery", label: "Gallery", path: "/admin/gallery", searchPlaceholder: "Search gallery" },
+    { key: "announcements", label: "Announcements", path: "/admin/announcements", searchPlaceholder: "Search announcements" },
+  ];
+
+  const currentItem = useMemo(() => adminNavigation.find((item) => item.path === location.pathname) ?? adminNavigation[0], [location.pathname]);
 
   const breadcrumbItems = useMemo(() => {
-    if (currentItem.key === "dashboard") {
-      return ["Administrator Preview", "Dashboard"];
-    }
-
-    return ["Administrator Preview", currentItem.label];
+    return ["Administrator", currentItem.label];
   }, [currentItem]);
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
 
   return (
     <div className="admin-preview-shell">
@@ -36,7 +43,7 @@ export default function AdministratorPreviewLayout() {
             <div className="admin-preview-sidebar__brand-mark">GS</div>
             <div>
               <p className="admin-preview-sidebar__eyebrow">Grandessa Smart Campus</p>
-              <h2>Administrator Preview</h2>
+              <h2>Administrator</h2>
             </div>
             <button
               type="button"
@@ -48,12 +55,8 @@ export default function AdministratorPreviewLayout() {
             </button>
           </div>
 
-          <p className="admin-preview-sidebar__summary">
-            Explore the future school management system using realistic preview data.
-          </p>
-
-          <nav className="admin-preview-sidebar__nav" aria-label="Administrator Preview Navigation">
-            {previewNavigation.map((item) => (
+          <nav className="admin-preview-sidebar__nav" aria-label="Administrator Navigation">
+            {adminNavigation.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
@@ -65,14 +68,6 @@ export default function AdministratorPreviewLayout() {
               </NavLink>
             ))}
           </nav>
-
-          <div className="admin-preview-sidebar__note">
-            <h3>Preview Mode</h3>
-            <p>
-              This walkthrough shows how Grandessa administrators will eventually manage school
-              data, communication and operations.
-            </p>
-          </div>
         </aside>
 
         {isSidebarOpen ? (
@@ -107,7 +102,7 @@ export default function AdministratorPreviewLayout() {
             </div>
 
             <div className="admin-preview-topbar__right">
-              <label className="admin-preview-search" aria-label="Preview search">
+              <label className="admin-preview-search" aria-label="Search">
                 <Search size={16} />
                 <input type="text" placeholder={currentItem.searchPlaceholder} readOnly />
               </label>
@@ -121,9 +116,25 @@ export default function AdministratorPreviewLayout() {
                 <span className="admin-preview-profile__avatar">A</span>
                 <span className="admin-preview-profile__text">
                   <strong>Administrator</strong>
-                  <small>School Preview</small>
                 </span>
                 <ChevronDown size={16} />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSignOut}
+                style={{
+                  marginLeft: "0.75rem",
+                  border: "1px solid rgba(15, 107, 53, 0.18)",
+                  background: "#ffffff",
+                  color: "#0f6b35",
+                  borderRadius: "999px",
+                  padding: "0.55rem 0.9rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Sign Out
               </button>
             </div>
           </header>

@@ -1,6 +1,10 @@
+import { Copy } from "lucide-react";
+import { useState } from "react";
+
 type Props = {
   student?: {
     admission_number?: string;
+    result_access_code?: string;
     first_name?: string;
     last_name?: string;
     class_name?: string;
@@ -9,6 +13,8 @@ type Props = {
 };
 
 export default function StudentProfile({ student }: Props) {
+  const [copied, setCopied] = useState(false);
+
   if (!student) {
     return (
       <div className="card">
@@ -25,6 +31,25 @@ export default function StudentProfile({ student }: Props) {
 
       <p>
         <strong>Admission:</strong> {student.admission_number}
+      </p>
+
+      <p>
+        <strong>Result Access Code:</strong> {student.result_access_code || "Not assigned"}
+        {student.result_access_code ? (
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard.writeText(student.result_access_code ?? "").then(() => {
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 1600);
+              });
+            }}
+            style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 4 }}
+          >
+            <Copy size={14} />
+            {copied ? "Copied" : "Copy Code"}
+          </button>
+        ) : null}
       </p>
 
       <p>

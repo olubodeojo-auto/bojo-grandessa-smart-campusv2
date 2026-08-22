@@ -1,46 +1,58 @@
 .report-card {
-  width: 100%;
-  max-width: 900px;
+  width: calc(100% - 24px);
+  max-width: 186mm;
+  box-sizing: border-box;
   margin: 0 auto;
   background: #ffffff;
-  border: 1px solid #111111;
+  border: 1px solid #374151;
+  border-top: 4px solid #2e7d32;
   border-radius: 6px;
-  padding: 14px;
+  padding: 4mm;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
   color: #111111;
   font-family: "Arial", "Helvetica", sans-serif;
 }
 
 .report-card-header {
+  position: relative;
+  min-height: 62px;
+  padding-left: 96px;
   text-align: center;
-  border-bottom: 1px solid #111111;
-  padding-bottom: 8px;
+  border-bottom: 2px solid #c49a32;
+  padding-bottom: 5px;
 }
 
 .report-card-header h1 {
   margin: 0;
-  font-size: 30px;
+  color: #1f5f3a;
+  font-size: 28px;
   font-weight: 700;
   letter-spacing: 0.4px;
 }
 
 .report-card-header h2 {
   margin: 2px 0;
-  font-size: 20px;
+  color: #1f2937;
+  font-size: 16px;
   letter-spacing: 0.8px;
 }
 
 .report-card-header h3 {
   margin: 2px 0 0;
-  font-size: 20px;
+  color: #1f5f3a;
+  font-size: 16px;
   letter-spacing: 0.9px;
 }
 
 .school-logo {
-  width: 84px;
-  height: 84px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 76px;
+  height: 62px;
+  max-width: 76px;
+  max-height: 62px;
   object-fit: contain;
-  margin: 0 auto 4px;
 }
 
 .school-motto {
@@ -50,10 +62,10 @@
 }
 
 .official-meta {
-  margin-top: 8px;
+  margin-top: 4px;
   display: grid;
-  gap: 4px;
-  font-size: 12px;
+  gap: 2px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.3px;
 }
@@ -68,32 +80,65 @@
   margin: 0;
 }
 
+.meta-row .pupil-name {
+  font-size: 13px;
+}
+
 .attendance-inline {
   grid-template-columns: 1fr 1fr 1fr;
 }
 
 .official-results {
-  margin-top: 8px;
+  margin-top: 5px;
 }
 
 .report-card-results table {
   width: 100%;
+  max-width: 170mm;
+  margin-left: auto;
+  margin-right: auto;
   border-collapse: collapse;
   table-layout: fixed;
 }
 
+.report-card-results th:nth-child(1),
+.report-card-results td:nth-child(1) {
+  width: 29%;
+}
+
+.report-card-results th:nth-child(2),
+.report-card-results td:nth-child(2),
+.report-card-results th:nth-child(3),
+.report-card-results td:nth-child(3),
+.report-card-results th:nth-child(4),
+.report-card-results td:nth-child(4),
+.report-card-results th:nth-child(5),
+.report-card-results td:nth-child(5) {
+  width: 10%;
+  text-align: center;
+}
+
+.report-card-results th:nth-child(6),
+.report-card-results td:nth-child(6) {
+  width: 31%;
+}
+
 .report-card-results th,
 .report-card-results td {
-  border: 1px dashed #333333;
-  padding: 4px 6px;
+  border: 1px solid #4b5563;
+  padding: 3px 2px;
   text-align: left;
   font-size: 11px;
+  line-height: 1.15;
 }
 
 .report-card-results th {
-  background: #ffffff;
+  background: #f3f8f2;
+  color: #1f5f3a;
   text-transform: uppercase;
-  font-size: 10px;
+  font-size: 8.5px;
+  line-height: 1.1;
+  white-space: normal;
 }
 
 .summary-row td {
@@ -101,15 +146,15 @@
 }
 
 .official-comments {
-  border-left: 1px solid #111111;
-  border-right: 1px solid #111111;
-  border-bottom: 1px solid #111111;
+  border-left: 1px solid #4b5563;
+  border-right: 1px solid #4b5563;
+  border-bottom: 1px solid #4b5563;
 }
 
 .official-comments div {
-  border-top: 1px solid #111111;
-  min-height: 54px;
-  padding: 6px;
+  border-top: 1px solid #4b5563;
+  min-height: 32px;
+  padding: 3px 5px;
 }
 
 .official-comments span {
@@ -118,38 +163,93 @@
 }
 
 .official-comments p {
-  margin: 8px 0 0;
-  min-height: 20px;
-  font-size: 12px;
+  margin: 2px 0 0;
+  min-height: 13px;
+  font-size: 10.5px;
+}
+
+.official-signoff-assets {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  height: 38px;
+  margin-top: 3px;
+}
+
+.principal-signature {
+  width: 116px;
+  height: 34px;
+  max-width: 116px;
+  max-height: 34px;
+  object-fit: contain;
+  object-position: left bottom;
+}
+
+.school-stamp {
+  width: 48px;
+  height: 38px;
+  max-width: 48px;
+  max-height: 38px;
+  object-fit: contain;
 }
 
 .official-grading-block {
-  border: 1px dashed #333333;
+  border: 1px solid #4b5563;
   border-top: none;
-  padding: 6px;
+  background: #fbfcf9;
+  padding: 4px 6px;
 }
 
 .official-grading-block h4 {
   margin: 0;
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .official-grading-block p {
   margin: 4px 0 0;
-  font-size: 12px;
-}
-
-.official-footer {
-  margin-top: 8px;
-  text-align: center;
   font-size: 10px;
 }
 
+.grading-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px 8px;
+  margin-top: 3px;
+  font-size: 9.5px;
+  line-height: 1.2;
+}
+
+.grading-strip span {
+  white-space: nowrap;
+}
+
+.official-footer {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 8px;
+}
+
 .official-footer p {
-  margin: 3px 0;
+  margin: 2px 0;
+  white-space: pre-line;
+}
+
+.official-footer p span {
+  display: inline-block;
+  margin: 0 7px;
 }
 
 @media (max-width: 840px) {
+  .report-card-header {
+    padding-left: 0;
+  }
+
+  .school-logo {
+    position: static;
+    display: block;
+    margin: 0 0 4px;
+  }
+
   .meta-row,
   .attendance-inline {
     grid-template-columns: 1fr;
@@ -161,6 +261,11 @@
 }
 
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
   body {
     background: #ffffff !important;
   }
@@ -172,11 +277,15 @@
   }
 
   .report-card {
-    max-width: none;
-    border: 1px solid #111111;
+    width: 100%;
+    max-width: 186mm;
+    border: 1px solid #374151;
+    border-top: 4px solid #2e7d32;
     box-shadow: none;
     border-radius: 0;
-    padding: 0;
+    padding: 4mm;
+    margin: 0;
     page-break-inside: avoid;
+    page-break-after: avoid;
   }
 }

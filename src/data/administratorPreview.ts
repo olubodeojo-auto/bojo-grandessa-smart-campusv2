@@ -82,6 +82,12 @@ export const previewNavigation = [
   { key: "parents", label: "Parents", path: "/administrator-preview/parents", searchPlaceholder: "Search parent, learner or contact" },
   { key: "finance", label: "Finance", path: "/administrator-preview/finance", searchPlaceholder: "Search fee item, invoice or payment" },
   { key: "reports", label: "Reports", path: "/administrator-preview/reports", searchPlaceholder: "Search report type or export" },
+  {
+    key: "report-card",
+    label: "Sample Report Card",
+    path: "/administrator-preview/report-card",
+    searchPlaceholder: "Search subject, grade or report summary",
+  },
   { key: "website-content-manager", label: "Website Content Manager", path: "/administrator-preview/website-content-manager", searchPlaceholder: "Search page, section or media asset" },
   { key: "users-roles", label: "Users & Roles", path: "/administrator-preview/users-roles", searchPlaceholder: "Search user, role or permission" },
 ] as const;

@@ -9,19 +9,19 @@ import AppModal from "../../../components/modals/AppModal";
 import Button from "../../../components/ui/Button";
 import EmptyState from "../../../components/ui/EmptyState";
 import { useAuth } from "../../../hooks/useAuth";
-import { getClasses } from "../../../services/classService";
-import { deleteResult, getResults, updateResult } from "../../../services/resultService";
+import { createResult, deleteResult, getResults, updateResult } from "../../../services/resultService";
+import { parseResultWorkbook, summarizeImportPreview, type ResultImportPreviewEntry } from "../../../services/resultImportService";
 import { getStudents } from "../../../services/studentService";
 import { getSubjects } from "../../../services/subjectService";
-import { getTeachers } from "../../../services/teacherService";
-import type { SchoolClass } from "../../../types/class";
+import { getClasses } from "../../../services/classService";
 import type { Result } from "../../../types/result";
 import type { Student } from "../../../types/student";
 import type { Subject } from "../../../types/subject";
-import type { Teacher } from "../../../types/teacher";
+import type { SchoolClass } from "../../../types/class";
 import ResultFilters from "./ResultFilters";
 import ResultForm from "./ResultForm";
-import ResultTable, { type ResultRow } from "./ResultTable";
+import ResultTableGrouped from "./ResultTableGrouped";
+import type { ResultRow } from "./ResultTable";
 
 type FilterTerm = "All" | "First" | "Second" | "Third";
 type FilterStatus = "All" | "Draft" | "Published" | "Approved";
@@ -76,16 +76,19 @@ export default function ResultsPage() {
   const { role } = useAuth();
 
   const normalizedRole = normalizeRole(role?.name);
-  const canManage = ["teacher", "school_admin", "super_admin", "admin"].includes(normalizedRole);
-  const canPublish = ["teacher", "school_admin", "super_admin", "admin"].includes(normalizedRole);
+  const canManage = ["teacher", "school_admin", "super_admin", "admin", "administrator"].includes(normalizedRole);
+  const canPublish = ["teacher", "school_admin", "super_admin", "admin", "administrator"].includes(normalizedRole);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [results, setResults] = useState<Result[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [error, setError] = useState<string>("");
+  const [isImportOpen, setIsImportOpen] = useState<boolean>(false);
+  const [importEntries, setImportEntries] = useState<ResultImportPreviewEntry[]>([]);
+  const [importFileName, setImportFileName] = useState<string>("");
+  const [importSubmitting, setImportSubmitting] = useState<boolean>(false);
 
   const [search, setSearch] = useState<string>("");
   const [term, setTerm] = useState<FilterTerm>("All");
@@ -112,19 +115,17 @@ export default function ResultsPage() {
     setError("");
 
     try {
-      const [resultsData, studentsData, classesData, subjectsData, teachersData] = await Promise.all([
+      const [resultsData, studentsData, classesData, subjectsData] = await Promise.all([
         loadWithDiagnostics("getResults", () => getResults()),
         loadWithDiagnostics("getStudents", () => getStudents()),
         loadWithDiagnostics("getClasses", () => getClasses()),
         loadWithDiagnostics("getSubjects", () => getSubjects()),
-        loadWithDiagnostics("getTeachers", () => getTeachers()),
       ]);
 
       setResults(resultsData);
       setStudents(studentsData);
       setClasses(classesData);
       setSubjects(subjectsData);
-      setTeachers(teachersData);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to load results module.";
       setError(message);
@@ -143,44 +144,24 @@ export default function ResultsPage() {
     return map;
   }, [students]);
 
-  const classesMap = useMemo(() => {
-    const map = new Map<string, SchoolClass>();
-    classes.forEach((schoolClass) => map.set(schoolClass.id, schoolClass));
-    return map;
-  }, [classes]);
-
-  const subjectsMap = useMemo(() => {
-    const map = new Map<string, Subject>();
-    subjects.forEach((subject) => map.set(subject.id, subject));
-    return map;
-  }, [subjects]);
-
-  const teachersMap = useMemo(() => {
-    const map = new Map<string, Teacher>();
-    teachers.forEach((teacher) => map.set(teacher.id, teacher));
-    return map;
-  }, [teachers]);
-
   const rows = useMemo<ResultRow[]>(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
     return results
       .map((result) => {
         const student = studentsMap.get(result.student_id);
-        const schoolClass = classesMap.get(result.class_id);
-        const subject = subjectsMap.get(result.subject_id);
-        const teacher = teachersMap.get(result.teacher_id);
+        const classNameValue = result.class_name?.trim() || "Unknown class";
+        const subjectNameValue = result.subject_name?.trim() || "Unknown subject";
+        const teacherNameValue = result.teacher_name?.trim() || "Unknown teacher";
 
         return {
           id: result.id,
           studentName: student
             ? `${formatName(student.first_name, student.last_name)} (${student.admission_number})`
             : "Unknown student",
-          className: schoolClass
-            ? `${schoolClass.class_name}${schoolClass.section ? ` - ${schoolClass.section}` : ""}`
-            : "Unknown class",
-          subjectName: subject ? `${subject.subject_name} (${subject.subject_code})` : "Unknown subject",
-          teacherName: teacher ? formatName(teacher.first_name, teacher.last_name) : "Unknown teacher",
+          className: classNameValue,
+          subjectName: subjectNameValue,
+          teacherName: teacherNameValue,
           academicYear: result.academic_year,
           term: result.term,
           continuousAssessment: result.continuous_assessment,
@@ -206,7 +187,7 @@ export default function ResultsPage() {
         return matchesSearch && matchesTerm && matchesStatus && matchesSession;
       })
       .sort((a, b) => b.totalScore - a.totalScore);
-  }, [results, studentsMap, classesMap, subjectsMap, teachersMap, search, term, status, session]);
+  }, [results, studentsMap, search, term, status, session]);
 
   const handleAdd = (): void => {
     setFormMode("add");
@@ -286,6 +267,96 @@ export default function ResultsPage() {
     }
   };
 
+  const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    setError("");
+    setImportFileName(file.name);
+
+    try {
+      const entries = await parseResultWorkbook(file, students);
+      setImportEntries(entries);
+      setIsImportOpen(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to parse workbook.";
+      setError(message);
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const handleImportSelection = (entryIndex: number, studentId: string): void => {
+    setImportEntries((current) =>
+      current.map((entry, index) =>
+        index === entryIndex
+          ? {
+              ...entry,
+              selectedStudentId: studentId,
+              matchStatus: studentId ? "matched" : "unmatched",
+            }
+          : entry
+      )
+    );
+  };
+
+  const handleConfirmImport = async (): Promise<void> => {
+    const validEntries = importEntries.filter((entry) => {
+      const studentId = entry.selectedStudentId ?? entry.matchedStudentId;
+      return Boolean(studentId) && entry.items.length > 0;
+    });
+
+    if (validEntries.length === 0) {
+      setError("No valid students were matched for import.");
+      return;
+    }
+
+    setImportSubmitting(true);
+    setError("");
+
+    try {
+      const payloads = validEntries.flatMap((entry) => {
+        const studentId = entry.selectedStudentId ?? entry.matchedStudentId;
+
+        if (!studentId) {
+          return [];
+        }
+
+        return entry.items.map((item) => ({
+          student_id: studentId,
+          class_id: "",
+          subject_id: "",
+          class_name: item.className || entry.className || undefined,
+          subject_name: item.subjectName || undefined,
+          teacher_name: item.teacherName || entry.teacherName || undefined,
+          academic_year: item.academicYear || entry.academicYear,
+          term: item.term || entry.term,
+          continuous_assessment: item.continuousAssessment,
+          examination: item.examination,
+          total_score: item.totalScore,
+          grade: item.grade,
+          remark: item.remark,
+          teacher_id: "",
+          status: "Draft" as const,
+        }));
+      });
+
+      await Promise.all(payloads.map((payload) => createResult(payload)));
+      setImportEntries([]);
+      setIsImportOpen(false);
+      setImportFileName("");
+      await loadData();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to import results.";
+      setError(message);
+    } finally {
+      setImportSubmitting(false);
+    }
+  };
+
   if (!canManage) {
     return (
       <div className="card" style={{ padding: 30 }}>
@@ -325,6 +396,13 @@ export default function ResultsPage() {
               <Upload size={16} />
               Publish Drafts
             </Button>
+            <label style={{ display: "inline-flex" }}>
+              <input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => void handleImportFile(event)} hidden />
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", borderRadius: 12, background: "#e2e8f0", color: "#0f172a", fontWeight: 700, cursor: "pointer" }}>
+                <Upload size={16} />
+                Import Excel
+              </span>
+            </label>
             <Button type="button" onClick={handleAdd} disabled={loading}>
               <FilePlus2 size={16} />
               Add Result
@@ -359,7 +437,7 @@ export default function ResultsPage() {
         />
 
         <div style={{ marginTop: 24 }}>
-          <ResultTable
+          <ResultTableGrouped
             rows={rows}
             loading={loading}
             canManage={canManage}
@@ -388,13 +466,120 @@ export default function ResultsPage() {
           students={students}
           classes={classes}
           subjects={subjects}
-          teachers={teachers}
+          teachers={[]}
           onClose={() => {
             setIsFormOpen(false);
             setEditingResult(null);
           }}
           onSaved={loadData}
         />
+      </AppModal>
+
+      <AppModal
+        open={isImportOpen}
+        title="Excel Result Import Preview"
+        size="xl"
+        onClose={() => {
+          setIsImportOpen(false);
+          setImportEntries([]);
+          setImportFileName("");
+        }}
+        footer={
+          <div style={{ display: "flex", gap: 12 }}>
+            <Button type="button" variant="secondary" onClick={() => {
+              setIsImportOpen(false);
+              setImportEntries([]);
+              setImportFileName("");
+            }}>
+              Close
+            </Button>
+            <Button type="button" onClick={() => void handleConfirmImport()} disabled={importSubmitting}>
+              {importSubmitting ? "Importing..." : "Confirm Import"}
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Workbook: {importFileName || "Uploaded file"}</div>
+          <div style={{ color: "#475569" }}>
+            {summarizeImportPreview(importEntries).totalStudents} student block(s) detected.
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gap: 12, maxHeight: 520, overflow: "auto" }}>
+          {importEntries.length === 0 ? (
+            <EmptyState title="No import preview" description="Upload a workbook to preview result rows." />
+          ) : (
+            importEntries.map((entry, index) => {
+              const studentId = entry.selectedStudentId ?? entry.matchedStudentId;
+
+              return (
+                <div key={`${entry.studentKey}-${index}`} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontSize: 18, fontWeight: 700 }}>{entry.studentName || "Unknown student"}</div>
+                      <div style={{ color: "#475569" }}>
+                        {entry.admissionNumber ? `Admission: ${entry.admissionNumber}` : "No admission number found"}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ padding: "6px 10px", borderRadius: 999, background: entry.matchStatus === "matched" ? "#dcfce7" : entry.matchStatus === "manual-review" ? "#fef3c7" : "#fee2e2", color: entry.matchStatus === "matched" ? "#166534" : entry.matchStatus === "manual-review" ? "#92400e" : "#991b1b", fontSize: 12, fontWeight: 700 }}>
+                        {entry.matchStatus === "matched" ? "Matched" : entry.matchStatus === "manual-review" ? "Review" : "Unmatched"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 12 }}>
+                    <div><strong>Session:</strong> {entry.academicYear || "Not provided"}</div>
+                    <div><strong>Term:</strong> {entry.term}</div>
+                    <div><strong>Class:</strong> {entry.className || "Not provided"}</div>
+                    <div><strong>Teacher:</strong> {entry.teacherName || "Not provided"}</div>
+                  </div>
+
+                  {entry.matchStatus !== "matched" ? (
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>Match student</label>
+                      <select
+                        value={studentId ?? ""}
+                        onChange={(event) => handleImportSelection(index, event.target.value)}
+                        style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #cbd5e1" }}
+                      >
+                        <option value="">Select matching student</option>
+                        {students.map((student) => (
+                          <option key={student.id} value={student.id}>
+                            {student.first_name} {student.last_name} ({student.admission_number})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+
+                  {entry.warnings.length > 0 ? (
+                    <div style={{ marginBottom: 12, color: "#b45309", fontSize: 13 }}>
+                      {entry.warnings.map((warning) => (
+                        <div key={warning}>{warning}</div>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {entry.items.map((item, itemIndex) => (
+                      <div key={`${entry.studentKey}-${item.subjectName}-${itemIndex}`} style={{ background: "#f8fafc", borderRadius: 10, padding: 10, border: "1px solid #e2e8f0" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                          <strong>{item.subjectName}</strong>
+                          <span>{item.grade} · {item.totalScore}/100</span>
+                        </div>
+                        <div style={{ color: "#475569", fontSize: 13 }}>
+                          CA: {item.continuousAssessment} · Exam: {item.examination} · {item.remark}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </AppModal>
 
       <AppModal

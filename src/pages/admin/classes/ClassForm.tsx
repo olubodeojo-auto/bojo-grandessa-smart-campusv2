@@ -4,8 +4,6 @@ import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { createClass, updateClass } from "../../../services/classService";
 import type { ClassStatus, SchoolClass } from "../../../types/class";
 
-const MAX_CAPACITY = 100;
-
 type Props = {
   mode: "add" | "edit";
   schoolClass?: SchoolClass | null;
@@ -15,18 +13,12 @@ type Props = {
 
 type ClassFormState = {
   class_name: string;
-  section: string;
-  capacity: number;
-  class_teacher: string;
   status: ClassStatus;
 };
 
 function createInitialState(schoolClass?: SchoolClass | null): ClassFormState {
   return {
     class_name: schoolClass?.class_name ?? "",
-    section: schoolClass?.section ?? "",
-    capacity: schoolClass?.capacity ?? 30,
-    class_teacher: schoolClass?.class_teacher ?? "",
     status: schoolClass?.status ?? "Active",
   };
 }
@@ -54,16 +46,6 @@ export default function ClassForm({ mode, schoolClass, onClose, onSaved }: Props
       return;
     }
 
-    if (form.capacity <= 0) {
-      alert("Capacity must be greater than zero.");
-      return;
-    }
-
-    if (form.capacity > MAX_CAPACITY) {
-      alert(`Capacity cannot exceed ${MAX_CAPACITY}.`);
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -71,17 +53,11 @@ export default function ClassForm({ mode, schoolClass, onClose, onSaved }: Props
         await updateClass({
           id: schoolClass.id,
           class_name: form.class_name,
-          section: form.section,
-          capacity: form.capacity,
-          class_teacher: form.class_teacher,
           status: form.status,
         });
       } else {
         await createClass({
           class_name: form.class_name,
-          section: form.section,
-          capacity: form.capacity,
-          class_teacher: form.class_teacher,
           status: form.status,
         });
       }
@@ -114,46 +90,10 @@ export default function ClassForm({ mode, schoolClass, onClose, onSaved }: Props
           <span>Class Name</span>
           <input
             style={inputStyle}
-            placeholder="Class Name (e.g. JSS1)"
+            placeholder="Class Name (e.g. Kindergarten 2)"
             value={form.class_name}
             onChange={(event) => update("class_name", event.target.value)}
             aria-label="Class name"
-          />
-        </label>
-
-        <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <span>Section</span>
-          <input
-            style={inputStyle}
-            placeholder="Section (A, B, Science...)"
-            value={form.section}
-            onChange={(event) => update("section", event.target.value)}
-            aria-label="Class section"
-          />
-        </label>
-
-        <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <span>Capacity</span>
-          <input
-            style={inputStyle}
-            type="number"
-            min="1"
-            max={MAX_CAPACITY}
-            placeholder="Capacity"
-            value={form.capacity}
-            onChange={(event) => update("capacity", Number(event.target.value))}
-            aria-label="Class capacity"
-          />
-        </label>
-
-        <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <span>Class Teacher</span>
-          <input
-            style={inputStyle}
-            placeholder="Class Teacher"
-            value={form.class_teacher}
-            onChange={(event) => update("class_teacher", event.target.value)}
-            aria-label="Class teacher"
           />
         </label>
 

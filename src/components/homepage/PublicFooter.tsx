@@ -19,6 +19,8 @@ export default function PublicFooter() {
             <li><a href="/admissions">Admissions</a></li>
             <li><a href="/faq">FAQ</a></li>
             <li><a href="/contact">Contact</a></li>
+            <li><a href="/portal/reports">Parent Portal</a></li>
+            <li><a href="/admin">Staff Login</a></li>
           </ul>
         </section>
 

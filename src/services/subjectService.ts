@@ -33,14 +33,13 @@ function normalizeSubject(record: Subject): Subject {
 }
 
 export async function getSubjects(
-  options: SubjectQueryOptions = {}
+  _options: SubjectQueryOptions = {}
 ): Promise<Subject[]> {
-  const schoolId = getActiveSchoolId(options.schoolId);
-
+  // Load subjects without assuming a school_id column exists. Return only active subjects ordered by name.
   const { data, error } = await supabase
     .from(TABLE)
     .select("*")
-    .eq("school_id", schoolId)
+    .eq("status", "Active")
     .order("subject_name", { ascending: true });
 
   if (error) throw error;

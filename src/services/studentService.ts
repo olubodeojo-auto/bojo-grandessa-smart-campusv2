@@ -97,6 +97,26 @@ export async function getStudent(id: string): Promise<Student | null> {
   return (data ?? null) as Student | null;
 }
 
+export async function getStudentByAccessCode(code: string): Promise<Student | null> {
+  const normalized = code.trim().toUpperCase();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("students")
+    .select("*")
+    .eq("result_access_code", normalized)
+    .maybeSingle();
+
+  if (error && error.code !== "PGRST116") {
+    throw error;
+  }
+
+  return (data ?? null) as Student | null;
+}
+
 export async function createStudent(
   student: Omit<Student, "id" | "created_at" | "updated_at">
 ): Promise<Student> {

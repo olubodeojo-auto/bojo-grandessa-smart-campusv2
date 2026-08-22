@@ -63,28 +63,13 @@ export default function ClassesPage() {
     const term = search.trim().toLowerCase();
 
     return classes.filter((schoolClass) => {
-      const normalizedTeacher = (schoolClass.class_teacher ?? "").toLowerCase();
-      const normalizedLevel = (schoolClass.academic_level ?? "").toLowerCase();
-      const normalizedSection = (schoolClass.section ?? "").toLowerCase();
       const normalizedName = schoolClass.class_name.toLowerCase();
-
-      const matchesSearch =
-        term.length === 0 ||
-        normalizedName.includes(term) ||
-        normalizedSection.includes(term) ||
-        normalizedTeacher.includes(term);
-
-      const matchesLevel =
-        academicLevel === "All Levels" ||
-        normalizedLevel.includes(academicLevel.toLowerCase()) ||
-        normalizedName.includes(academicLevel.toLowerCase()) ||
-        normalizedSection.includes(academicLevel.toLowerCase());
-
+      const matchesSearch = term.length === 0 || normalizedName.includes(term);
       const matchesStatus = status === "All Statuses" || schoolClass.status === status;
 
-      return matchesSearch && matchesLevel && matchesStatus;
+      return matchesSearch && matchesStatus;
     });
-  }, [academicLevel, classes, search, status]);
+  }, [classes, search, status]);
 
   const openAddModal = (): void => {
     setSelectedClass(null);

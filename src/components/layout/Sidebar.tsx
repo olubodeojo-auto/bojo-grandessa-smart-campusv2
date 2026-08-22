@@ -1,38 +1,28 @@
 import { motion } from "framer-motion";
-import {
-  LayoutDashboard,
-  Users,
-  GraduationCap,
-  School,
-  BookOpen,
-  ClipboardCheck,
-  FileSpreadsheet,
-  House,
-  Megaphone,
-  Image,
-  Settings,
-  LogOut,
-} from "lucide-react";
+import { LayoutDashboard, Users, FileSpreadsheet, Image, Megaphone, LogOut } from "lucide-react";
 
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useAuthContext } from "../../contexts/AuthContext";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/admin", implemented: true },
   { icon: Users, label: "Students", path: "/admin/students", implemented: true },
-  { icon: GraduationCap, label: "Teachers", path: "/admin/teachers", implemented: true },
-  { icon: School, label: "Classes", path: "/admin/classes", implemented: true },
-  { icon: BookOpen, label: "Subjects", path: "/admin/subjects", implemented: true },
-  { icon: ClipboardCheck, label: "Attendance", path: "/admin/attendance", implemented: false },
   { icon: FileSpreadsheet, label: "Results", path: "/admin/results", implemented: true },
-  { icon: House, label: "Parents", path: "/admin/parents", implemented: false },
-  { icon: Megaphone, label: "Announcements", path: "/admin/announcements", implemented: false },
-  { icon: Image, label: "Gallery", path: "/admin/gallery", implemented: false },
-  { icon: Settings, label: "Settings", path: "/admin/settings", implemented: false },
+  { icon: Image, label: "Gallery", path: "/admin/gallery", implemented: true },
+  { icon: Megaphone, label: "Announcements", path: "/admin/announcements", implemented: true },
 ];
 
 const visibleMenuItems = menuItems.filter((item) => item.implemented);
 
 export default function Sidebar() {
+  const navigate = useNavigate();
+  const { signOut } = useAuthContext();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
+
   return (
     <aside
       style={{
@@ -140,11 +130,13 @@ export default function Sidebar() {
         })}
       </div>
 
-      <motion.div
+      <motion.button
+        type="button"
         whileHover={{
           scale: 1.03,
           backgroundColor: "rgba(255,255,255,.15)",
         }}
+        onClick={handleSignOut}
         style={{
           display: "flex",
           alignItems: "center",
@@ -153,6 +145,12 @@ export default function Sidebar() {
           borderRadius: 16,
           cursor: "pointer",
           marginTop: 20,
+          border: "none",
+          background: "transparent",
+          color: "#fff",
+          textAlign: "left",
+          fontFamily: "Poppins",
+          fontSize: 16,
         }}
       >
         <LogOut size={22} />
@@ -163,9 +161,9 @@ export default function Sidebar() {
             fontSize: 16,
           }}
         >
-          Logout
+          Sign Out
         </span>
-      </motion.div>
+      </motion.button>
     </aside>
   );
 }

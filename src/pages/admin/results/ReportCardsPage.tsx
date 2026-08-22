@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import ReportCardDocument from "../../../components/reports/ReportCardDocument";
@@ -16,6 +16,7 @@ import {
   getSchoolSettings,
   saveAcademicCalendar,
   saveSchoolSettings,
+  uploadSchoolBrandingAsset,
 } from "../../../services/schoolSettingsService";
 import { getStudents } from "../../../services/studentService";
 import type { ReportCardData, ReportHistoryBySession, ReportTerm } from "../../../types/reportCard";
@@ -23,6 +24,33 @@ import type { SchoolSettings } from "../../../types/schoolSettings";
 import type { Student } from "../../../types/student";
 
 const TERMS: ReportTerm[] = ["First", "Second", "Third"];
+
+function BrandingField({
+  label,
+  value,
+  uploading,
+  onUpload,
+  onRemove,
+}: {
+  label: string;
+  value: string | null;
+  uploading: boolean;
+  onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <FormField label={label}>
+      <div style={{ display: "grid", gap: 8 }}>
+        {value ? <img src={value} alt={`${label} preview`} style={{ width: 96, height: 64, objectFit: "contain", border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }} /> : null}
+        <label style={{ ...inputStyle, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: uploading ? "wait" : "pointer" }}>
+          {uploading ? "Uploading..." : value ? "Replace" : "Upload"}
+          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onUpload} disabled={uploading} style={{ display: "none" }} />
+        </label>
+        {value ? <Button type="button" variant="secondary" onClick={onRemove}>Remove</Button> : null}
+      </div>
+    </FormField>
+  );
+}
 
 function extractInitialTerm(input: string | null): ReportTerm {
   if (input === "First" || input === "Second" || input === "Third") {
@@ -45,6 +73,32 @@ export default function ReportCardsPage() {
   const [report, setReport] = useState<ReportCardData | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  const [uploadingBranding, setUploadingBranding] = useState<string>("");
+
+  // Preview override fields (manual, not persisted)
+  const [editedTimesPresent, setEditedTimesPresent] = useState<string>("");
+  const [editedTimesAbsent, setEditedTimesAbsent] = useState<string>("");
+  const [editedClassTeacherComment, setEditedClassTeacherComment] = useState<string>("");
+  const [editedHeadTeacherComment, setEditedHeadTeacherComment] = useState<string>("");
+  const [editedClassAverage, setEditedClassAverage] = useState<string>("");
+
+  // Initialize preview overrides when a report is loaded
+  useEffect(() => {
+    if (!report) {
+      setEditedTimesPresent("");
+      setEditedTimesAbsent("");
+      setEditedClassTeacherComment("");
+      setEditedHeadTeacherComment("");
+      setEditedClassAverage("");
+      return;
+    }
+
+    setEditedTimesPresent(report.attendance?.timesPresent != null ? String(report.attendance.timesPresent) : "");
+    setEditedTimesAbsent(report.attendance?.timesAbsent != null ? String(report.attendance.timesAbsent) : "");
+    setEditedClassTeacherComment(report.classTeacherComment ?? "");
+    setEditedHeadTeacherComment(report.headTeacherComment ?? "");
+    setEditedClassAverage(report.classAverage != null && report.classAverage > 0 ? String(report.classAverage) : "");
+  }, [report]);
 
   useEffect(() => {
     async function loadStudents(): Promise<void> {
@@ -224,10 +278,33 @@ export default function ReportCardsPage() {
       setError("");
       const saved = await saveSchoolSettings(schoolSettings);
       setSchoolSettings(saved);
-      setReport(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to save school settings.";
       setError(message);
+    }
+  }
+
+  async function handleBrandingUpload(
+    event: React.ChangeEvent<HTMLInputElement>,
+    field: "logo_url" | "principal_signature_url" | "school_stamp_url",
+    assetName: "logo" | "signature" | "stamp"
+  ): Promise<void> {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      setUploadingBranding(field);
+      setError("");
+      const imageUrl = await uploadSchoolBrandingAsset(file, assetName);
+      updateSchoolSetting(field, imageUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The image could not be uploaded. Please try again.");
+    } finally {
+      setUploadingBranding("");
     }
   }
 
@@ -333,7 +410,7 @@ export default function ReportCardsPage() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
             <div>
               <h2 style={{ margin: 0 }}>School Settings</h2>
-              <p style={{ color: "#666", marginTop: 6 }}>Report identity, contact and template mapping are shared from Supabase.</p>
+              <p style={{ color: "#666", marginTop: 6 }}>These details appear on report cards and school contact information.</p>
             </div>
             <Button type="button" onClick={saveSettings}>Save Settings</Button>
           </div>
@@ -341,15 +418,17 @@ export default function ReportCardsPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 }}>
             <FormField label="School Name"><input style={inputStyle} value={schoolSettings.school_name ?? ""} onChange={(event) => updateSchoolSetting("school_name", event.target.value)} /></FormField>
             <FormField label="Motto"><input style={inputStyle} value={schoolSettings.motto ?? ""} onChange={(event) => updateSchoolSetting("motto", event.target.value)} /></FormField>
-            <FormField label="Logo URL"><input style={inputStyle} value={schoolSettings.logo_url ?? ""} onChange={(event) => updateSchoolSetting("logo_url", event.target.value)} /></FormField>
+            <BrandingField label="School Logo" value={schoolSettings.logo_url} uploading={uploadingBranding === "logo_url"} onUpload={(event) => void handleBrandingUpload(event, "logo_url", "logo")} onRemove={() => updateSchoolSetting("logo_url", "")} />
+            <BrandingField label="Head Teacher / Principal Signature" value={schoolSettings.principal_signature_url} uploading={uploadingBranding === "principal_signature_url"} onUpload={(event) => void handleBrandingUpload(event, "principal_signature_url", "signature")} onRemove={() => updateSchoolSetting("principal_signature_url", "")} />
+            <BrandingField label="School Stamp" value={schoolSettings.school_stamp_url} uploading={uploadingBranding === "school_stamp_url"} onUpload={(event) => void handleBrandingUpload(event, "school_stamp_url", "stamp")} onRemove={() => updateSchoolSetting("school_stamp_url", "")} />
             <FormField label="Address"><input style={inputStyle} value={schoolSettings.address ?? ""} onChange={(event) => updateSchoolSetting("address", event.target.value)} /></FormField>
             <FormField label="Phone"><input style={inputStyle} value={schoolSettings.phone ?? ""} onChange={(event) => updateSchoolSetting("phone", event.target.value)} /></FormField>
             <FormField label="Email"><input style={inputStyle} value={schoolSettings.email ?? ""} onChange={(event) => updateSchoolSetting("email", event.target.value)} /></FormField>
             <FormField label="Website"><input style={inputStyle} value={schoolSettings.website ?? ""} onChange={(event) => updateSchoolSetting("website", event.target.value)} /></FormField>
             <FormField label="Head Teacher Name"><input style={inputStyle} value={schoolSettings.head_teacher_name ?? ""} onChange={(event) => updateSchoolSetting("head_teacher_name", event.target.value)} /></FormField>
-            <FormField label="Report Footer"><input style={inputStyle} value={schoolSettings.report_footer ?? ""} onChange={(event) => updateSchoolSetting("report_footer", event.target.value)} /></FormField>
-            <FormField label="Kindergarten Class Patterns (comma separated)"><input style={inputStyle} value={schoolSettings.kindergarten_class_patterns.join(", ")} onChange={(event) => updateSchoolSetting("kindergarten_class_patterns", event.target.value)} /></FormField>
-            <FormField label="Basic Class Patterns (comma separated)"><input style={inputStyle} value={schoolSettings.basic_class_patterns.join(", ")} onChange={(event) => updateSchoolSetting("basic_class_patterns", event.target.value)} /></FormField>
+            <FormField label="Report Footer / Closing Note"><input style={inputStyle} value={schoolSettings.report_footer ?? ""} onChange={(event) => updateSchoolSetting("report_footer", event.target.value)} /></FormField>
+            <FormField label="Kindergarten Classes"><input style={inputStyle} value={schoolSettings.kindergarten_class_patterns.join(", ")} onChange={(event) => updateSchoolSetting("kindergarten_class_patterns", event.target.value)} /></FormField>
+            <FormField label="Basic Classes"><input style={inputStyle} value={schoolSettings.basic_class_patterns.join(", ")} onChange={(event) => updateSchoolSetting("basic_class_patterns", event.target.value)} /></FormField>
           </div>
         </SectionCard>
       ) : null}
@@ -363,7 +442,70 @@ export default function ReportCardsPage() {
       {loading ? (
         <EmptyState title="Building report card" description="Please wait while report data is generated." />
       ) : report ? (
-        <ReportCardDocument report={report} />
+        <div>
+          <SectionCard>
+            <h3 style={{ marginTop: 0 }}>Preview Overrides</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
+              <FormField label="Time Present">
+                <input
+                  style={inputStyle}
+                  type="number"
+                  min={0}
+                  value={typeof editedTimesPresent === "number" ? String(editedTimesPresent) : editedTimesPresent}
+                  onChange={(e) => setEditedTimesPresent(e.target.value)}
+                />
+              </FormField>
+
+              <FormField label="Time Absent">
+                <input
+                  style={inputStyle}
+                  type="number"
+                  min={0}
+                  value={typeof editedTimesAbsent === "number" ? String(editedTimesAbsent) : editedTimesAbsent}
+                  onChange={(e) => setEditedTimesAbsent(e.target.value)}
+                />
+
+              </FormField>
+
+              <FormField label="Class Average">
+                <input
+                  style={inputStyle}
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  placeholder={report.classAverage > 0 ? `Auto: ${report.classAverage}%` : "Auto: —"}
+                  value={editedClassAverage}
+                  onChange={(e) => setEditedClassAverage(e.target.value)}
+                />
+              </FormField>
+
+              <div style={{ gridColumn: "1 / -1", display: "grid", gap: 8 }}>
+                <FormField label="Class Teacher's Comment">
+                  <textarea style={{ ...inputStyle, height: 80 }} value={editedClassTeacherComment ?? ""} onChange={(e) => setEditedClassTeacherComment(e.target.value)} />
+                </FormField>
+
+                <FormField label="Head Teacher's Comment">
+                  <textarea style={{ ...inputStyle, height: 80 }} value={editedHeadTeacherComment ?? ""} onChange={(e) => setEditedHeadTeacherComment(e.target.value)} />
+                </FormField>
+              </div>
+            </div>
+          </SectionCard>
+
+          <ReportCardDocument
+            report={{
+              ...report,
+              attendance: {
+                ...report.attendance,
+                timesPresent: editedTimesPresent === "" ? report.attendance.timesPresent : Number(editedTimesPresent),
+                timesAbsent: editedTimesAbsent === "" ? report.attendance.timesAbsent : Number(editedTimesAbsent),
+              },
+              classTeacherComment: editedClassTeacherComment === "" ? report.classTeacherComment : editedClassTeacherComment ?? report.classTeacherComment,
+              headTeacherComment: editedHeadTeacherComment === "" ? report.headTeacherComment : editedHeadTeacherComment ?? report.headTeacherComment,
+              classAverage: editedClassAverage === "" ? report.classAverage : Number(editedClassAverage),
+            }}
+          />
+        </div>
       ) : (
         <EmptyState title="No report card" description="Select a student session and term with saved results." />
       )}

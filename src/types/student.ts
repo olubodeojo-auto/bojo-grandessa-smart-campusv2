@@ -12,9 +12,11 @@ export type Gender =
 export interface Student {
   id: string;
 
-  school_id: string;
+  school_id?: string;
 
   admission_number: string;
+
+  result_access_code?: string;
 
   first_name: string;
 
@@ -26,7 +28,13 @@ export interface Student {
 
   date_of_birth: string;
 
+  class_id?: string | null;
+
   class_name?: string;
+
+  primary_contact_id?: string | null;
+
+  secondary_contact_id?: string | null;
 
   parent_name?: string;
 

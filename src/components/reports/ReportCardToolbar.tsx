@@ -18,26 +18,14 @@ async function exportElementAsPdf(element: HTMLElement, fileName: string): Promi
 
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
+  const imageRatio = canvas.width / canvas.height;
+  const pageRatio = pageWidth / pageHeight;
+  const imageWidth = imageRatio > pageRatio ? pageWidth : pageHeight * imageRatio;
+  const imageHeight = imageRatio > pageRatio ? pageWidth / imageRatio : pageHeight;
+  const left = (pageWidth - imageWidth) / 2;
+  const top = (pageHeight - imageHeight) / 2;
 
-  const imageWidth = pageWidth;
-  const imageHeight = (canvas.height * imageWidth) / canvas.width;
-
-  if (imageHeight <= pageHeight) {
-    pdf.addImage(imgData, "PNG", 0, 0, imageWidth, imageHeight);
-  } else {
-    let heightLeft = imageHeight;
-    let position = 0;
-
-    pdf.addImage(imgData, "PNG", 0, position, imageWidth, imageHeight);
-    heightLeft -= pageHeight;
-
-    while (heightLeft > 0) {
-      position = heightLeft - imageHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, "PNG", 0, position, imageWidth, imageHeight);
-      heightLeft -= pageHeight;
-    }
-  }
+  pdf.addImage(imgData, "PNG", left, top, imageWidth, imageHeight);
 
   pdf.save(fileName);
 }
@@ -69,7 +57,7 @@ export default function ReportCardToolbar({
         Print
       </Button>
       <Button type="button" onClick={() => void handleExportPdf()}>
-        Export PDF
+        Download PDF
       </Button>
     </div>
   );

@@ -49,8 +49,12 @@ export async function getCurrentSession() {
 export async function resetPassword(
   email: string
 ) {
+  const redirectTo = typeof window !== "undefined"
+    ? `${window.location.origin}/reset-password`
+    : undefined;
+
   const { error } =
-    await supabase.auth.resetPasswordForEmail(email);
+    await supabase.auth.resetPasswordForEmail(email, { redirectTo });
 
   if (error) throw error;
 }

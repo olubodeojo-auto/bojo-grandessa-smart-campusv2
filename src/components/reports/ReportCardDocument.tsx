@@ -2,18 +2,12 @@ import type { ReportCardData } from "../../types/reportCard";
 
 export default function ReportCardDocument({ report }: { report: ReportCardData }) {
   const schoolName = report.schoolSettings.school_name || "";
-  const schoolLevel = report.template.level === "Kindergarten" ? "KINDERGARTEN" : "ELEMENTARY";
+  const schoolLevel = "KINDERGARTEN AND ELEMENTARY SCHOOL";
   const pupilName = `${report.student.first_name} ${report.student.last_name}`.trim();
   const ageText = report.student.date_of_birth
     ? Math.max(0, new Date().getFullYear() - new Date(report.student.date_of_birth).getFullYear()).toString()
-    : "";
-
-  const gradingText = report.gradingScale
-    .map((item) => {
-      const range = item.min === 0 ? "Below 40" : `${item.min} - ${Math.floor(item.max)}`;
-      return `${range}  ${item.grade}  ${item.remark}`;
-    })
-    .join(" | ");
+    : "—";
+  const classDisplay = report.className?.trim() || "—";
 
   return (
     <article className="report-card" id="report-card-preview">
@@ -22,7 +16,7 @@ export default function ReportCardDocument({ report }: { report: ReportCardData 
           <img className="school-logo" src={report.schoolSettings.logo_url} alt="School Logo" />
         ) : null}
         <h1>{schoolName}</h1>
-        <h2>{schoolLevel} SCHOOL</h2>
+        <h2>{schoolLevel}</h2>
         <h3>STATEMENT OF RESULT</h3>
         {report.schoolSettings.motto ? <p className="school-motto">{report.schoolSettings.motto}</p> : null}
       </header>
@@ -33,11 +27,11 @@ export default function ReportCardDocument({ report }: { report: ReportCardData 
           <p>TERM ENDING ON: {report.termEnding}</p>
         </div>
         <div className="meta-row">
-          <p>NAME OF PUPIL: {pupilName}</p>
-          <p>CLASS: {report.className}</p>
+          <p className="pupil-name">NAME OF PUPIL: {pupilName}</p>
+          <p>CLASS: {classDisplay}</p>
         </div>
         <div className="meta-row">
-          <p>AGE: {ageText ? `${ageText}+` : ""}</p>
+          <p>AGE: {ageText === "—" ? "—" : `${ageText}+`}</p>
           <p>NEXT TERM BEGINS: {report.nextTermBegins}</p>
         </div>
         <div className="meta-row attendance-inline">
@@ -91,7 +85,7 @@ export default function ReportCardDocument({ report }: { report: ReportCardData 
             </tr>
             <tr className="summary-row">
               <td>CLASS AVERAGE</td>
-              <td colSpan={5}>{report.classAverage}%</td>
+              <td colSpan={5}>{report.classAverage > 0 ? `${report.classAverage}%` : "—"}</td>
             </tr>
           </tbody>
         </table>
@@ -105,20 +99,44 @@ export default function ReportCardDocument({ report }: { report: ReportCardData 
         <div>
           <span>Head Teacher's Comment:</span>
           <p>{report.headTeacherComment || " "}</p>
+          <div className="official-signoff-assets">
+            {report.schoolSettings.principal_signature_url ? (
+              <img
+                className="principal-signature"
+                src={report.schoolSettings.principal_signature_url}
+                alt="Head Teacher / Principal signature"
+                onError={(event) => { event.currentTarget.style.display = "none"; }}
+              />
+            ) : null}
+            {report.schoolSettings.school_stamp_url ? (
+              <img
+                className="school-stamp"
+                src={report.schoolSettings.school_stamp_url}
+                alt="School stamp"
+                onError={(event) => { event.currentTarget.style.display = "none"; }}
+              />
+            ) : null}
+          </div>
         </div>
       </section>
 
       <section className="official-grading-block">
         <h4>GRADING</h4>
-        <p>{gradingText}</p>
+        <div className="grading-strip">
+          {report.gradingScale.map((item) => (
+            <span key={item.grade}>
+              <strong>{item.min === 0 ? "Below 40" : `${item.min} - ${Math.floor(item.max)}`}</strong> {item.grade} {item.remark}
+            </span>
+          ))}
+        </div>
       </section>
 
       <footer className="report-card-footer official-footer">
-        {report.schoolSettings.address ? <p>{report.schoolSettings.address}</p> : null}
+        {report.schoolSettings.address ? <p><strong>Address:</strong> {report.schoolSettings.address}</p> : null}
         <p>
-          {[report.schoolSettings.phone, report.schoolSettings.email, report.schoolSettings.website]
-            .filter(Boolean)
-            .join(" | ")}
+          {report.schoolSettings.phone ? <span><strong>Phone:</strong> {report.schoolSettings.phone}</span> : null}
+          {report.schoolSettings.email ? <span><strong>Email:</strong> {report.schoolSettings.email}</span> : null}
+          {report.schoolSettings.website ? <span><strong>Web:</strong> {report.schoolSettings.website}</span> : null}
         </p>
         {report.schoolSettings.report_footer ? <p>{report.schoolSettings.report_footer}</p> : null}
       </footer>

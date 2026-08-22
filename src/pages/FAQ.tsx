@@ -36,7 +36,7 @@ const faqItems: FaqItem[] = [
   {
     question: "Are extracurricular activities available?",
     answer:
-      "Yes. Learners participate in creative arts, sports, leadership activities and school events that support holistic development.",
+      "Yes. Learners participate in Robotics, Coding, Creative Arts, Sports, Leadership and Clubs to support holistic development.",
   },
   {
     question: "How can I contact the Admissions Office?",
@@ -50,11 +50,11 @@ const faqItems: FaqItem[] = [
   },
   {
     question: "What age do you admit children?",
-    answer: "To be confirmed by school management.",
+    answer: "Admissions are open from 3 months, depending on class placement readiness requirements.",
   },
   {
     question: "Do you provide school transportation?",
-    answer: "Awaiting confirmation from school management.",
+    answer: "No. At this time, school transportation is not provided in line with current Lagos State policy.",
   },
   {
     question: "What uniforms are required?",
@@ -62,11 +62,11 @@ const faqItems: FaqItem[] = [
   },
   {
     question: "Are meals available?",
-    answer: "Awaiting confirmation from school management.",
+    answer: "Meals are available on special request. Parents can coordinate preferences with the school office.",
   },
   {
     question: "Do you offer after-school care?",
-    answer: "To be confirmed.",
+    answer: "Yes. After-school care is available for families who need extended pickup support.",
   },
   {
     question: "Can transfer students apply?",
@@ -74,11 +74,11 @@ const faqItems: FaqItem[] = [
   },
   {
     question: "When does each academic session begin?",
-    answer: "School management publishes resumption dates before each term.",
+    answer: "Each academic session begins in September unless Lagos State directives require an adjustment.",
   },
   {
     question: "How many pupils are in each class?",
-    answer: "To be confirmed.",
+    answer: "Maximum class size is 10 pupils to ensure focused teaching and personalized learner support.",
   },
 ];
 

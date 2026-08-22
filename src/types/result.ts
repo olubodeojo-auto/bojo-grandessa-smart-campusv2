@@ -8,9 +8,15 @@ export interface Result {
 
   student_id: string;
 
-  class_id: string;
+  class_id?: string;
 
-  subject_id: string;
+  subject_id?: string;
+
+  class_name?: string;
+
+  subject_name?: string;
+
+  teacher_name?: string;
 
   academic_year: string;
 
@@ -26,7 +32,7 @@ export interface Result {
 
   remark: string;
 
-  teacher_id: string;
+  teacher_id?: string;
 
   status: ResultStatus;
 

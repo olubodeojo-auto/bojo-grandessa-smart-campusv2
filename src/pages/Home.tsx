@@ -3,6 +3,8 @@ import PublicFooter from "../components/homepage/PublicFooter";
 import PublicNavigation from "../components/homepage/PublicNavigation";
 import PublicWhatsAppButton from "../components/homepage/PublicWhatsAppButton";
 import SectionHeading from "../components/homepage/SectionHeading";
+import GallerySlider from "../components/home/GallerySlider";
+import AnnouncementsList from "../components/AnnouncementsList";
 import "./homepage.css";
 
 const assetsBase = "/client-resources";
@@ -161,6 +163,25 @@ function Home() {
                                 <figcaption>{item.label}</figcaption>
                             </figure>
                         ))}
+                    </div>
+                </div>
+            </section>
+
+            <section className="homepage-section homepage-section--tint" id="gallery-highlights">
+                <div className="homepage-container">
+                    <GallerySlider />
+                </div>
+            </section>
+
+            <section className="homepage-section" id="announcements">
+                <div className="homepage-container">
+                    <SectionHeading
+                        eyebrow="Latest News"
+                        title="Stay updated with important announcements."
+                        description="Find the latest news, updates and information from Grandessa School."
+                    />
+                    <div style={{ marginTop: 32 }}>
+                        <AnnouncementsList limit={3} />
                     </div>
                 </div>
             </section>

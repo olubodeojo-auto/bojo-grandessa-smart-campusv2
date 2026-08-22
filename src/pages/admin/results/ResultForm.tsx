@@ -2,7 +2,6 @@ import { useMemo, useState, type FormEvent } from "react";
 import Button from "../../../components/ui/Button";
 import FormField, { inputStyle } from "../../../components/forms/FormField";
 import { defaultAcademicCalendar } from "../../../config/grandessaCalendar";
-import { useAuth } from "../../../hooks/useAuth";
 import { createResult, updateResult } from "../../../services/resultService";
 import type { SchoolClass } from "../../../types/class";
 import type { Result } from "../../../types/result";
@@ -15,46 +14,34 @@ type ResultFormProps = {
   mode: "add" | "edit";
   result?: Result | null;
   students: Student[];
-  classes: SchoolClass[];
-  subjects: Subject[];
-  teachers: Teacher[];
+  classes?: SchoolClass[];
+  subjects?: Subject[];
+  teachers?: Teacher[];
   onClose: () => void;
   onSaved?: () => Promise<void> | void;
 };
 
 type ResultFormState = {
   student_id: string;
-  class_id: string;
-  subject_id: string;
-  teacher_id: string;
+  class_name: string;
+  subject_name: string;
+  teacher_name: string;
   academic_year: string;
   term: "First" | "Second" | "Third";
   continuous_assessment: number;
   examination: number;
 };
 
-function normalize(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function resolvePreferredTeacherId(teachers: Teacher[], fullName: string): string {
-  const match = teachers.find((teacher) => normalize(`${teacher.first_name} ${teacher.last_name}`) === normalize(fullName));
-  return match?.id ?? teachers[0]?.id ?? "";
-}
-
 function createInitialState(
   result: Result | null | undefined,
   students: Student[],
-  classes: SchoolClass[],
-  subjects: Subject[],
-  preferredTeacherId: string,
   defaultAcademicYear: string
 ): ResultFormState {
   return {
     student_id: result?.student_id ?? students[0]?.id ?? "",
-    class_id: result?.class_id ?? classes[0]?.id ?? "",
-    subject_id: result?.subject_id ?? subjects[0]?.id ?? "",
-    teacher_id: result?.teacher_id ?? preferredTeacherId,
+    class_name: result?.class_name ?? "",
+    subject_name: result?.subject_name ?? "",
+    teacher_name: result?.teacher_name ?? "",
     academic_year: result?.academic_year ?? defaultAcademicYear,
     term: result?.term ?? "First",
     continuous_assessment: result?.continuous_assessment ?? 0,
@@ -66,9 +53,6 @@ function validateForm(form: ResultFormState): string[] {
   const messages: string[] = [];
 
   if (!form.student_id) messages.push("Student is required.");
-  if (!form.class_id) messages.push("Class is required.");
-  if (!form.subject_id) messages.push("Subject is required.");
-  if (!form.teacher_id) messages.push("Teacher is required.");
 
   if (!form.academic_year.trim()) {
     messages.push("Session is required.");
@@ -95,28 +79,19 @@ export default function ResultForm({
   mode,
   result,
   students,
-  classes,
+  classes: _classes,
   subjects,
-  teachers,
+  teachers: _teachers,
   onClose,
   onSaved,
 }: ResultFormProps) {
-  const { fullName } = useAuth();
-  const preferredTeacherId = resolvePreferredTeacherId(teachers, fullName);
   const [form, setForm] = useState<ResultFormState>(() =>
-    createInitialState(result, students, classes, subjects, preferredTeacherId, defaultAcademicCalendar.academicYear)
+    createInitialState(result, students, defaultAcademicCalendar.academicYear)
   );
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [validationMessages, setValidationMessages] = useState<string[]>([]);
 
-  const selectedClass = classes.find((schoolClass) => schoolClass.id === form.class_id) ?? null;
-  const filteredStudents = useMemo(() => {
-    if (!selectedClass) {
-      return students;
-    }
-
-    return students.filter((student) => normalize(student.class_name ?? "") === normalize(selectedClass.class_name));
-  }, [selectedClass, students]);
+  const selectedStudentOptions = useMemo(() => students, [students]);
 
   const totalScore = useMemo(
     () => computeTotal(form.continuous_assessment, form.examination),
@@ -148,8 +123,9 @@ export default function ResultForm({
     try {
       const payload = {
         student_id: form.student_id,
-        class_id: form.class_id,
-        subject_id: form.subject_id,
+        class_name: form.class_name.trim() || undefined,
+        subject_name: form.subject_name.trim() || undefined,
+        teacher_name: form.teacher_name.trim() || undefined,
         academic_year: form.academic_year.trim(),
         term: form.term,
         continuous_assessment: form.continuous_assessment,
@@ -157,7 +133,6 @@ export default function ResultForm({
         total_score: totalScore,
         grade,
         remark,
-        teacher_id: form.teacher_id,
         status: mode === "edit" ? result?.status ?? "Draft" : "Draft",
       };
 
@@ -177,37 +152,11 @@ export default function ResultForm({
     }
   }
 
-  const canSubmit = students.length > 0 && classes.length > 0 && subjects.length > 0 && teachers.length > 0;
+  const canSubmit = students.length > 0;
 
   return (
     <form onSubmit={handleSubmit}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 }}>
-        <FormField label="Class">
-          <select
-            style={inputStyle}
-            value={form.class_id}
-            onChange={(event) => {
-              const nextClassId = event.target.value;
-              const nextClass = classes.find((schoolClass) => schoolClass.id === nextClassId) ?? null;
-              const nextStudent = students.find((student) => normalize(student.class_name ?? "") === normalize(nextClass?.class_name ?? ""));
-
-              setForm((previous) => ({
-                ...previous,
-                class_id: nextClassId,
-                student_id: nextStudent?.id ?? previous.student_id,
-              }));
-            }}
-            aria-label="Select class"
-          >
-            {classes.map((schoolClass) => (
-              <option key={schoolClass.id} value={schoolClass.id}>
-                {schoolClass.class_name}
-                {schoolClass.section ? ` - ${schoolClass.section}` : ""}
-              </option>
-            ))}
-          </select>
-        </FormField>
-
         <FormField label="Student">
           <select
             style={inputStyle}
@@ -215,7 +164,7 @@ export default function ResultForm({
             onChange={(event) => update("student_id", event.target.value)}
             aria-label="Select student"
           >
-            {filteredStudents.map((student) => (
+            {selectedStudentOptions.map((student) => (
               <option key={student.id} value={student.id}>
                 {student.first_name} {student.last_name} ({student.admission_number})
               </option>
@@ -223,19 +172,56 @@ export default function ResultForm({
           </select>
         </FormField>
 
-        <FormField label="Subject">
+        <FormField label="Class (optional)">
+          {Array.isArray(_classes) && _classes.length > 0 ? (
+            <select
+              style={inputStyle}
+              value={form.class_name}
+              onChange={(event) => update("class_name", event.target.value)}
+              aria-label="Select class"
+            >
+              <option value="">Select class</option>
+              {_classes.map((c: any) => (
+                <option key={c.id} value={c.class_name}>
+                  {c.class_name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              style={inputStyle}
+              value={form.class_name}
+              onChange={(event) => update("class_name", event.target.value)}
+              placeholder="e.g. Primary 5"
+              aria-label="Class name"
+            />
+          )}
+        </FormField>
+
+        <FormField label="Subject (optional)">
           <select
             style={inputStyle}
-            value={form.subject_id}
-            onChange={(event) => update("subject_id", event.target.value)}
+            value={form.subject_name}
+            onChange={(event) => update("subject_name", event.target.value)}
             aria-label="Select subject"
           >
-            {subjects.map((subject) => (
-              <option key={subject.id} value={subject.id}>
-                {subject.subject_name} ({subject.subject_code})
+            <option value="">Select subject</option>
+            {Array.isArray(subjects) && subjects.map((subject) => (
+              <option key={subject.id} value={subject.subject_name}>
+                {subject.subject_name}
               </option>
             ))}
           </select>
+        </FormField>
+
+        <FormField label="Teacher (optional)">
+          <input
+            style={inputStyle}
+            value={form.teacher_name}
+            onChange={(event) => update("teacher_name", event.target.value)}
+            placeholder="e.g. Mrs. Adebayo"
+            aria-label="Teacher name"
+          />
         </FormField>
 
         <FormField label="Session" hint="Academic year">
