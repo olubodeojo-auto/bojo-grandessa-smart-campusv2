@@ -119,7 +119,19 @@ async function getReportCardRecord(
       .limit(20);
 
     if (error || !data || data.length === 0) {
-      return null;
+      const legacy = await supabase
+        .from("report_cards")
+        .select("*, terms(name, academic_year)")
+        .eq("student_id", studentId)
+        .eq("class_id", classId)
+        .limit(20);
+
+      if (legacy.error || !legacy.data) return null;
+
+      const match = (legacy.data as Array<ReportCardRecord & { terms?: { name?: string; academic_year?: string } | null }>).find((record) =>
+        record.terms?.academic_year === academicYear && record.terms.name?.toLowerCase().startsWith(term.toLowerCase())
+      );
+      return match ?? null;
     }
 
     const exactMatch = (data as ReportCardRecord[]).find((record) => {
@@ -222,6 +234,7 @@ export async function buildStudentReportCard(
     return value && value.toLowerCase() !== "unknown" && value.toLowerCase() !== "unknown class";
   })?.class_name?.trim();
   const className = classEntity?.class_name?.trim() || student.class_name?.trim() || resultClassName || "";
+  const classTeacherName = classEntity?.class_teacher_name?.trim() || student.class_teacher_name?.trim() || "Not Assigned";
   const reportCardRecord = await getReportCardRecord(studentId, academicYear, term, classId);
 
   const cohortRows = allResults.filter(
@@ -293,6 +306,7 @@ export async function buildStudentReportCard(
     student,
     schoolSettings,
     className,
+    classTeacherName,
     academicYear,
     term,
     termEnding: termConfig.termEnding,
@@ -308,6 +322,75 @@ export async function buildStudentReportCard(
     gradingScale: grandessaGradingScale,
     template,
   };
+}
+
+export async function saveReportCardComments(params: {
+  studentId: string;
+  academicYear: string;
+  term: ReportTerm;
+  classId: string;
+  classTeacherComment: string;
+  headTeacherComment: string;
+}): Promise<void> {
+  const comments = {
+    class_teacher_comment: params.classTeacherComment.trim() || null,
+    head_teacher_comment: params.headTeacherComment.trim() || null,
+  };
+  const { data: existing, error: lookupError } = await supabase
+    .from("report_cards")
+    .select("id")
+    .eq("student_id", params.studentId)
+    .eq("academic_year", params.academicYear)
+    .eq("term", params.term)
+    .maybeSingle();
+
+  if (!lookupError && existing?.id) {
+    const { error } = await supabase.from("report_cards").update(comments).eq("id", existing.id);
+    if (!error) return;
+  }
+
+  const student = await supabase.from("students").select("school_id").eq("id", params.studentId).single();
+  const termRow = await supabase
+    .from("terms")
+    .select("id")
+    .eq("school_id", student.data?.school_id ?? "")
+    .eq("academic_year", params.academicYear)
+    .ilike("name", `${params.term}%`)
+    .maybeSingle();
+
+  if (student.error || termRow.error || !student.data?.school_id || !termRow.data?.id) {
+    throw lookupError ?? termRow.error ?? new Error("Unable to save report comments.");
+  }
+
+  const legacyExisting = await supabase
+    .from("report_cards")
+    .select("id")
+    .eq("student_id", params.studentId)
+    .eq("class_id", params.classId)
+    .eq("term_id", termRow.data.id)
+    .maybeSingle();
+
+  if (legacyExisting.error) throw legacyExisting.error;
+
+  if (legacyExisting.data?.id) {
+    const { error } = await supabase.from("report_cards").update({
+      teacher_comment: comments.class_teacher_comment,
+      principal_comment: comments.head_teacher_comment,
+    }).eq("id", legacyExisting.data.id);
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await supabase.from("report_cards").insert({
+    school_id: student.data.school_id,
+    student_id: params.studentId,
+    class_id: params.classId,
+    term_id: termRow.data.id,
+    teacher_comment: comments.class_teacher_comment,
+    principal_comment: comments.head_teacher_comment,
+  });
+
+  if (error) throw error;
 }
 
 export function normalizeResultInput(

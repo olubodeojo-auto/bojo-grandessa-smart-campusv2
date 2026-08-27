@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { normalizeClassName } from "./classService";
 import type { Student } from "../types/student";
 
 interface StudentListFilters {
@@ -64,7 +65,7 @@ export async function getStudents(
   const search = normalizeFilterValue(filters.search);
   const className = normalizeFilterValue(filters.className);
 
-  let query = supabase.from("students").select("*").order("created_at", {
+    let query = supabase.from("students").select("*").order("created_at", {
     ascending: false,
   });
 
@@ -82,7 +83,7 @@ export async function getStudents(
 
   if (error) throw error;
 
-  return (data ?? []) as Student[];
+    return (data ?? []).map(mapStudentRow);
 }
 
 export async function getStudent(id: string): Promise<Student | null> {
@@ -94,7 +95,17 @@ export async function getStudent(id: string): Promise<Student | null> {
 
   if (error) throw error;
 
-  return (data ?? null) as Student | null;
+  return data ? mapStudentRow(data) : null;
+}
+
+function mapStudentRow(row: Record<string, unknown>): Student {
+  const schoolClass = row.classes as { class_name?: string; teachers?: { first_name?: string | null; last_name?: string | null } | null } | null | undefined;
+  const teacherName = [schoolClass?.teachers?.first_name, schoolClass?.teachers?.last_name].filter(Boolean).join(" ") || null;
+  return {
+    ...(row as unknown as Student),
+    class_name: normalizeClassName(schoolClass?.class_name || (row.class_name as string | undefined) || ""),
+    class_teacher_name: teacherName,
+  };
 }
 
 export async function getStudentByAccessCode(code: string): Promise<Student | null> {

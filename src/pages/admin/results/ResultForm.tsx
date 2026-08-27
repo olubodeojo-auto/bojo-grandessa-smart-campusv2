@@ -23,6 +23,9 @@ type ResultFormProps = {
 
 type ResultFormState = {
   student_id: string;
+  class_id: string;
+  subject_id: string;
+  teacher_id: string;
   class_name: string;
   subject_name: string;
   teacher_name: string;
@@ -39,6 +42,9 @@ function createInitialState(
 ): ResultFormState {
   return {
     student_id: result?.student_id ?? students[0]?.id ?? "",
+    class_id: result?.class_id ?? students.find((student) => student.id === result?.student_id)?.class_id ?? "",
+    subject_id: result?.subject_id ?? "",
+    teacher_id: result?.teacher_id ?? "",
     class_name: result?.class_name ?? "",
     subject_name: result?.subject_name ?? "",
     teacher_name: result?.teacher_name ?? "",
@@ -81,7 +87,7 @@ export default function ResultForm({
   students,
   classes: _classes,
   subjects,
-  teachers: _teachers,
+  teachers = [],
   onClose,
   onSaved,
 }: ResultFormProps) {
@@ -123,6 +129,9 @@ export default function ResultForm({
     try {
       const payload = {
         student_id: form.student_id,
+        class_id: form.class_id,
+        subject_id: form.subject_id,
+        teacher_id: form.teacher_id,
         class_name: form.class_name.trim() || undefined,
         subject_name: form.subject_name.trim() || undefined,
         teacher_name: form.teacher_name.trim() || undefined,
@@ -161,7 +170,12 @@ export default function ResultForm({
           <select
             style={inputStyle}
             value={form.student_id}
-            onChange={(event) => update("student_id", event.target.value)}
+            onChange={(event) => {
+              const studentId = event.target.value;
+              const selected = students.find((student) => student.id === studentId);
+              update("student_id", studentId);
+              if (selected?.class_id) update("class_id", selected.class_id);
+            }}
             aria-label="Select student"
           >
             {selectedStudentOptions.map((student) => (
@@ -172,17 +186,22 @@ export default function ResultForm({
           </select>
         </FormField>
 
-        <FormField label="Class (optional)">
+        <FormField label="Class">
           {Array.isArray(_classes) && _classes.length > 0 ? (
             <select
               style={inputStyle}
-              value={form.class_name}
-              onChange={(event) => update("class_name", event.target.value)}
+              value={form.class_id}
+              onChange={(event) => {
+                const classId = event.target.value;
+                const selected = _classes.find((schoolClass) => schoolClass.id === classId);
+                update("class_id", classId);
+                update("class_name", selected?.class_name ?? "");
+              }}
               aria-label="Select class"
             >
               <option value="">Select class</option>
               {_classes.map((c: any) => (
-                <option key={c.id} value={c.class_name}>
+                <option key={c.id} value={c.id}>
                   {c.class_name}
                 </option>
               ))}
@@ -198,30 +217,46 @@ export default function ResultForm({
           )}
         </FormField>
 
-        <FormField label="Subject (optional)">
+        <FormField label="Subject">
           <select
             style={inputStyle}
-            value={form.subject_name}
-            onChange={(event) => update("subject_name", event.target.value)}
+            value={form.subject_id}
+            onChange={(event) => {
+              const subjectId = event.target.value;
+              const selected = subjects?.find((subject) => subject.id === subjectId);
+              update("subject_id", subjectId);
+              update("subject_name", selected?.subject_name ?? "");
+            }}
             aria-label="Select subject"
           >
             <option value="">Select subject</option>
             {Array.isArray(subjects) && subjects.map((subject) => (
-              <option key={subject.id} value={subject.subject_name}>
+              <option key={subject.id} value={subject.id}>
                 {subject.subject_name}
               </option>
             ))}
           </select>
         </FormField>
 
-        <FormField label="Teacher (optional)">
-          <input
+        <FormField label="Teacher">
+          <select
             style={inputStyle}
-            value={form.teacher_name}
-            onChange={(event) => update("teacher_name", event.target.value)}
-            placeholder="e.g. Mrs. Adebayo"
+            value={form.teacher_id}
+            onChange={(event) => {
+              const teacherId = event.target.value;
+              const selected = teachers.find((teacher) => teacher.id === teacherId);
+              update("teacher_id", teacherId);
+              update("teacher_name", selected ? `${selected.first_name} ${selected.last_name}` : "");
+            }}
             aria-label="Teacher name"
-          />
+          >
+            <option value="">Select teacher</option>
+            {teachers.map((teacher) => (
+              <option key={teacher.id} value={teacher.id}>
+                {teacher.first_name} {teacher.last_name}
+              </option>
+            ))}
+          </select>
         </FormField>
 
         <FormField label="Session" hint="Academic year">

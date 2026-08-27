@@ -11,14 +11,14 @@ const classOptions = [
   "All Classes",
   "Creche",
   "Pre-Nursery",
-  "Nursery 1",
-  "Nursery 2",
-  "Primary 1",
-  "Primary 2",
-  "Primary 3",
-  "Primary 4",
-  "Primary 5",
-  "Primary 6",
+  "Kindergarten 1",
+  "Kindergarten 2",
+  "Basic 1",
+  "Basic 2",
+  "Basic 3",
+  "Basic 4",
+  "Basic 5",
+  "Basic 6",
 ];
 
 export default function StudentFilters({

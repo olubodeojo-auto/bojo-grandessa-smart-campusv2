@@ -84,12 +84,14 @@ function createInitialState(student?: Student | null): StudentFormState {
 
 export default function StudentForm({ mode, student, onClose, onSaved }: Props) {
   const [loading, setLoading] = useState(false);
+  const [loadingInitialData, setLoadingInitialData] = useState(true);
   const [form, setForm] = useState<StudentFormState>(() => createInitialState(student));
   const hasUserEditedRef = useRef(false);
   const [classesList, setClassesList] = useState<SchoolClass[]>([]);
 
   useEffect(() => {
     hasUserEditedRef.current = false;
+    setLoadingInitialData(true);
     const nextState = createInitialState(student);
     setForm(nextState);
 
@@ -156,6 +158,8 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
         }
       } catch {
         // fail silently only for fetch population; actual save paths must surface errors
+      } finally {
+        if (!cancelled) setLoadingInitialData(false);
       }
     })();
 
@@ -256,6 +260,7 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
         date_of_birth: form.date_of_birth || null,
         admission_date: form.admission_date || new Date().toISOString().slice(0, 10),
         class_id: classId,
+        class_name: form.class_name || null,
         primary_contact_id: primaryContactId,
         secondary_contact_id: secondaryContactId,
         blood_group: form.blood_group.trim() || null,
@@ -323,12 +328,14 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
+            gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,260px),1fr))",
             gap: 16,
             width: "100%",
             boxSizing: "border-box",
           }}
         >
+        <h3 style={{ gridColumn: "1 / -1", margin: "8px 0 0" }}>Core Student Information</h3>
+
           <input
             style={inputStyle}
             placeholder="Admission Number"
@@ -343,6 +350,28 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
           value={form.first_name}
           onChange={(event) => update("first_name", event.target.value)}
         />
+
+        <div>
+          <label htmlFor="student-date-of-birth" style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>Date of Birth</label>
+          <input
+            id="student-date-of-birth"
+            style={inputStyle}
+            type="date"
+            value={form.date_of_birth}
+            onChange={(event) => update("date_of_birth", event.target.value)}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="student-admission-date" style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>Admission Date</label>
+          <input
+            id="student-admission-date"
+            style={inputStyle}
+            type="date"
+            value={form.admission_date}
+            onChange={(event) => update("admission_date", event.target.value)}
+          />
+        </div>
 
         <input
           style={inputStyle}
@@ -372,6 +401,12 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
           ))}
         </select>
 
+        <div style={{ padding: "12px 0", color: "#475569" }}>
+          <strong>Class Teacher:</strong> {classesList.find((item) => item.id === form.class_id)?.class_teacher_name || "Not Assigned"}
+        </div>
+
+        <h3 style={{ gridColumn: "1 / -1", margin: "8px 0 0" }}>Additional Information (Optional)</h3>
+
         <input
           style={inputStyle}
           placeholder="Blood Group"
@@ -399,6 +434,8 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
           value={form.medical_notes}
           onChange={(event) => update("medical_notes", event.target.value)}
         />
+
+        <h3 style={{ gridColumn: "1 / -1", margin: "8px 0 0" }}>Parent / Guardian Information</h3>
 
         {/* Primary contact */}
         <input
@@ -526,20 +563,6 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
           <option value="Female">Female</option>
         </select>
 
-        <input
-          style={inputStyle}
-          type="date"
-          value={form.date_of_birth}
-          onChange={(event) => update("date_of_birth", event.target.value)}
-        />
-
-        <input
-          style={inputStyle}
-          type="date"
-          value={form.admission_date}
-          onChange={(event) => update("admission_date", event.target.value)}
-        />
-
           <select
             style={inputStyle}
             value={form.status}
@@ -569,8 +592,8 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
           Cancel
         </button>
 
-        <button type="submit" disabled={loading}>
-          {loading ? "Saving..." : mode === "edit" ? "Update Student" : "Save Student"}
+        <button type="submit" disabled={loading || loadingInitialData}>
+          {loading || loadingInitialData ? "Loading..." : mode === "edit" ? "Update Student" : "Save Student"}
         </button>
       </div>
     </form>

@@ -32,6 +32,8 @@ export interface Student {
 
   class_name?: string;
 
+  class_teacher_name?: string | null;
+
   primary_contact_id?: string | null;
 
   secondary_contact_id?: string | null;

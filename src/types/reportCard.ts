@@ -35,6 +35,7 @@ export interface ReportCardData {
   student: Student;
   schoolSettings: SchoolSettings;
   className: string;
+  classTeacherName: string;
   academicYear: string;
   term: ReportTerm;
   termEnding: string;

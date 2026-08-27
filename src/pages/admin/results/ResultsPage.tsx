@@ -13,6 +13,7 @@ import { createResult, deleteResult, getResults, updateResult } from "../../../s
 import { parseResultWorkbook, summarizeImportPreview, type ResultImportPreviewEntry } from "../../../services/resultImportService";
 import { getStudents } from "../../../services/studentService";
 import { getSubjects } from "../../../services/subjectService";
+import { getTeachers } from "../../../services/teacherService";
 import { getClasses } from "../../../services/classService";
 import type { Result } from "../../../types/result";
 import type { Student } from "../../../types/student";
@@ -84,11 +85,13 @@ export default function ResultsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [teachers, setTeachers] = useState<import("../../../types/teacher").Teacher[]>([]);
   const [error, setError] = useState<string>("");
   const [isImportOpen, setIsImportOpen] = useState<boolean>(false);
   const [importEntries, setImportEntries] = useState<ResultImportPreviewEntry[]>([]);
   const [importFileName, setImportFileName] = useState<string>("");
   const [importSubmitting, setImportSubmitting] = useState<boolean>(false);
+  const [importSummary, setImportSummary] = useState<string>("");
 
   const [search, setSearch] = useState<string>("");
   const [term, setTerm] = useState<FilterTerm>("All");
@@ -113,19 +116,25 @@ export default function ResultsPage() {
   const loadData = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError("");
+    setImportSummary("");
 
     try {
-      const [resultsData, studentsData, classesData, subjectsData] = await Promise.all([
+      const [resultsData, studentsData, classesData, subjectsData, teachersData] = await Promise.all([
         loadWithDiagnostics("getResults", () => getResults()),
         loadWithDiagnostics("getStudents", () => getStudents()),
         loadWithDiagnostics("getClasses", () => getClasses()),
         loadWithDiagnostics("getSubjects", () => getSubjects()),
+        loadWithDiagnostics("getTeachers", () => getTeachers()).catch((error) => {
+          console.warn("Teacher directory is unavailable; continuing without teacher options.", error);
+          return [];
+        }),
       ]);
 
       setResults(resultsData);
       setStudents(studentsData);
       setClasses(classesData);
       setSubjects(subjectsData);
+      setTeachers(teachersData);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to load results module.";
       setError(message);
@@ -150,9 +159,9 @@ export default function ResultsPage() {
     return results
       .map((result) => {
         const student = studentsMap.get(result.student_id);
-        const classNameValue = result.class_name?.trim() || "Unknown class";
+        const classNameValue = result.class_name?.trim() || "Not Assigned";
         const subjectNameValue = result.subject_name?.trim() || "Unknown subject";
-        const teacherNameValue = result.teacher_name?.trim() || "Unknown teacher";
+        const teacherNameValue = result.teacher_name?.trim() || "Not Assigned";
 
         return {
           id: result.id,
@@ -318,6 +327,10 @@ export default function ResultsPage() {
     setError("");
 
     try {
+      const classByName = new Map(classes.map((schoolClass) => [schoolClass.class_name.trim().toLowerCase(), schoolClass]));
+      const subjectByName = new Map(subjects.map((subject) => [subject.subject_name.trim().toLowerCase(), subject]));
+      const teacherByName = new Map(teachers.map((teacher) => [`${teacher.first_name} ${teacher.last_name}`.trim().toLowerCase(), teacher]));
+      let skipped = 0;
       const payloads = validEntries.flatMap((entry) => {
         const studentId = entry.selectedStudentId ?? entry.matchedStudentId;
 
@@ -325,26 +338,50 @@ export default function ResultsPage() {
           return [];
         }
 
-        return entry.items.map((item) => ({
-          student_id: studentId,
-          class_id: "",
-          subject_id: "",
-          class_name: item.className || entry.className || undefined,
-          subject_name: item.subjectName || undefined,
-          teacher_name: item.teacherName || entry.teacherName || undefined,
-          academic_year: item.academicYear || entry.academicYear,
-          term: item.term || entry.term,
-          continuous_assessment: item.continuousAssessment,
-          examination: item.examination,
-          total_score: item.totalScore,
-          grade: item.grade,
-          remark: item.remark,
-          teacher_id: "",
-          status: "Draft" as const,
-        }));
+        const student = studentsMap.get(studentId);
+        const schoolClass = (item: ResultImportPreviewEntry["items"][number]) =>
+          classByName.get((item.className || entry.className || student?.class_name || "").trim().toLowerCase())
+          ?? (student?.class_id ? classes.find((schoolClass) => schoolClass.id === student.class_id) : undefined);
+
+        return entry.items.flatMap((item) => {
+          const classEntity = schoolClass(item);
+          const subject = subjectByName.get(item.subjectName.trim().toLowerCase());
+          const teacher = teacherByName.get((item.teacherName || entry.teacherName).trim().toLowerCase())
+            ?? (classEntity?.class_teacher_id ? teachers.find((candidate) => candidate.id === classEntity.class_teacher_id) : undefined);
+
+          if (!student || !classEntity || !subject || !teacher) {
+            skipped += 1;
+            return [];
+          }
+
+          return [{
+            student_id: student.id,
+            class_id: classEntity.id,
+            subject_id: subject.id,
+            class_name: classEntity.class_name,
+            subject_name: subject.subject_name,
+            teacher_name: `${teacher.first_name} ${teacher.last_name}`,
+            academic_year: item.academicYear || entry.academicYear,
+            term: item.term || entry.term,
+            continuous_assessment: item.continuousAssessment,
+            examination: item.examination,
+            total_score: item.totalScore,
+            grade: item.grade,
+            remark: item.remark,
+            teacher_id: teacher.id,
+            status: "Draft" as const,
+          }];
+        });
       });
 
-      await Promise.all(payloads.map((payload) => createResult(payload)));
+      const existingKeys = new Set(results.map((result) => `${result.student_id}|${result.subject_id}|${result.academic_year}|${result.term}`));
+      await Promise.all(payloads.map((payload) => {
+        const key = `${payload.student_id}|${payload.subject_id}|${payload.academic_year}|${payload.term}`;
+        const existing = results.find((result) => existingKeys.has(key) && `${result.student_id}|${result.subject_id}|${result.academic_year}|${result.term}` === key);
+        return existing ? updateResult(existing.id, payload) : createResult(payload);
+      }));
+      const unmatchedStudents = importEntries.filter((entry) => !(entry.selectedStudentId ?? entry.matchedStudentId)).length;
+      setImportSummary(`Import complete. Imported: ${payloads.length}. Skipped: ${unmatchedStudents + skipped}.`);
       setImportEntries([]);
       setIsImportOpen(false);
       setImportFileName("");
@@ -422,6 +459,12 @@ export default function ResultsPage() {
             }}
           >
             {error}
+          </div>
+        ) : null}
+
+        {importSummary ? (
+          <div style={{ marginBottom: 16, padding: 12, borderRadius: 12, border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#166534" }}>
+            {importSummary}
           </div>
         ) : null}
 

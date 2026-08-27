@@ -31,6 +31,9 @@ export default function ReportCardDocument({ report }: { report: ReportCardData 
           <p>CLASS: {classDisplay}</p>
         </div>
         <div className="meta-row">
+          <p>CLASS TEACHER: {report.classTeacherName || "Not Assigned"}</p>
+        </div>
+        <div className="meta-row">
           <p>AGE: {ageText === "—" ? "—" : `${ageText}+`}</p>
           <p>NEXT TERM BEGINS: {report.nextTermBegins}</p>
         </div>

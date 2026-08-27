@@ -151,6 +151,8 @@ export default function AnnouncementsPage() {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "flex-start",
+            gap: 16,
+            flexWrap: "wrap",
           }}
         >
           <div>

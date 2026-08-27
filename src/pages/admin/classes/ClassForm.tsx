@@ -2,7 +2,9 @@
 
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { createClass, updateClass } from "../../../services/classService";
+import { getTeachers } from "../../../services/teacherService";
 import type { ClassStatus, SchoolClass } from "../../../types/class";
+import type { Teacher } from "../../../types/teacher";
 
 type Props = {
   mode: "add" | "edit";
@@ -13,12 +15,14 @@ type Props = {
 
 type ClassFormState = {
   class_name: string;
+  class_teacher_id: string | null;
   status: ClassStatus;
 };
 
 function createInitialState(schoolClass?: SchoolClass | null): ClassFormState {
   return {
     class_name: schoolClass?.class_name ?? "",
+    class_teacher_id: schoolClass?.class_teacher_id ?? null,
     status: schoolClass?.status ?? "Active",
   };
 }
@@ -26,10 +30,15 @@ function createInitialState(schoolClass?: SchoolClass | null): ClassFormState {
 export default function ClassForm({ mode, schoolClass, onClose, onSaved }: Props) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<ClassFormState>(() => createInitialState(schoolClass));
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
 
   useEffect(() => {
     setForm(createInitialState(schoolClass));
   }, [schoolClass]);
+
+  useEffect(() => {
+    void getTeachers().then(setTeachers).catch(() => setTeachers([]));
+  }, []);
 
   function update<K extends keyof ClassFormState>(field: K, value: ClassFormState[K]): void {
     setForm((prev) => ({
@@ -53,11 +62,13 @@ export default function ClassForm({ mode, schoolClass, onClose, onSaved }: Props
         await updateClass({
           id: schoolClass.id,
           class_name: form.class_name,
+          class_teacher_id: form.class_teacher_id,
           status: form.status,
         });
       } else {
         await createClass({
           class_name: form.class_name,
+          class_teacher_id: form.class_teacher_id,
           status: form.status,
         });
       }
@@ -95,6 +106,23 @@ export default function ClassForm({ mode, schoolClass, onClose, onSaved }: Props
             onChange={(event) => update("class_name", event.target.value)}
             aria-label="Class name"
           />
+        </label>
+
+        <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span>Class Teacher</span>
+          <select
+            style={inputStyle}
+            value={form.class_teacher_id ?? ""}
+            onChange={(event) => update("class_teacher_id", event.target.value || null)}
+            aria-label="Class teacher"
+          >
+            <option value="">Not Assigned</option>
+            {teachers.map((teacher) => (
+              <option key={teacher.id} value={teacher.id}>
+                {teacher.first_name} {teacher.last_name}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>

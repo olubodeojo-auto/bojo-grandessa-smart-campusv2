@@ -23,6 +23,10 @@ export default function ClassProfile({ schoolClass }: Props) {
       <p>
         <strong>Created:</strong> {schoolClass.created_at}
       </p>
+
+      <p>
+        <strong>Class Teacher:</strong> {schoolClass.class_teacher_name || "Not Assigned"}
+      </p>
       <p>
         <strong>Updated:</strong> {schoolClass.updated_at}
       </p>

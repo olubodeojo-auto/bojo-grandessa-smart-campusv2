@@ -10,7 +10,7 @@ import FormField, { inputStyle } from "../../../components/forms/FormField";
 import SectionCard from "../../../components/ui/SectionCard";
 import Button from "../../../components/ui/Button";
 import { type AcademicCalendarConfig } from "../../../config/grandessaCalendar";
-import { buildStudentReportCard, getReportHistoryByStudent } from "../../../services/reportCardService";
+import { buildStudentReportCard, getReportHistoryByStudent, saveReportCardComments } from "../../../services/reportCardService";
 import {
   getAcademicCalendarByYear,
   getSchoolSettings,
@@ -74,6 +74,7 @@ export default function ReportCardsPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [uploadingBranding, setUploadingBranding] = useState<string>("");
+  const [savingComments, setSavingComments] = useState(false);
 
   // Preview override fields (manual, not persisted)
   const [editedTimesPresent, setEditedTimesPresent] = useState<string>("");
@@ -284,6 +285,28 @@ export default function ReportCardsPage() {
     }
   }
 
+  async function saveComments(): Promise<void> {
+    if (!report) return;
+    try {
+      setSavingComments(true);
+      setError("");
+      await saveReportCardComments({
+        studentId: report.student.id,
+        academicYear: report.academicYear,
+        term: report.term,
+        classId: report.student.class_id ?? "",
+        classTeacherComment: editedClassTeacherComment,
+        headTeacherComment: editedHeadTeacherComment,
+      });
+      const refreshed = await buildStudentReportCard(report.student.id, report.academicYear, report.term);
+      setReport(refreshed);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save report comments.");
+    } finally {
+      setSavingComments(false);
+    }
+  }
+
   async function handleBrandingUpload(
     event: React.ChangeEvent<HTMLInputElement>,
     field: "logo_url" | "principal_signature_url" | "school_stamp_url",
@@ -384,6 +407,15 @@ export default function ReportCardsPage() {
             </div>
             <Button type="button" onClick={saveCalendar}>Save Calendar</Button>
           </div>
+
+          <FormField label="Academic Session">
+            <input
+              style={inputStyle}
+              value={calendarConfig.academicYear}
+              onChange={(event) => setCalendarConfig((previous) => previous ? { ...previous, academicYear: event.target.value } : previous)}
+              placeholder="e.g. 2026/2027"
+            />
+          </FormField>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 }}>
             {([
@@ -488,6 +520,9 @@ export default function ReportCardsPage() {
                 <FormField label="Head Teacher's Comment">
                   <textarea style={{ ...inputStyle, height: 80 }} value={editedHeadTeacherComment ?? ""} onChange={(e) => setEditedHeadTeacherComment(e.target.value)} />
                 </FormField>
+                <Button type="button" onClick={() => void saveComments()} disabled={savingComments}>
+                  {savingComments ? "Saving comments..." : "Save Comments"}
+                </Button>
               </div>
             </div>
           </SectionCard>
@@ -500,8 +535,8 @@ export default function ReportCardsPage() {
                 timesPresent: editedTimesPresent === "" ? report.attendance.timesPresent : Number(editedTimesPresent),
                 timesAbsent: editedTimesAbsent === "" ? report.attendance.timesAbsent : Number(editedTimesAbsent),
               },
-              classTeacherComment: editedClassTeacherComment === "" ? report.classTeacherComment : editedClassTeacherComment ?? report.classTeacherComment,
-              headTeacherComment: editedHeadTeacherComment === "" ? report.headTeacherComment : editedHeadTeacherComment ?? report.headTeacherComment,
+              classTeacherComment: editedClassTeacherComment,
+              headTeacherComment: editedHeadTeacherComment,
               classAverage: editedClassAverage === "" ? report.classAverage : Number(editedClassAverage),
             }}
           />
