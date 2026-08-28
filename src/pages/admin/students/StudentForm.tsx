@@ -260,7 +260,6 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
         date_of_birth: form.date_of_birth || null,
         admission_date: form.admission_date || new Date().toISOString().slice(0, 10),
         class_id: classId,
-        class_name: form.class_name || null,
         primary_contact_id: primaryContactId,
         secondary_contact_id: secondaryContactId,
         blood_group: form.blood_group.trim() || null,
@@ -402,7 +401,7 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
         </select>
 
         <div style={{ padding: "12px 0", color: "#475569" }}>
-          <strong>Class Teacher:</strong> {classesList.find((item) => item.id === form.class_id)?.class_teacher_name || "Not Assigned"}
+          <strong>Class Teacher:</strong> {[classesList.find((item) => item.id === form.class_id)?.class_teacher?.first_name, classesList.find((item) => item.id === form.class_id)?.class_teacher?.last_name].filter(Boolean).join(" ") || "Not Assigned"}
         </div>
 
         <h3 style={{ gridColumn: "1 / -1", margin: "8px 0 0" }}>Additional Information (Optional)</h3>

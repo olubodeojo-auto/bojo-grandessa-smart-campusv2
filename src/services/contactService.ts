@@ -58,8 +58,8 @@ export async function createContact(payload: {
 export async function updateContact(id: string, payload: Partial<Contact>): Promise<Contact> {
   const updatePayload: any = {};
 
-  if (payload.first_name !== undefined) updatePayload.first_name = (payload.first_name ?? "").trim() || null;
-  if (payload.last_name !== undefined) updatePayload.last_name = (payload.last_name ?? "").trim() || null;
+  if (payload.first_name !== undefined && (payload.first_name ?? "").trim()) updatePayload.first_name = payload.first_name.trim();
+  if (payload.last_name !== undefined && (payload.last_name ?? "").trim()) updatePayload.last_name = payload.last_name.trim();
   if (payload.relationship !== undefined) updatePayload.relationship = ALLOWED_RELATIONSHIPS.includes(payload.relationship as string) ? payload.relationship : null;
   if (payload.phone !== undefined) updatePayload.phone = (payload.phone ?? "").trim() || null;
   if (payload.alternate_phone !== undefined) updatePayload.alternate_phone = (payload.alternate_phone ?? "").trim() || null;

@@ -30,6 +30,11 @@ export interface Student {
 
   class_id?: string | null;
 
+  class_teacher?: {
+    first_name: string | null;
+    last_name: string | null;
+  } | null;
+
   class_name?: string;
 
   class_teacher_name?: string | null;

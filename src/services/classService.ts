@@ -6,6 +6,7 @@ import type {
 } from "../types/class";
 
 const TABLE = "classes";
+const CLASS_SELECT = "id, class_name, class_teacher_id, status, created_at, updated_at";
 
 export function normalizeClassName(className: string): string {
   const normalized = className.trim().toLowerCase();
@@ -31,14 +32,49 @@ export function normalizeClassName(className: string): string {
 export async function getClasses(): Promise<SchoolClass[]> {
   const { data, error } = await supabase
     .from(TABLE)
-    .select("id, class_name, status, created_at, updated_at")
+    .select(CLASS_SELECT)
     .order("class_name", { ascending: true });
 
   if (error) throw error;
 
-  const normalizedClasses = (data ?? []).map((item) => ({
-    ...(item as SchoolClass),
-    class_name: normalizeClassName((item as SchoolClass).class_name),
+  const classRows = (data ?? []) as SchoolClass[];
+  const teacherIds = classRows.map((item) => item.class_teacher_id).filter((id): id is string => Boolean(id));
+  const teacherMap = new Map<string, SchoolClass["class_teacher"]>();
+
+  if (teacherIds.length > 0) {
+    const { data: assignments, error: assignmentError } = await supabase
+      .from("user_roles")
+      .select("user_id, role_id")
+      .in("user_id", teacherIds)
+      .eq("is_active", true);
+
+    if (assignmentError) throw assignmentError;
+
+    const roleIds = (assignments ?? []).map((assignment) => assignment.role_id);
+    const { data: roles, error: roleError } = await supabase.from("roles").select("id, name").in("id", roleIds);
+    if (roleError) throw roleError;
+
+    const teacherRoleIds = new Set((roles ?? []).filter((role) => role.name === "Teacher").map((role) => role.id));
+    const activeTeacherIds = (assignments ?? [])
+      .filter((assignment) => teacherRoleIds.has(assignment.role_id))
+      .map((assignment) => assignment.user_id);
+
+    if (activeTeacherIds.length > 0) {
+      const { data: teachers, error: teacherError } = await supabase
+        .from("users")
+        .select("id, first_name, last_name, status")
+        .in("id", activeTeacherIds)
+        .eq("status", "Active");
+
+      if (teacherError) throw teacherError;
+      (teachers ?? []).forEach((teacher) => teacherMap.set(teacher.id, teacher));
+    }
+  }
+
+  const normalizedClasses = classRows.map((item) => ({
+    ...item,
+    class_name: normalizeClassName(item.class_name),
+    class_teacher: teacherMap.get(item.class_teacher_id ?? "") ?? null,
   }));
 
   return Array.from(new Map(normalizedClasses.map((item) => [item.class_name.toLowerCase(), item])).values());
@@ -55,7 +91,7 @@ export async function createClass(payload: CreateClassData): Promise<SchoolClass
       class_teacher_id: payload.class_teacher_id ?? null,
       status: payload.status,
     })
-    .select("id, class_name, class_teacher_id, status, created_at, updated_at")
+    .select(CLASS_SELECT)
     .single();
 
   if (error) throw error;
@@ -76,7 +112,7 @@ export async function updateClass(payload: UpdateClassData): Promise<SchoolClass
       updated_at: new Date().toISOString(),
     })
     .eq("id", payload.id)
-    .select("id, class_name, class_teacher_id, status, created_at, updated_at")
+    .select(CLASS_SELECT)
     .single();
 
   if (error) throw error;

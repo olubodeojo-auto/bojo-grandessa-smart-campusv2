@@ -2,9 +2,8 @@
 
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { createClass, updateClass } from "../../../services/classService";
-import { getTeachers } from "../../../services/teacherService";
+import { getActiveTeacherUsers, type StaffUser } from "../../../services/staffService";
 import type { ClassStatus, SchoolClass } from "../../../types/class";
-import type { Teacher } from "../../../types/teacher";
 
 type Props = {
   mode: "add" | "edit";
@@ -30,14 +29,14 @@ function createInitialState(schoolClass?: SchoolClass | null): ClassFormState {
 export default function ClassForm({ mode, schoolClass, onClose, onSaved }: Props) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<ClassFormState>(() => createInitialState(schoolClass));
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [teachers, setTeachers] = useState<StaffUser[]>([]);
 
   useEffect(() => {
     setForm(createInitialState(schoolClass));
   }, [schoolClass]);
 
   useEffect(() => {
-    void getTeachers().then(setTeachers).catch(() => setTeachers([]));
+    void getActiveTeacherUsers().then(setTeachers).catch(() => setTeachers([]));
   }, []);
 
   function update<K extends keyof ClassFormState>(field: K, value: ClassFormState[K]): void {
@@ -119,7 +118,7 @@ export default function ClassForm({ mode, schoolClass, onClose, onSaved }: Props
             <option value="">Not Assigned</option>
             {teachers.map((teacher) => (
               <option key={teacher.id} value={teacher.id}>
-                {teacher.first_name} {teacher.last_name}
+                {[teacher.first_name, teacher.last_name].filter(Boolean).join(" ")}
               </option>
             ))}
           </select>

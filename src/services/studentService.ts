@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import { normalizeClassName } from "./classService";
+import { getClasses, normalizeClassName } from "./classService";
 import type { Student } from "../types/student";
 
 interface StudentListFilters {
@@ -79,11 +79,12 @@ export async function getStudents(
     query = query.ilike("class_name", `%${className}%`);
   }
 
-  const { data, error } = await query;
+  const [{ data, error }, classes] = await Promise.all([query, getClasses()]);
 
   if (error) throw error;
 
-    return (data ?? []).map(mapStudentRow);
+  const classesById = new Map(classes.map((schoolClass) => [schoolClass.id, schoolClass]));
+  return (data ?? []).map((row) => mapStudentRow(row, classesById.get((row as { class_id?: string }).class_id ?? "")));
 }
 
 export async function getStudent(id: string): Promise<Student | null> {
@@ -95,16 +96,16 @@ export async function getStudent(id: string): Promise<Student | null> {
 
   if (error) throw error;
 
-  return data ? mapStudentRow(data) : null;
+  if (!data) return null;
+  const classes = await getClasses();
+  return mapStudentRow(data, classes.find((schoolClass) => schoolClass.id === (data as { class_id?: string }).class_id));
 }
 
-function mapStudentRow(row: Record<string, unknown>): Student {
-  const schoolClass = row.classes as { class_name?: string; teachers?: { first_name?: string | null; last_name?: string | null } | null } | null | undefined;
-  const teacherName = [schoolClass?.teachers?.first_name, schoolClass?.teachers?.last_name].filter(Boolean).join(" ") || null;
+function mapStudentRow(row: Record<string, unknown>, schoolClass?: Awaited<ReturnType<typeof getClasses>>[number]): Student {
   return {
     ...(row as unknown as Student),
     class_name: normalizeClassName(schoolClass?.class_name || (row.class_name as string | undefined) || ""),
-    class_teacher_name: teacherName,
+    class_teacher: schoolClass?.class_teacher ?? null,
   };
 }
 

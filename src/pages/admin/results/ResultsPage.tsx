@@ -13,7 +13,6 @@ import { createResult, deleteResult, getResults, updateResult } from "../../../s
 import { parseResultWorkbook, summarizeImportPreview, type ResultImportPreviewEntry } from "../../../services/resultImportService";
 import { getStudents } from "../../../services/studentService";
 import { getSubjects } from "../../../services/subjectService";
-import { getTeachers } from "../../../services/teacherService";
 import { getClasses } from "../../../services/classService";
 import type { Result } from "../../../types/result";
 import type { Student } from "../../../types/student";
@@ -85,7 +84,6 @@ export default function ResultsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [teachers, setTeachers] = useState<import("../../../types/teacher").Teacher[]>([]);
   const [error, setError] = useState<string>("");
   const [isImportOpen, setIsImportOpen] = useState<boolean>(false);
   const [importEntries, setImportEntries] = useState<ResultImportPreviewEntry[]>([]);
@@ -119,22 +117,17 @@ export default function ResultsPage() {
     setImportSummary("");
 
     try {
-      const [resultsData, studentsData, classesData, subjectsData, teachersData] = await Promise.all([
+      const [resultsData, studentsData, classesData, subjectsData] = await Promise.all([
         loadWithDiagnostics("getResults", () => getResults()),
         loadWithDiagnostics("getStudents", () => getStudents()),
         loadWithDiagnostics("getClasses", () => getClasses()),
         loadWithDiagnostics("getSubjects", () => getSubjects()),
-        loadWithDiagnostics("getTeachers", () => getTeachers()).catch((error) => {
-          console.warn("Teacher directory is unavailable; continuing without teacher options.", error);
-          return [];
-        }),
       ]);
 
       setResults(resultsData);
       setStudents(studentsData);
       setClasses(classesData);
       setSubjects(subjectsData);
-      setTeachers(teachersData);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to load results module.";
       setError(message);
@@ -329,7 +322,6 @@ export default function ResultsPage() {
     try {
       const classByName = new Map(classes.map((schoolClass) => [schoolClass.class_name.trim().toLowerCase(), schoolClass]));
       const subjectByName = new Map(subjects.map((subject) => [subject.subject_name.trim().toLowerCase(), subject]));
-      const teacherByName = new Map(teachers.map((teacher) => [`${teacher.first_name} ${teacher.last_name}`.trim().toLowerCase(), teacher]));
       let skipped = 0;
       const payloads = validEntries.flatMap((entry) => {
         const studentId = entry.selectedStudentId ?? entry.matchedStudentId;
@@ -346,10 +338,9 @@ export default function ResultsPage() {
         return entry.items.flatMap((item) => {
           const classEntity = schoolClass(item);
           const subject = subjectByName.get(item.subjectName.trim().toLowerCase());
-          const teacher = teacherByName.get((item.teacherName || entry.teacherName).trim().toLowerCase())
-            ?? (classEntity?.class_teacher_id ? teachers.find((candidate) => candidate.id === classEntity.class_teacher_id) : undefined);
+          const teacherName = (item.teacherName || entry.teacherName || [classEntity?.class_teacher?.first_name, classEntity?.class_teacher?.last_name].filter(Boolean).join(" ") || "").trim();
 
-          if (!student || !classEntity || !subject || !teacher) {
+          if (!student || !classEntity || !subject || !teacherName) {
             skipped += 1;
             return [];
           }
@@ -360,7 +351,7 @@ export default function ResultsPage() {
             subject_id: subject.id,
             class_name: classEntity.class_name,
             subject_name: subject.subject_name,
-            teacher_name: `${teacher.first_name} ${teacher.last_name}`,
+            teacher_name: teacherName,
             academic_year: item.academicYear || entry.academicYear,
             term: item.term || entry.term,
             continuous_assessment: item.continuousAssessment,
@@ -368,7 +359,7 @@ export default function ResultsPage() {
             total_score: item.totalScore,
             grade: item.grade,
             remark: item.remark,
-            teacher_id: teacher.id,
+            teacher_id: undefined,
             status: "Draft" as const,
           }];
         });

@@ -459,8 +459,6 @@ export default function ReportCardsPage() {
             <FormField label="Website"><input style={inputStyle} value={schoolSettings.website ?? ""} onChange={(event) => updateSchoolSetting("website", event.target.value)} /></FormField>
             <FormField label="Head Teacher Name"><input style={inputStyle} value={schoolSettings.head_teacher_name ?? ""} onChange={(event) => updateSchoolSetting("head_teacher_name", event.target.value)} /></FormField>
             <FormField label="Report Footer / Closing Note"><input style={inputStyle} value={schoolSettings.report_footer ?? ""} onChange={(event) => updateSchoolSetting("report_footer", event.target.value)} /></FormField>
-            <FormField label="Kindergarten Classes"><input style={inputStyle} value={schoolSettings.kindergarten_class_patterns.join(", ")} onChange={(event) => updateSchoolSetting("kindergarten_class_patterns", event.target.value)} /></FormField>
-            <FormField label="Basic Classes"><input style={inputStyle} value={schoolSettings.basic_class_patterns.join(", ")} onChange={(event) => updateSchoolSetting("basic_class_patterns", event.target.value)} /></FormField>
           </div>
         </SectionCard>
       ) : null}

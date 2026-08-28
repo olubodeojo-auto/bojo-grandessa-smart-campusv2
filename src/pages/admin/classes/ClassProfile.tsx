@@ -25,7 +25,7 @@ export default function ClassProfile({ schoolClass }: Props) {
       </p>
 
       <p>
-        <strong>Class Teacher:</strong> {schoolClass.class_teacher_name || "Not Assigned"}
+        <strong>Class Teacher:</strong> {[schoolClass.class_teacher?.first_name, schoolClass.class_teacher?.last_name].filter(Boolean).join(" ") || "Not Assigned"}
       </p>
       <p>
         <strong>Updated:</strong> {schoolClass.updated_at}

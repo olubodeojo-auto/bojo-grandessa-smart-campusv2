@@ -20,6 +20,7 @@ export default function AdministratorPreviewLayout() {
     { key: "dashboard", label: "Dashboard", path: "/admin", searchPlaceholder: "Search dashboard" },
     { key: "students", label: "Students", path: "/admin/students", searchPlaceholder: "Search students" },
     { key: "results", label: "Results", path: "/admin/results", searchPlaceholder: "Search results" },
+    { key: "classes", label: "Classes", path: "/admin/classes", searchPlaceholder: "Search classes" },
     { key: "gallery", label: "Gallery", path: "/admin/gallery", searchPlaceholder: "Search gallery" },
     { key: "announcements", label: "Announcements", path: "/admin/announcements", searchPlaceholder: "Search announcements" },
   ];

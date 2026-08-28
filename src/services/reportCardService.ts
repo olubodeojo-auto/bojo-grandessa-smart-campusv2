@@ -234,7 +234,7 @@ export async function buildStudentReportCard(
     return value && value.toLowerCase() !== "unknown" && value.toLowerCase() !== "unknown class";
   })?.class_name?.trim();
   const className = classEntity?.class_name?.trim() || student.class_name?.trim() || resultClassName || "";
-  const classTeacherName = classEntity?.class_teacher_name?.trim() || student.class_teacher_name?.trim() || "Not Assigned";
+  const classTeacherName = [classEntity?.class_teacher?.first_name, classEntity?.class_teacher?.last_name].filter(Boolean).join(" ") || "Not Assigned";
   const reportCardRecord = await getReportCardRecord(studentId, academicYear, term, classId);
 
   const cohortRows = allResults.filter(

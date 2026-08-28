@@ -1,5 +1,5 @@
 alter table if exists public.classes
-  add column if not exists class_teacher_id uuid references public.teachers(id) on delete set null;
+  add column if not exists class_teacher_id uuid references public.users(id) on delete set null;
 
 create index if not exists idx_classes_class_teacher_id on public.classes(class_teacher_id);
 
@@ -19,13 +19,3 @@ where lower(trim(class_name)) in (
   'nursery 1', 'nursery 2', 'primary 1', 'primary 2', 'primary 3',
   'primary 4', 'primary 5', 'primary 6'
 );
-
-update public.students s
-set class_name = c.class_name
-from public.classes c
-where s.class_id = c.id;
-
-update public.results r
-set class_name = c.class_name
-from public.classes c
-where r.class_id = c.id;

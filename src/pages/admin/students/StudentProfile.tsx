@@ -8,6 +8,7 @@ type Props = {
     first_name?: string;
     last_name?: string;
     class_name?: string;
+    class_teacher?: { first_name?: string | null; last_name?: string | null } | null;
     gender?: string;
   };
 };
@@ -54,6 +55,10 @@ export default function StudentProfile({ student }: Props) {
 
       <p>
         <strong>Class:</strong> {student.class_name}
+      </p>
+
+      <p>
+        <strong>Class Teacher:</strong> {[student.class_teacher?.first_name, student.class_teacher?.last_name].filter(Boolean).join(" ") || "Not Assigned"}
       </p>
 
       <p>

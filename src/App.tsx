@@ -21,6 +21,7 @@ import ResultsPage from "./pages/admin/results/ResultsPage";
 import ReportCardsPage from "./pages/admin/results/ReportCardsPage";
 import GalleryPage from "./pages/admin/gallery/GalleryPage";
 import AnnouncementsPage from "./pages/admin/announcements/AnnouncementsPage";
+import ClassesPage from "./pages/admin/classes/ClassesPage";
 import ParentReportsPage from "./pages/portal/ParentReportsPage";
 
 export default function App() {
@@ -51,6 +52,8 @@ export default function App() {
         <Route path="students" element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
 
         <Route path="results" element={<ProtectedRoute allowedRoles={["Super Admin", "School Admin", "Teacher", "super_admin", "school_admin", "teacher", "admin", "Admin", "Administrator"]}><ResultsPage /></ProtectedRoute>} />
+
+        <Route path="classes" element={<ProtectedRoute allowedRoles={["Super Admin", "School Admin", "super_admin", "school_admin", "admin", "Admin", "Administrator"]}><ClassesPage /></ProtectedRoute>} />
 
         <Route path="reports" element={<ProtectedRoute allowedRoles={["Super Admin", "School Admin", "Teacher", "super_admin", "school_admin", "teacher", "admin", "Admin", "Administrator"]}><ReportCardsPage /></ProtectedRoute>} />
 
