@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { updatePassword } from "../../services/authService";
 
 const MIN_PASSWORD_LENGTH = 8;
 
 export default function ResetPasswordPage() {
+  const navigate = useNavigate();
   const [hasRecoverySession, setHasRecoverySession] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [password, setPassword] = useState("");
@@ -75,6 +76,7 @@ export default function ResetPasswordPage() {
       setPassword("");
       setConfirmPassword("");
       setMessage("Your password has been changed successfully.");
+      navigate("/admin", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update your password.");
     } finally {
@@ -87,7 +89,7 @@ export default function ResetPasswordPage() {
       <form onSubmit={handleSubmit} style={{ width: 350, display: "flex", flexDirection: "column", gap: 15 }}>
         <h2>Choose a new password</h2>
 
-        {checkingSession ? <p>Checking your recovery link...</p> : null}
+        {checkingSession ? <p>Checking your invitation or recovery link...</p> : null}
         {!checkingSession && !hasRecoverySession ? (
           <p style={{ color: "red" }}>This recovery link is invalid or has expired. Request a new link.</p>
         ) : null}

@@ -103,14 +103,38 @@ export async function createClass(payload: CreateClassData): Promise<SchoolClass
  * Update an existing class.
  */
 export async function updateClass(payload: UpdateClassData): Promise<SchoolClass> {
+  const { data: currentClass, error: currentClassError } = await supabase
+    .from(TABLE)
+    .select("class_name, class_teacher_id, status")
+    .eq("id", payload.id)
+    .single();
+
+  if (currentClassError) throw currentClassError;
+
+  const updateData: Record<string, unknown> = {};
+  const normalizedPayloadName = payload.class_name.trim();
+
+  if (currentClass.class_name !== normalizedPayloadName) {
+    updateData.class_name = normalizedPayloadName;
+  }
+
+  if ((currentClass.class_teacher_id ?? null) !== (payload.class_teacher_id ?? null)) {
+    updateData.class_teacher_id = payload.class_teacher_id ?? null;
+  }
+
+  if (currentClass.status !== payload.status) {
+    updateData.status = payload.status;
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    return currentClass as SchoolClass;
+  }
+
+  updateData.updated_at = new Date().toISOString();
+
   const { data, error } = await supabase
     .from(TABLE)
-    .update({
-      class_name: payload.class_name.trim(),
-      class_teacher_id: payload.class_teacher_id ?? null,
-      status: payload.status,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq("id", payload.id)
     .select(CLASS_SELECT)
     .single();

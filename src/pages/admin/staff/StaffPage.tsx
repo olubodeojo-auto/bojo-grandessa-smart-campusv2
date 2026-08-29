@@ -1,9 +1,10 @@
-import { UserPlus, UserRound, UserRoundCheck, UserRoundX } from "lucide-react";
+import { UserPlus, UserRound, UserRoundCheck, UserRoundX, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 
 import {
   createStaffUser,
+  deleteStaffUser,
   getStaffUsers,
   toggleStaffStatus,
   type CreateStaffInput,
@@ -151,6 +152,20 @@ export default function StaffPage() {
     }
   }
 
+  async function deleteStaff(member: StaffUser): Promise<void> {
+    const confirmed = window.confirm(`Delete ${displayName(member)} and their account? This action cannot be undone.`);
+
+    if (!confirmed) return;
+
+    try {
+      await deleteStaffUser(member.id);
+      await loadStaff();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to delete staff member.";
+      alert(message);
+    }
+  }
+
   return (
     <>
       <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
@@ -207,10 +222,14 @@ export default function StaffPage() {
                       <td style={{ padding: "14px 8px" }}>{member.phone || "Not provided"}</td>
                       <td style={{ padding: "14px 8px" }}>{member.role_name}</td>
                       <td style={{ padding: "14px 8px" }}>{statusLabel(member.status)}</td>
-                      <td style={{ padding: "14px 8px" }}>
+                      <td style={{ padding: "14px 8px", display: "flex", gap: 12 }}>
                         <button type="button" onClick={() => void changeStatus(member)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                           {active ? <UserRoundX size={16} /> : <UserRoundCheck size={16} />}
                           {active ? "Deactivate" : "Activate"}
+                        </button>
+                        <button type="button" onClick={() => void deleteStaff(member)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#dc2626" }} title="Delete staff member">
+                          <Trash2 size={16} />
+                          Delete
                         </button>
                       </td>
                     </tr>

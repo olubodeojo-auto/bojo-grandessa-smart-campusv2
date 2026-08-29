@@ -25,7 +25,17 @@ type StaffFunctionResponse = { staff?: StaffUser[]; user?: StaffUser };
 
 async function invokeStaffFunction<T extends StaffFunctionResponse>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke("manage-staff", { body });
-  if (error) throw error;
+  if (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    // Provide more helpful error messages
+    if (errorMessage.includes("already registered")) {
+      throw new Error("This email is already registered.");
+    }
+    if (errorMessage.includes("not authorized")) {
+      throw new Error("You are not authorized to perform this action.");
+    }
+    throw error;
+  }
   return data as T;
 }
 
@@ -35,13 +45,20 @@ export async function getStaffUsers(): Promise<StaffUser[]> {
 }
 
 export async function createStaffUser(input: CreateStaffInput): Promise<StaffUser> {
-  const response = await invokeStaffFunction<{ user: StaffUser }>({ action: "create", ...input });
-  if (!response.user) throw new Error("Staff user was not returned by the server.");
+  const redirectTo = typeof window !== "undefined"
+    ? `${window.location.origin}/reset-password`
+    : undefined;
+  const response = await invokeStaffFunction<{ user: StaffUser }>({ action: "create", ...input, redirect_to: redirectTo });
+  if (!response.user) throw new Error("Staff user was not returned by the server. Invitation may have been sent.");
   return response.user;
 }
 
 export async function toggleStaffStatus(id: string, status: "Active" | "Inactive"): Promise<void> {
   await invokeStaffFunction({ action: "set_status", id, status });
+}
+
+export async function deleteStaffUser(id: string): Promise<void> {
+  await invokeStaffFunction({ action: "delete", id });
 }
 
 export async function getActiveTeacherUsers(): Promise<StaffUser[]> {

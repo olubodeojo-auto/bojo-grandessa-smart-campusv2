@@ -10,6 +10,15 @@ type Props = {
   onArchive: (schoolClass: SchoolClass) => void | Promise<void>;
 };
 
+function teacherDisplayName(schoolClass: SchoolClass): string {
+  if (!schoolClass.class_teacher) {
+    return "Unassigned";
+  }
+  return [schoolClass.class_teacher.first_name, schoolClass.class_teacher.last_name]
+    .filter(Boolean)
+    .join(" ") || "Unassigned";
+}
+
 export default function ClassTable({ classes, loading, onView, onEdit, onArchive }: Props) {
   if (loading) {
     return (
@@ -34,7 +43,7 @@ export default function ClassTable({ classes, loading, onView, onEdit, onArchive
         <thead>
           <tr>
             <th style={th}>Class</th>
-            <th style={th}>Status</th>
+            <th style={th}>Class Teacher</th>
             <th style={th}>Actions</th>
           </tr>
         </thead>
@@ -43,7 +52,7 @@ export default function ClassTable({ classes, loading, onView, onEdit, onArchive
           {classes.map((schoolClass) => (
             <tr key={schoolClass.id}>
               <td style={td}>{schoolClass.class_name}</td>
-              <td style={td}>{schoolClass.status}</td>
+              <td style={td}>{teacherDisplayName(schoolClass)}</td>
               <td style={td}>
                 <div style={{ display: "flex", gap: 10 }}>
                   <button type="button" aria-label={`View ${schoolClass.class_name}`} onClick={() => onView(schoolClass)} style={actionButtonStyle}>
