@@ -408,13 +408,6 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
 
         <input
           style={inputStyle}
-          placeholder="Blood Group"
-          value={form.blood_group}
-          onChange={(event) => update("blood_group", event.target.value)}
-        />
-
-        <input
-          style={inputStyle}
           placeholder="Genotype"
           value={form.genotype}
           onChange={(event) => update("genotype", event.target.value)}
@@ -425,13 +418,6 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
           placeholder="Photo URL"
           value={form.photo_url}
           onChange={(event) => update("photo_url", event.target.value)}
-        />
-
-        <input
-          style={inputStyle}
-          placeholder="Medical Notes"
-          value={form.medical_notes}
-          onChange={(event) => update("medical_notes", event.target.value)}
         />
 
         <h3 style={{ gridColumn: "1 / -1", margin: "8px 0 0" }}>Parent / Guardian Information</h3>
