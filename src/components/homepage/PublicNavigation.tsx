@@ -4,7 +4,7 @@ const assetsBase = "/client-resources";
 const logoPath = `${assetsBase}/branding/grandessa-logo-primary.png`;
 
 type PublicNavigationProps = {
-  active?: "home" | "about" | "admissions" | "gallery" | "announcements" | "contact" | "faq";
+  active?: "home" | "about" | "admissions" | "gallery" | "announcements" | "contact" | "faq" | "our-team";
 };
 
 export default function PublicNavigation({ active }: PublicNavigationProps) {
@@ -44,6 +44,12 @@ export default function PublicNavigation({ active }: PublicNavigationProps) {
           <li>
             <NavLink to="/gallery" aria-current={active === "gallery" ? "page" : undefined}>
               Gallery
+            </NavLink>
+          </li>
+
+          <li>
+            <NavLink to="/our-team" aria-current={active === "our-team" ? "page" : undefined}>
+              Our Team
             </NavLink>
           </li>
 

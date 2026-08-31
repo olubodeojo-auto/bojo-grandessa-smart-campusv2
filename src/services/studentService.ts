@@ -109,6 +109,34 @@ function mapStudentRow(row: Record<string, unknown>, schoolClass?: Awaited<Retur
   };
 }
 
+export function generateResultAccessCode(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+}
+
+async function generateUniqueResultAccessCode(excludeStudentId?: string): Promise<string> {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const candidate = generateResultAccessCode();
+
+    const { data, error } = await supabase
+      .from("students")
+      .select("id")
+      .eq("result_access_code", candidate)
+      .neq("id", excludeStudentId ?? "")
+      .maybeSingle();
+
+    if (error && error.code !== "PGRST116") {
+      throw error;
+    }
+
+    if (!data) {
+      return candidate;
+    }
+  }
+
+  throw new Error("Unable to generate a unique Result Access Code.");
+}
+
 export async function getStudentByAccessCode(code: string): Promise<Student | null> {
   const normalized = code.trim().toUpperCase();
 
@@ -123,7 +151,7 @@ export async function getStudentByAccessCode(code: string): Promise<Student | nu
     .maybeSingle();
 
   if (error && error.code !== "PGRST116") {
-    throw error;
+    return null;
   }
 
   return (data ?? null) as Student | null;
@@ -132,9 +160,34 @@ export async function getStudentByAccessCode(code: string): Promise<Student | nu
 export async function createStudent(
   student: Omit<Student, "id" | "created_at" | "updated_at">
 ): Promise<Student> {
+  const suppliedCode = student.result_access_code?.trim().toUpperCase();
+  const accessCode = suppliedCode && suppliedCode.length > 0
+    ? suppliedCode
+    : await generateUniqueResultAccessCode();
+
+  const uniqueCode = await (async () => {
+    if (suppliedCode) {
+      const { data, error } = await supabase
+        .from("students")
+        .select("id")
+        .eq("result_access_code", suppliedCode)
+        .maybeSingle();
+
+      if (error && error.code !== "PGRST116") {
+        throw error;
+      }
+
+      if (data) {
+        return await generateUniqueResultAccessCode();
+      }
+    }
+
+    return accessCode;
+  })();
+
   const { data, error } = await supabase
     .from("students")
-    .insert(student)
+    .insert({ ...student, result_access_code: uniqueCode })
     .select()
     .single();
 
@@ -150,9 +203,20 @@ export async function updateStudent(
   id: string,
   updates: Partial<Student>
 ): Promise<Student> {
+  const payload = { ...updates };
+
+  if (Object.prototype.hasOwnProperty.call(payload, "result_access_code")) {
+    const existingCode = payload.result_access_code?.trim().toUpperCase();
+    if (!existingCode) {
+      delete payload.result_access_code;
+    } else {
+      payload.result_access_code = existingCode;
+    }
+  }
+
   const { data, error } = await supabase
     .from("students")
-    .update(updates)
+    .update(payload)
     .eq("id", id)
     .select()
     .single();

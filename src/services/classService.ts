@@ -114,7 +114,7 @@ export async function updateClass(payload: UpdateClassData): Promise<SchoolClass
   const updateData: Record<string, unknown> = {};
   const normalizedPayloadName = payload.class_name.trim();
 
-  if (currentClass.class_name !== normalizedPayloadName) {
+  if ((currentClass.class_name ?? "").trim() !== normalizedPayloadName) {
     updateData.class_name = normalizedPayloadName;
   }
 

@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { LayoutDashboard, Users, FileSpreadsheet, Image, Megaphone, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, FileSpreadsheet, Image, Megaphone, LogOut, UserSquare2 } from "lucide-react";
 
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuthContext } from "../../contexts/AuthContext";
@@ -7,6 +7,7 @@ import { useAuthContext } from "../../contexts/AuthContext";
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/admin", implemented: true },
   { icon: Users, label: "Students", path: "/admin/students", implemented: true },
+  { icon: UserSquare2, label: "Staff Directory", path: "/admin/staff-directory", implemented: true },
   { icon: FileSpreadsheet, label: "Results", path: "/admin/results", implemented: true },
   { icon: Image, label: "Gallery", path: "/admin/gallery", implemented: true },
   { icon: Megaphone, label: "Announcements", path: "/admin/announcements", implemented: true },

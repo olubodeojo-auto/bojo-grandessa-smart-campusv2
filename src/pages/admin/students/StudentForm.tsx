@@ -23,8 +23,6 @@ type StudentFormState = {
   class_id: string | null;
   class_name: string;
   blood_group: string;
-  genotype: string;
-  medical_notes: string;
   photo_url: string;
   primary_contact_id: string | null;
   secondary_contact_id: string | null;
@@ -57,8 +55,6 @@ function createInitialState(student?: Student | null): StudentFormState {
     class_id: student?.class_id ?? null,
     class_name: (student as any)?.class_name ?? "",
     blood_group: (student as any)?.blood_group ?? "",
-    genotype: (student as any)?.genotype ?? "",
-    medical_notes: (student as any)?.medical_notes ?? "",
     photo_url: (student as any)?.photo_url ?? "",
     primary_contact_id: student?.primary_contact_id ?? null,
     secondary_contact_id: student?.secondary_contact_id ?? null,
@@ -263,8 +259,6 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
         primary_contact_id: primaryContactId,
         secondary_contact_id: secondaryContactId,
         blood_group: form.blood_group.trim() || null,
-        genotype: form.genotype.trim() || null,
-        medical_notes: form.medical_notes.trim() || null,
         photo_url: form.photo_url.trim() || null,
         status: form.status,
       } as unknown as Omit<Student, "id" | "created_at" | "updated_at">;
@@ -405,13 +399,6 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
         </div>
 
         <h3 style={{ gridColumn: "1 / -1", margin: "8px 0 0" }}>Additional Information (Optional)</h3>
-
-        <input
-          style={inputStyle}
-          placeholder="Genotype"
-          value={form.genotype}
-          onChange={(event) => update("genotype", event.target.value)}
-        />
 
         <input
           style={inputStyle}

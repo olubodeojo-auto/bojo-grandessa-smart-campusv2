@@ -35,7 +35,7 @@ export default function StudentProfile({ student }: Props) {
       </p>
 
       <p>
-        <strong>Result Access Code:</strong> {student.result_access_code || "Not assigned"}
+        <strong>Parent Result Access Code:</strong> {student.result_access_code || "Not assigned"}
         {student.result_access_code ? (
           <button
             type="button"
@@ -46,11 +46,15 @@ export default function StudentProfile({ student }: Props) {
               });
             }}
             style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 4 }}
+            title="Copy the parent code used to view this student's result"
           >
             <Copy size={14} />
             {copied ? "Copied" : "Copy Code"}
           </button>
         ) : null}
+      </p>
+      <p style={{ color: "#475569", marginTop: 0 }}>
+        Parents use this code to view the student&apos;s report result.
       </p>
 
       <p>

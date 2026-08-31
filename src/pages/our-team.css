@@ -1,0 +1,48 @@
+.our-team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px;
+}
+
+.our-team-card {
+  background: #fff;
+  border: 1px solid rgba(15, 107, 53, 0.12);
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(24, 49, 31, 0.08);
+}
+
+.our-team-card__image {
+  margin: 0;
+  height: 290px;
+  overflow: hidden;
+}
+
+.our-team-card__image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.our-team-card__content {
+  padding: 22px 20px 24px;
+}
+
+.our-team-card__content h3 {
+  margin: 8px 0 10px;
+  font-size: clamp(1.3rem, 2vw, 1.65rem);
+  color: #102f1d;
+}
+
+.our-team-card__content p {
+  margin: 0;
+  color: var(--grandessa-muted);
+  line-height: 1.7;
+}
+
+@media (max-width: 640px) {
+  .our-team-card__image {
+    height: 240px;
+  }
+}

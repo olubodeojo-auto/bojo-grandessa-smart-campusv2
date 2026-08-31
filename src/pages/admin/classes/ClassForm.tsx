@@ -58,9 +58,11 @@ export default function ClassForm({ mode, schoolClass, onClose, onSaved }: Props
 
     try {
       if (mode === "edit" && schoolClass?.id) {
+        const classNameChanged = (schoolClass.class_name ?? "").trim() !== form.class_name.trim();
+
         await updateClass({
           id: schoolClass.id,
-          class_name: form.class_name,
+          class_name: classNameChanged ? form.class_name.trim() : schoolClass.class_name.trim(),
           class_teacher_id: form.class_teacher_id,
           status: form.status,
         });

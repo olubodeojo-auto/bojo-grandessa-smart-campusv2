@@ -1,21 +1,21 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
+import Button from "../../components/ui/Button";
 import ReportCardDocument from "../../components/reports/ReportCardDocument";
 import ReportCardToolbar from "../../components/reports/ReportCardToolbar";
 import EmptyState from "../../components/ui/EmptyState";
 import SectionCard from "../../components/ui/SectionCard";
 import FormField, { inputStyle } from "../../components/forms/FormField";
 import { buildStudentReportCard, getReportHistoryByStudent } from "../../services/reportCardService";
-import { useAuth } from "../../hooks/useAuth";
-import { getParentChildren } from "../../services/parentPortalService";
+import { getStudentByAccessCode } from "../../services/studentService";
 import type { ReportCardData, ReportHistoryBySession, ReportTerm } from "../../types/reportCard";
 import type { Student } from "../../types/student";
 
 export default function ParentReportsPage() {
-  const { fullName, profile } = useAuth();
-  const [children, setChildren] = useState<Student[]>([]);
+  const [studentCode, setStudentCode] = useState("");
+  const [student, setStudent] = useState<Student | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [history, setHistory] = useState<ReportHistoryBySession[]>([]);
   const [academicYear, setAcademicYear] = useState("");
@@ -24,61 +24,62 @@ export default function ParentReportsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    async function loadChildren(): Promise<void> {
-      setLoading(true);
-      setError("");
-      try {
-        const rows = await getParentChildren({ fullName, phone: profile?.phone ?? "" });
-        setChildren(rows);
-        if (rows.length > 0) setSelectedStudentId(rows[0].id);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to load linked students.");
-      } finally {
-        setLoading(false);
-      }
-    }
-    void loadChildren();
-  }, [fullName, profile?.phone]);
+  async function handleLookup(): Promise<void> {
+    const normalizedCode = studentCode.trim().toUpperCase();
 
-  useEffect(() => {
-    if (!selectedStudentId) {
+    if (!normalizedCode) {
+      setError("Enter the Result Access Code provided by the school.");
+      setStudent(null);
+      setSelectedStudentId("");
       setHistory([]);
-      setAcademicYear("");
       setReport(null);
       return;
     }
-    async function loadHistory(): Promise<void> {
-      try {
-        const rows = await getReportHistoryByStudent(selectedStudentId);
-        setHistory(rows);
-        if (rows.length > 0) setAcademicYear(rows[0].academicYear);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to load report history.");
-      }
-    }
-    void loadHistory();
-  }, [selectedStudentId]);
 
-  useEffect(() => {
-    if (!selectedStudentId || !academicYear) {
-      setReport(null);
-      return;
-    }
-    async function loadReport(): Promise<void> {
-      setLoading(true);
-      setError("");
-      try {
-        setReport(await buildStudentReportCard(selectedStudentId, academicYear, term));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to load report card.");
+    setLoading(true);
+    setError("");
+
+    try {
+      const matchedStudent = await getStudentByAccessCode(normalizedCode);
+
+      if (!matchedStudent) {
+        setStudent(null);
+        setSelectedStudentId("");
+        setHistory([]);
+        setAcademicYear("");
         setReport(null);
-      } finally {
-        setLoading(false);
+        setError("No student found for this Result Access Code. Please check the code and try again.");
+        return;
       }
+
+      const rows = await getReportHistoryByStudent(matchedStudent.id);
+      setStudent(matchedStudent);
+      setSelectedStudentId(matchedStudent.id);
+      setHistory(rows);
+
+      const nextYear = rows[0]?.academicYear ?? "";
+      setAcademicYear(nextYear);
+      const nextTerm = rows[0]?.entries[0]?.term ?? "First";
+      setTerm(nextTerm);
+
+      if (!nextYear) {
+        setReport(null);
+        setError("No report is available for this student yet.");
+        return;
+      }
+
+      const data = await buildStudentReportCard(matchedStudent.id, nextYear, nextTerm);
+      setReport(data);
+      if (!data) {
+        setError("No report is available for this student yet.");
+      }
+    } catch {
+      setError("No student found for this Result Access Code. Please check the code and try again.");
+      setReport(null);
+    } finally {
+      setLoading(false);
     }
-    void loadReport();
-  }, [selectedStudentId, academicYear, term]);
+  }
 
   async function handleTermChange(nextTerm: ReportTerm): Promise<void> {
     setTerm(nextTerm);
@@ -138,7 +139,6 @@ export default function ParentReportsPage() {
     () => history.find((item) => item.academicYear === academicYear)?.entries.map((entry) => entry.term) ?? [],
     [academicYear, history]
   );
-  const student = children.find((item) => item.id === selectedStudentId) ?? null;
   const studentName = student ? [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ") : "";
   const fileStudentName = studentName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "Student";
 
@@ -146,23 +146,19 @@ export default function ParentReportsPage() {
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "20px" }}>
       <div className="card" style={{ marginBottom: 16 }}>
         <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>Parent Report Portal</h1>
-        <p style={{ marginTop: 8, color: "#666" }}>View your child&apos;s report history and download printable report cards.</p>
+        <p style={{ marginTop: 8, color: "#666" }}>Enter the Result Access Code provided by the school.</p>
       </div>
 
       <SectionCard>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 }}>
-          <FormField label="Child">
-            <select
+          <FormField label="Result Access Code">
+            <input
               style={inputStyle}
-              value={selectedStudentId}
-              onChange={(event) => setSelectedStudentId(event.target.value)}
-            >
-              {children.map((child) => (
-                <option key={child.id} value={child.id}>
-                  {child.first_name} {child.last_name}
-                </option>
-              ))}
-            </select>
+              value={studentCode}
+              onChange={(event) => setStudentCode(event.target.value.toUpperCase())}
+              placeholder="e.g. GRC-2D7F9A"
+              aria-label="Result access code"
+            />
           </FormField>
 
           <FormField label="Session">
@@ -196,6 +192,11 @@ export default function ParentReportsPage() {
           </FormField>
         </div>
 
+        <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
+          <Button type="button" onClick={() => void handleLookup()} disabled={loading}>
+            {loading ? "Loading..." : "View Result"}
+          </Button>
+        </div>
       </SectionCard>
 
       {student ? (
@@ -226,7 +227,7 @@ export default function ParentReportsPage() {
       ) : report ? (
         <ReportCardDocument report={report} />
       ) : (
-        <EmptyState title="No report available" description="No report card found for the selected child/session/term." />
+        <EmptyState title="No report available" description="No report card found for the selected student." />
       )}
     </div>
   );
