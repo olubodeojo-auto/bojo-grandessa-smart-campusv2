@@ -49,26 +49,35 @@ export default function StudentTable({
             <th style={th}>Admission No.</th>
             <th style={th}>Student</th>
             <th style={th}>Gender</th>
-            <th style={th}>Status</th>
+            <th style={th}>Class</th>
+            <th style={th}>Class Teacher</th>
             <th style={th}>Actions</th>
           </tr>
         </thead>
 
         <tbody>
-          {students.map((student) => (
-            <tr key={student.id}>
-              <td style={td}>{student.admission_number}</td>
+          {students.map((student) => {
+            const className = student.class_name || "Not Assigned";
+            const classTeacherName = student.class_teacher
+              ? [student.class_teacher.first_name, student.class_teacher.last_name].filter(Boolean).join(" ") || "Not Assigned"
+              : "Not Assigned";
 
-              <td style={td}>
-                {student.first_name} {student.last_name}
-              </td>
+            return (
+              <tr key={student.id}>
+                <td style={td}>{student.admission_number}</td>
 
-              <td style={td}>{student.gender}</td>
+                <td style={td}>
+                  {student.first_name} {student.last_name}
+                </td>
 
-              <td style={td}>{student.status}</td>
+                <td style={td}>{student.gender}</td>
 
-              <td style={td}>
-                <div style={{ display: "flex", gap: 10 }}>
+                <td style={td}>{className}</td>
+
+                <td style={td}>{classTeacherName}</td>
+
+                <td style={td}>
+                  <div style={{ display: "flex", gap: 10 }}>
                   <button
                     type="button"
                     aria-label={`View ${student.first_name} ${student.last_name}`}
@@ -87,18 +96,19 @@ export default function StudentTable({
                     <Pencil size={18} />
                   </button>
 
-                  <button
-                    type="button"
-                    aria-label={`Delete ${student.first_name} ${student.last_name}`}
-                    onClick={() => onDelete(student)}
-                    style={{ ...actionButtonStyle, color: "#dc2626" }}
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
+                    <button
+                      type="button"
+                      aria-label={`Delete ${student.first_name} ${student.last_name}`}
+                      onClick={() => onDelete(student)}
+                      style={{ ...actionButtonStyle, color: "#dc2626" }}
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

@@ -16,6 +16,7 @@ type Props = {
 
 type StudentFormState = {
   admission_number: string;
+  result_access_code: string;
   first_name: string;
   last_name: string;
   middle_name: string;
@@ -48,6 +49,7 @@ type StudentFormState = {
 function createInitialState(student?: Student | null): StudentFormState {
   return {
     admission_number: student?.admission_number ?? "",
+    result_access_code: student?.result_access_code ?? "",
     first_name: student?.first_name ?? "",
     last_name: student?.last_name ?? "",
     middle_name: (student as any)?.middle_name ?? "",
@@ -247,8 +249,13 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
         }
       }
 
+      const nextResultAccessCode = form.result_access_code.trim().toUpperCase();
+
       const payload: Omit<Student, "id" | "created_at" | "updated_at"> = {
         admission_number: form.admission_number.trim(),
+        result_access_code: mode === "edit"
+          ? (nextResultAccessCode || student?.result_access_code?.trim().toUpperCase() || undefined)
+          : (nextResultAccessCode || undefined),
         first_name: form.first_name.trim(),
         middle_name: form.middle_name.trim() || null,
         last_name: form.last_name.trim(),
@@ -336,6 +343,17 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
             onChange={(event) => update("admission_number", event.target.value)}
           />
 
+          <div style={{ display: "grid", gap: 6 }}>
+            <label htmlFor="student-result-access-code" style={{ fontWeight: 600 }}>Result Access Code</label>
+            <input
+              id="student-result-access-code"
+              style={inputStyle}
+              placeholder={mode === "edit" ? "Existing code" : "Generated automatically"}
+              value={form.result_access_code}
+              onChange={(event) => update("result_access_code", event.target.value.toUpperCase())}
+              aria-label="Result access code"
+            />
+          </div>
 
         <input
           style={inputStyle}

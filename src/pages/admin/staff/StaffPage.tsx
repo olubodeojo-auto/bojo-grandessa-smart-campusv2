@@ -1,4 +1,4 @@
-import { UserPlus, UserRound, UserRoundCheck, UserRoundX, Trash2 } from "lucide-react";
+import { UserPlus, UserRound, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 
@@ -6,7 +6,6 @@ import {
   createStaffUser,
   deleteStaffUser,
   getStaffUsers,
-  toggleStaffStatus,
   type CreateStaffInput,
   type StaffRole,
   type StaffUser,
@@ -137,21 +136,6 @@ export default function StaffPage() {
     }
   }
 
-  async function changeStatus(member: StaffUser): Promise<void> {
-    const nextStatus = statusLabel(member.status) === "Active" ? "Inactive" : "Active";
-    const confirmed = window.confirm(`${nextStatus === "Active" ? "Activate" : "Deactivate"} ${displayName(member)}?`);
-
-    if (!confirmed) return;
-
-    try {
-      await toggleStaffStatus(member.id, nextStatus);
-      await loadStaff();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to update staff status.";
-      alert(message);
-    }
-  }
-
   async function deleteStaff(member: StaffUser): Promise<void> {
     const confirmed = window.confirm(`Delete ${displayName(member)} and their account? This action cannot be undone.`);
 
@@ -212,29 +196,21 @@ export default function StaffPage() {
                   <tr><td colSpan={6} style={{ padding: 24, textAlign: "center" }}>Loading staff...</td></tr>
                 ) : filteredStaff.length === 0 ? (
                   <tr><td colSpan={6} style={{ padding: 24, textAlign: "center", color: "#666" }}>No staff users found.</td></tr>
-                ) : filteredStaff.map((member) => {
-                  const active = statusLabel(member.status) === "Active";
-
-                  return (
-                    <tr key={member.id} style={{ borderBottom: "1px solid #f0f1f2" }}>
-                      <td style={{ padding: "14px 8px", fontWeight: 600 }}>{displayName(member)}</td>
-                      <td style={{ padding: "14px 8px" }}>{member.email || "Not available"}</td>
-                      <td style={{ padding: "14px 8px" }}>{member.phone || "Not provided"}</td>
-                      <td style={{ padding: "14px 8px" }}>{member.role_name}</td>
-                      <td style={{ padding: "14px 8px" }}>{statusLabel(member.status)}</td>
-                      <td style={{ padding: "14px 8px", display: "flex", gap: 12 }}>
-                        <button type="button" onClick={() => void changeStatus(member)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                          {active ? <UserRoundX size={16} /> : <UserRoundCheck size={16} />}
-                          {active ? "Deactivate" : "Activate"}
-                        </button>
-                        <button type="button" onClick={() => void deleteStaff(member)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#dc2626" }} title="Delete staff member">
-                          <Trash2 size={16} />
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                ) : filteredStaff.map((member) => (
+                  <tr key={member.id} style={{ borderBottom: "1px solid #f0f1f2" }}>
+                    <td style={{ padding: "14px 8px", fontWeight: 600 }}>{displayName(member)}</td>
+                    <td style={{ padding: "14px 8px" }}>{member.email || "Not available"}</td>
+                    <td style={{ padding: "14px 8px" }}>{member.phone || "Not provided"}</td>
+                    <td style={{ padding: "14px 8px" }}>{member.role_name}</td>
+                    <td style={{ padding: "14px 8px" }}>{statusLabel(member.status)}</td>
+                    <td style={{ padding: "14px 8px" }}>
+                      <button type="button" onClick={() => void deleteStaff(member)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#dc2626" }} title="Delete staff member">
+                        <Trash2 size={16} />
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

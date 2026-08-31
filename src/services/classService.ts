@@ -8,6 +8,11 @@ import type {
 const TABLE = "classes";
 const CLASS_SELECT = "id, class_name, class_teacher_id, status, created_at, updated_at";
 
+function normalizeClassTeacherId(classTeacherId?: string | null): string | null {
+  const normalized = typeof classTeacherId === "string" ? classTeacherId.trim() : "";
+  return normalized.length > 0 ? normalized : null;
+}
+
 export function normalizeClassName(className: string): string {
   const normalized = className.trim().toLowerCase();
   const legacyLabels: Record<string, string> = {
@@ -38,7 +43,9 @@ export async function getClasses(): Promise<SchoolClass[]> {
   if (error) throw error;
 
   const classRows = (data ?? []) as SchoolClass[];
-  const teacherIds = classRows.map((item) => item.class_teacher_id).filter((id): id is string => Boolean(id));
+  const teacherIds = classRows
+    .map((item) => normalizeClassTeacherId(item.class_teacher_id))
+    .filter((id): id is string => Boolean(id));
   const teacherMap = new Map<string, SchoolClass["class_teacher"]>();
 
   if (teacherIds.length > 0) {
@@ -71,13 +78,11 @@ export async function getClasses(): Promise<SchoolClass[]> {
     }
   }
 
-  const normalizedClasses = classRows.map((item) => ({
+  return classRows.map((item) => ({
     ...item,
-    class_name: normalizeClassName(item.class_name),
-    class_teacher: teacherMap.get(item.class_teacher_id ?? "") ?? null,
+    class_name: item.class_name,
+    class_teacher: teacherMap.get(normalizeClassTeacherId(item.class_teacher_id) ?? "") ?? null,
   }));
-
-  return Array.from(new Map(normalizedClasses.map((item) => [item.class_name.toLowerCase(), item])).values());
 }
 
 /**
@@ -88,7 +93,7 @@ export async function createClass(payload: CreateClassData): Promise<SchoolClass
     .from(TABLE)
     .insert({
       class_name: payload.class_name.trim(),
-      class_teacher_id: payload.class_teacher_id ?? null,
+      class_teacher_id: normalizeClassTeacherId(payload.class_teacher_id),
       status: payload.status,
     })
     .select(CLASS_SELECT)
@@ -103,6 +108,10 @@ export async function createClass(payload: CreateClassData): Promise<SchoolClass
  * Update an existing class.
  */
 export async function updateClass(payload: UpdateClassData): Promise<SchoolClass> {
+  if (!payload.id) {
+    throw new Error("A valid class id is required to update a class.");
+  }
+
   const { data: currentClass, error: currentClassError } = await supabase
     .from(TABLE)
     .select("class_name, class_teacher_id, status")
@@ -113,13 +122,14 @@ export async function updateClass(payload: UpdateClassData): Promise<SchoolClass
 
   const updateData: Record<string, unknown> = {};
   const normalizedPayloadName = payload.class_name.trim();
+  const normalizedPayloadTeacherId = normalizeClassTeacherId(payload.class_teacher_id);
 
   if ((currentClass.class_name ?? "").trim() !== normalizedPayloadName) {
     updateData.class_name = normalizedPayloadName;
   }
 
-  if ((currentClass.class_teacher_id ?? null) !== (payload.class_teacher_id ?? null)) {
-    updateData.class_teacher_id = payload.class_teacher_id ?? null;
+  if (normalizeClassTeacherId(currentClass.class_teacher_id) !== normalizedPayloadTeacherId) {
+    updateData.class_teacher_id = normalizedPayloadTeacherId;
   }
 
   if (currentClass.status !== payload.status) {

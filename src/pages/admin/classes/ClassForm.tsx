@@ -13,6 +13,7 @@ type Props = {
 };
 
 type ClassFormState = {
+  id: string | null;
   class_name: string;
   class_teacher_id: string | null;
   status: ClassStatus;
@@ -20,6 +21,7 @@ type ClassFormState = {
 
 function createInitialState(schoolClass?: SchoolClass | null): ClassFormState {
   return {
+    id: schoolClass?.id ?? null,
     class_name: schoolClass?.class_name ?? "",
     class_teacher_id: schoolClass?.class_teacher_id ?? null,
     status: schoolClass?.status ?? "Active",
@@ -49,27 +51,35 @@ export default function ClassForm({ mode, schoolClass, onClose, onSaved }: Props
   async function save(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
 
-    if (!form.class_name.trim()) {
+    const trimmedClassName = form.class_name.trim();
+    if (!trimmedClassName) {
       alert("Class name is required.");
       return;
     }
 
+    const classId = (schoolClass?.id ?? form.id ?? null);
+    const normalizedTeacherId = form.class_teacher_id && form.class_teacher_id.trim().length > 0
+      ? form.class_teacher_id.trim()
+      : null;
+
     setLoading(true);
 
     try {
-      if (mode === "edit" && schoolClass?.id) {
-        const classNameChanged = (schoolClass.class_name ?? "").trim() !== form.class_name.trim();
+      if (mode === "edit") {
+        if (!classId) {
+          throw new Error("The selected class id was not found. Please reopen the record and try again.");
+        }
 
         await updateClass({
-          id: schoolClass.id,
-          class_name: classNameChanged ? form.class_name.trim() : schoolClass.class_name.trim(),
-          class_teacher_id: form.class_teacher_id,
+          id: classId,
+          class_name: trimmedClassName,
+          class_teacher_id: normalizedTeacherId,
           status: form.status,
         });
       } else {
         await createClass({
-          class_name: form.class_name,
-          class_teacher_id: form.class_teacher_id,
+          class_name: trimmedClassName,
+          class_teacher_id: normalizedTeacherId,
           status: form.status,
         });
       }
@@ -114,10 +124,10 @@ export default function ClassForm({ mode, schoolClass, onClose, onSaved }: Props
           <select
             style={inputStyle}
             value={form.class_teacher_id ?? ""}
-            onChange={(event) => update("class_teacher_id", event.target.value || null)}
+            onChange={(event) => update("class_teacher_id", event.target.value === "" ? null : event.target.value)}
             aria-label="Class teacher"
           >
-            <option value="">Not Assigned</option>
+            <option value="">Not Assigned / No teacher</option>
             {teachers.map((teacher) => (
               <option key={teacher.id} value={teacher.id}>
                 {[teacher.first_name, teacher.last_name].filter(Boolean).join(" ")}

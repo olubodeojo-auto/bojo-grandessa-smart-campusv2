@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import { getClasses, normalizeClassName } from "./classService";
+import { getClasses } from "./classService";
 import type { Student } from "../types/student";
 
 interface StudentListFilters {
@@ -104,7 +104,7 @@ export async function getStudent(id: string): Promise<Student | null> {
 function mapStudentRow(row: Record<string, unknown>, schoolClass?: Awaited<ReturnType<typeof getClasses>>[number]): Student {
   return {
     ...(row as unknown as Student),
-    class_name: normalizeClassName(schoolClass?.class_name || (row.class_name as string | undefined) || ""),
+    class_name: schoolClass?.class_name || (row.class_name as string | undefined) || "",
     class_teacher: schoolClass?.class_teacher ?? null,
   };
 }
@@ -112,6 +112,11 @@ function mapStudentRow(row: Record<string, unknown>, schoolClass?: Awaited<Retur
 export function generateResultAccessCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+}
+
+function normalizeResultAccessCode(value?: string | null): string | null {
+  const normalized = value?.trim().toUpperCase() ?? "";
+  return normalized.length > 0 ? normalized : null;
 }
 
 async function generateUniqueResultAccessCode(excludeStudentId?: string): Promise<string> {
@@ -160,10 +165,8 @@ export async function getStudentByAccessCode(code: string): Promise<Student | nu
 export async function createStudent(
   student: Omit<Student, "id" | "created_at" | "updated_at">
 ): Promise<Student> {
-  const suppliedCode = student.result_access_code?.trim().toUpperCase();
-  const accessCode = suppliedCode && suppliedCode.length > 0
-    ? suppliedCode
-    : await generateUniqueResultAccessCode();
+  const suppliedCode = normalizeResultAccessCode(student.result_access_code);
+  const accessCode = suppliedCode ?? (await generateUniqueResultAccessCode());
 
   const uniqueCode = await (async () => {
     if (suppliedCode) {
@@ -206,7 +209,7 @@ export async function updateStudent(
   const payload = { ...updates };
 
   if (Object.prototype.hasOwnProperty.call(payload, "result_access_code")) {
-    const existingCode = payload.result_access_code?.trim().toUpperCase();
+    const existingCode = normalizeResultAccessCode(payload.result_access_code);
     if (!existingCode) {
       delete payload.result_access_code;
     } else {
