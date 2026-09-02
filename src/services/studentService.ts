@@ -2,6 +2,32 @@ import { supabase } from "../lib/supabase";
 import { getClasses } from "./classService";
 import type { Student } from "../types/student";
 
+export type StudentDatabaseWrite = {
+  id?: string;
+  school_id?: string | null;
+  admission_number?: string | null;
+  class_id?: string | null;
+  primary_contact_id?: string | null;
+  secondary_contact_id?: string | null;
+  result_access_code?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  middle_name?: string | null;
+  gender?: string | null;
+  date_of_birth?: string | null;
+  photo_url?: string | null;
+  blood_group?: string | null;
+  genotype?: string | null;
+  allergies?: string | null;
+  medical_notes?: string | null;
+  admission_date?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type StudentWriteInput = StudentDatabaseWrite;
+
 interface StudentListFilters {
   search?: string;
   className?: string;
@@ -11,39 +37,8 @@ function normalizeFilterValue(value?: string): string {
   return value?.trim() ?? "";
 }
 
-async function ensureParentLinkage(student: Student): Promise<void> {
-  const parentName = normalizeFilterValue(student.parent_name);
-  const parentPhone = normalizeFilterValue(student.parent_phone);
-
-  if (!parentName && !parentPhone) {
-    return;
-  }
-
-  const [firstName, ...rest] = parentName.split(/\s+/).filter(Boolean);
-  const lastName = rest.join(" ") || firstName || "Unknown";
-
-  const parentPayload = {
-    first_name: firstName || "Unknown",
-    last_name: lastName,
-    phone: parentPhone || null,
-  };
-
-  try {
-    await supabase
-      .from("parents")
-      .upsert(parentPayload, {
-        onConflict: "phone",
-        ignoreDuplicates: false,
-      })
-      .throwOnError();
-  } catch {
-    // Parent linkage should not block student creation when parent schema differs.
-  }
-}
-
 async function ensureStudentProvisioning(student: Student): Promise<void> {
   await Promise.allSettled([
-    ensureParentLinkage(student),
     (async () => {
       try {
         await supabase
@@ -119,16 +114,43 @@ function normalizeResultAccessCode(value?: string | null): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+let resultAccessCodeColumnSupport: boolean | null = null;
+
+async function isResultAccessCodeColumnSupported(): Promise<boolean> {
+  if (resultAccessCodeColumnSupport !== null) {
+    return resultAccessCodeColumnSupport;
+  }
+
+  try {
+    const { error } = await supabase
+      .from("students")
+      .select("result_access_code")
+      .limit(1);
+
+    const supported = !(error && (error.code === "42703" || error.message.toLowerCase().includes("result_access_code")));
+    resultAccessCodeColumnSupport = supported;
+    return supported;
+  } catch {
+    resultAccessCodeColumnSupport = false;
+    return false;
+  }
+}
+
 async function generateUniqueResultAccessCode(excludeStudentId?: string): Promise<string> {
+  if (!(await isResultAccessCodeColumnSupported())) {
+    return generateResultAccessCode();
+  }
+
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const candidate = generateResultAccessCode();
-
-    const { data, error } = await supabase
+    const query = supabase
       .from("students")
       .select("id")
-      .eq("result_access_code", candidate)
-      .neq("id", excludeStudentId ?? "")
-      .maybeSingle();
+      .eq("result_access_code", candidate);
+
+    const safeExcludeStudentId = excludeStudentId?.trim();
+    const studentQuery = safeExcludeStudentId ? query.neq("id", safeExcludeStudentId) : query;
+    const { data, error } = await studentQuery.maybeSingle();
 
     if (error && error.code !== "PGRST116") {
       throw error;
@@ -162,13 +184,45 @@ export async function getStudentByAccessCode(code: string): Promise<Student | nu
   return (data ?? null) as Student | null;
 }
 
+function mapStudentDatabaseWrite(input: StudentWriteInput): StudentDatabaseWrite {
+  const payload: StudentDatabaseWrite = {};
+
+  if (input.school_id !== undefined) payload.school_id = input.school_id ?? null;
+  if (input.admission_number !== undefined) payload.admission_number = input.admission_number?.trim() || null;
+  if (input.class_id !== undefined) payload.class_id = input.class_id ?? null;
+  if (input.primary_contact_id !== undefined) payload.primary_contact_id = input.primary_contact_id ?? null;
+  if (input.secondary_contact_id !== undefined) payload.secondary_contact_id = input.secondary_contact_id ?? null;
+  if (input.first_name !== undefined) payload.first_name = input.first_name?.trim() || null;
+  if (input.last_name !== undefined) payload.last_name = input.last_name?.trim() || null;
+  if (input.middle_name !== undefined) payload.middle_name = input.middle_name?.trim() || null;
+  if (input.gender !== undefined) payload.gender = input.gender ?? null;
+  if (input.date_of_birth !== undefined) payload.date_of_birth = input.date_of_birth ?? null;
+  if (input.result_access_code !== undefined) payload.result_access_code = input.result_access_code?.trim() || null;
+  if (input.photo_url !== undefined) {
+    payload.photo_url = typeof input.photo_url === "string" ? input.photo_url.trim() || null : null;
+  }
+  if (input.blood_group !== undefined) payload.blood_group = input.blood_group?.trim() || null;
+  if (input.genotype !== undefined) payload.genotype = input.genotype?.trim() || null;
+  if (input.allergies !== undefined) payload.allergies = input.allergies?.trim() || null;
+  if (input.medical_notes !== undefined) payload.medical_notes = input.medical_notes?.trim() || null;
+  if (input.admission_date !== undefined) payload.admission_date = input.admission_date ?? null;
+  if (input.status !== undefined) payload.status = input.status ?? null;
+
+  return payload;
+}
+
 export async function createStudent(
-  student: Omit<Student, "id" | "created_at" | "updated_at">
+  student: StudentWriteInput
 ): Promise<Student> {
   const suppliedCode = normalizeResultAccessCode(student.result_access_code);
-  const accessCode = suppliedCode ?? (await generateUniqueResultAccessCode());
+  const accessCode: string = suppliedCode ?? (await generateUniqueResultAccessCode());
+  const supportsResultAccessCode = await isResultAccessCodeColumnSupported();
 
   const uniqueCode = await (async () => {
+    if (!supportsResultAccessCode) {
+      return null;
+    }
+
     if (suppliedCode) {
       const { data, error } = await supabase
         .from("students")
@@ -188,9 +242,16 @@ export async function createStudent(
     return accessCode;
   })();
 
+  const dbWrite = mapStudentDatabaseWrite(student);
+  const insertPayload: Record<string, unknown> = { ...dbWrite };
+
+  if (supportsResultAccessCode && uniqueCode) {
+    insertPayload.result_access_code = uniqueCode;
+  }
+
   const { data, error } = await supabase
     .from("students")
-    .insert({ ...student, result_access_code: uniqueCode })
+    .insert(insertPayload)
     .select()
     .single();
 
@@ -204,22 +265,21 @@ export async function createStudent(
 
 export async function updateStudent(
   id: string,
-  updates: Partial<Student>
+  updates: StudentWriteInput
 ): Promise<Student> {
-  const payload = { ...updates };
+  const payload = mapStudentDatabaseWrite(updates);
+  const updatePayload: Record<string, unknown> = { ...payload };
 
-  if (Object.prototype.hasOwnProperty.call(payload, "result_access_code")) {
-    const existingCode = normalizeResultAccessCode(payload.result_access_code);
-    if (!existingCode) {
-      delete payload.result_access_code;
-    } else {
-      payload.result_access_code = existingCode;
+  if (await isResultAccessCodeColumnSupported()) {
+    const existingCode = normalizeResultAccessCode(updates.result_access_code);
+    if (existingCode) {
+      updatePayload.result_access_code = existingCode;
     }
   }
 
   const { data, error } = await supabase
     .from("students")
-    .update(payload)
+    .update(updatePayload)
     .eq("id", id)
     .select()
     .single();

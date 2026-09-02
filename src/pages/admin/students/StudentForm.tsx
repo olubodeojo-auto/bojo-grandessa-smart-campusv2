@@ -1,9 +1,10 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
-import { createStudent, updateStudent } from "../../../services/studentService";
+import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from "react";
+import { createStudent, updateStudent, type StudentDatabaseWrite } from "../../../services/studentService";
 import { getClasses } from "../../../services/classService";
 import { createContact, updateContact, getContact } from "../../../services/contactService";
+import { removeStudentPassportPhoto, uploadStudentPassportPhoto } from "../../../services/studentPassportService";
 import type { Gender, Student, StudentStatus } from "../../../types/student";
 import type { SchoolClass } from "../../../types/class";
 
@@ -52,12 +53,12 @@ function createInitialState(student?: Student | null): StudentFormState {
     result_access_code: student?.result_access_code ?? "",
     first_name: student?.first_name ?? "",
     last_name: student?.last_name ?? "",
-    middle_name: (student as any)?.middle_name ?? "",
+    middle_name: student?.middle_name ?? "",
     gender: student?.gender ?? "Male",
     class_id: student?.class_id ?? null,
-    class_name: (student as any)?.class_name ?? "",
-    blood_group: (student as any)?.blood_group ?? "",
-    photo_url: (student as any)?.photo_url ?? "",
+    class_name: student?.class_name ?? "",
+    blood_group: student?.blood_group ?? "",
+    photo_url: student?.photo_url ?? "",
     primary_contact_id: student?.primary_contact_id ?? null,
     secondary_contact_id: student?.secondary_contact_id ?? null,
     primary_first_name: "",
@@ -83,6 +84,8 @@ function createInitialState(student?: Student | null): StudentFormState {
 export default function StudentForm({ mode, student, onClose, onSaved }: Props) {
   const [loading, setLoading] = useState(false);
   const [loadingInitialData, setLoadingInitialData] = useState(true);
+  const [isPhotoUploading, setIsPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [form, setForm] = useState<StudentFormState>(() => createInitialState(student));
   const hasUserEditedRef = useRef(false);
   const [classesList, setClassesList] = useState<SchoolClass[]>([]);
@@ -188,6 +191,40 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
     }));
   }
 
+  async function handlePassportFileChange(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setPhotoError(null);
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setPhotoError("Only JPG, JPEG, PNG, and WebP images are supported.");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoError("Please upload a passport photo smaller than 5 MB.");
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      setIsPhotoUploading(true);
+      const uploadedUrl = await uploadStudentPassportPhoto(file);
+      setForm((previous) => ({ ...previous, photo_url: uploadedUrl }));
+      event.target.value = "";
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The passport photo could not be uploaded.";
+      setPhotoError(message);
+      event.target.value = "";
+    } finally {
+      setIsPhotoUploading(false);
+    }
+  }
+
   async function save(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setLoading(true);
@@ -251,11 +288,8 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
 
       const nextResultAccessCode = form.result_access_code.trim().toUpperCase();
 
-      const payload: Omit<Student, "id" | "created_at" | "updated_at"> = {
+      const payload: StudentDatabaseWrite = {
         admission_number: form.admission_number.trim(),
-        result_access_code: mode === "edit"
-          ? (nextResultAccessCode || student?.result_access_code?.trim().toUpperCase() || undefined)
-          : (nextResultAccessCode || undefined),
         first_name: form.first_name.trim(),
         middle_name: form.middle_name.trim() || null,
         last_name: form.last_name.trim(),
@@ -265,15 +299,21 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
         class_id: classId,
         primary_contact_id: primaryContactId,
         secondary_contact_id: secondaryContactId,
-        blood_group: form.blood_group.trim() || null,
         photo_url: form.photo_url.trim() || null,
+        blood_group: form.blood_group.trim() || null,
         status: form.status,
-      } as unknown as Omit<Student, "id" | "created_at" | "updated_at">;
+      };
 
       if (mode === "edit" && student?.id) {
-        await updateStudent(student.id, payload);
+        await updateStudent(student.id, {
+          ...payload,
+          ...(nextResultAccessCode ? { result_access_code: nextResultAccessCode } : {}),
+        });
       } else {
-        await createStudent(payload);
+        await createStudent({
+          ...payload,
+          ...(nextResultAccessCode ? { result_access_code: nextResultAccessCode } : {}),
+        });
       }
 
       onSaved?.();
@@ -416,14 +456,35 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
           <strong>Class Teacher:</strong> {[classesList.find((item) => item.id === form.class_id)?.class_teacher?.first_name, classesList.find((item) => item.id === form.class_id)?.class_teacher?.last_name].filter(Boolean).join(" ") || "Not Assigned"}
         </div>
 
-        <h3 style={{ gridColumn: "1 / -1", margin: "8px 0 0" }}>Additional Information (Optional)</h3>
+        <h3 style={{ gridColumn: "1 / -1", margin: "8px 0 0" }}>Passport Photo (Optional)</h3>
 
-        <input
-          style={inputStyle}
-          placeholder="Photo URL"
-          value={form.photo_url}
-          onChange={(event) => update("photo_url", event.target.value)}
-        />
+        <div style={{ gridColumn: "1 / -1", display: "grid", gap: 8 }}>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span>Upload photo</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void handlePassportFileChange(event)} disabled={isPhotoUploading} />
+          </label>
+
+          {form.photo_url ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <img src={form.photo_url} alt="Student passport preview" style={{ width: 86, height: 108, objectFit: "cover", borderRadius: 8, border: "1px solid #e5e7eb" }} />
+              <button type="button" onClick={async () => {
+                if (!form.photo_url) return;
+                try {
+                  await removeStudentPassportPhoto(form.photo_url);
+                  setForm((previous) => ({ ...previous, photo_url: "" }));
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : "The photo could not be removed.";
+                  setPhotoError(message);
+                }
+              }}>
+                Remove Photo
+              </button>
+            </div>
+          ) : null}
+
+          {isPhotoUploading ? <span style={{ color: "#475569" }}>Uploading photo…</span> : null}
+          {photoError ? <span style={{ color: "#b91c1c" }}>{photoError}</span> : null}
+        </div>
 
         <h3 style={{ gridColumn: "1 / -1", margin: "8px 0 0" }}>Parent / Guardian Information</h3>
 

@@ -53,6 +53,8 @@ export interface Student {
 
   address?: string;
 
+  photo_url?: string | null;
+
   passport_url?: string;
 
   blood_group?: string;

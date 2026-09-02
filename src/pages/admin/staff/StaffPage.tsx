@@ -1,4 +1,4 @@
-import { UserPlus, UserRound, Trash2 } from "lucide-react";
+import { Pencil, UserPlus, UserRound, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 
@@ -6,6 +6,9 @@ import {
   createStaffUser,
   deleteStaffUser,
   getStaffUsers,
+  resendStaffInvitation,
+  toggleStaffStatus,
+  updateStaffUser,
   type CreateStaffInput,
   type StaffRole,
   type StaffUser,
@@ -59,6 +62,8 @@ const initialForm: FormState = {
   role_name: "Teacher",
 };
 
+const statusOptions = ["Active", "Inactive"] as const;
+
 function displayName(staff: StaffUser): string {
   return [staff.first_name, staff.last_name].filter(Boolean).join(" ") || "Unnamed user";
 }
@@ -73,6 +78,7 @@ export default function StaffPage() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<StaffUser | null>(null);
   const [form, setForm] = useState<FormState>(initialForm);
 
   const loadStaff = useCallback(async (): Promise<void> => {
@@ -109,8 +115,21 @@ export default function StaffPage() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function openForm(): void {
+  function openCreateForm(): void {
+    setEditingMember(null);
     setForm(initialForm);
+    setIsFormOpen(true);
+  }
+
+  function openEditForm(member: StaffUser): void {
+    setEditingMember(member);
+    setForm({
+      first_name: member.first_name ?? "",
+      last_name: member.last_name ?? "",
+      email: member.email ?? "",
+      phone: member.phone ?? "",
+      role_name: member.role_name,
+    });
     setIsFormOpen(true);
   }
 
@@ -119,20 +138,63 @@ export default function StaffPage() {
     setSaving(true);
 
     try {
-      await createStaffUser({
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
-        email: form.email.trim(),
-        phone: form.phone.trim() || undefined,
-        role_name: form.role_name,
-      });
+      if (editingMember) {
+        await updateStaffUser(editingMember.id, {
+          first_name: form.first_name.trim() || undefined,
+          last_name: form.last_name.trim() || undefined,
+          phone: form.phone.trim() || undefined,
+          role_name: form.role_name,
+        });
+
+        if (editingMember.status !== "Active" && editingMember.status !== "Inactive") {
+          await toggleStaffStatus(editingMember.id, "Active");
+        }
+      } else {
+        await createStaffUser({
+          first_name: form.first_name.trim(),
+          last_name: form.last_name.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim() || undefined,
+          role_name: form.role_name,
+        });
+      }
+
       setIsFormOpen(false);
+      setEditingMember(null);
       await loadStaff();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to create staff user.";
+      const message = error instanceof Error ? error.message : editingMember ? "Unable to update staff user." : "Unable to create staff user.";
       alert(message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function resendInvitation(member: StaffUser): Promise<void> {
+    if (!member.email) {
+      alert("This staff member does not have an email on file for an invitation.");
+      return;
+    }
+
+    try {
+      await resendStaffInvitation(member.id);
+      alert(`Invitation resent to ${member.email}.`);
+      await loadStaff();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to resend the invitation.";
+      alert(message);
+    }
+  }
+
+  async function toggleStatus(member: StaffUser): Promise<void> {
+    const nextStatus = member.status === "Active" ? "Inactive" : "Active";
+
+    try {
+      await toggleStaffStatus(member.id, nextStatus);
+      await loadStaff();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update staff status.";
+      alert(message);
     }
   }
 
@@ -155,12 +217,12 @@ export default function StaffPage() {
       <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, marginBottom: 24 }}>
           <div>
-            <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 32 }}>Staff &amp; Users</h1>
+            <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 32 }}>Staff Management</h1>
             <p style={{ marginTop: 8, color: "#666", fontFamily: "Poppins" }}>
               Manage authorized staff access for Grandessa School.
             </p>
           </div>
-          <button type="button" onClick={openForm} style={{ display: "flex", alignItems: "center", gap: 10, background: "#2E7D32", color: "#fff", border: "none", borderRadius: 12, padding: "12px 20px", cursor: "pointer", fontFamily: "Poppins", fontWeight: 600 }}>
+          <button type="button" onClick={openCreateForm} style={{ display: "flex", alignItems: "center", gap: 10, background: "#2E7D32", color: "#fff", border: "none", borderRadius: 12, padding: "12px 20px", cursor: "pointer", fontFamily: "Poppins", fontWeight: 600 }}>
             <UserPlus size={18} />
             Add Staff Member
           </button>
@@ -203,7 +265,17 @@ export default function StaffPage() {
                     <td style={{ padding: "14px 8px" }}>{member.phone || "Not provided"}</td>
                     <td style={{ padding: "14px 8px" }}>{member.role_name}</td>
                     <td style={{ padding: "14px 8px" }}>{statusLabel(member.status)}</td>
-                    <td style={{ padding: "14px 8px" }}>
+                    <td style={{ padding: "14px 8px", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button type="button" onClick={() => openEditForm(member)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }} title="Edit staff member">
+                        <Pencil size={16} />
+                        Edit
+                      </button>
+                      <button type="button" onClick={() => void resendInvitation(member)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }} title="Resend invitation to existing staff account">
+                        Resend Invite
+                      </button>
+                      <button type="button" onClick={() => void toggleStatus(member)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }} title={member.status === "Active" ? "Deactivate staff member" : "Activate staff member"}>
+                        {member.status === "Active" ? "Deactivate" : "Activate"}
+                      </button>
                       <button type="button" onClick={() => void deleteStaff(member)} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#dc2626" }} title="Delete staff member">
                         <Trash2 size={16} />
                         Delete
@@ -220,8 +292,8 @@ export default function StaffPage() {
       {isFormOpen ? (
         <div role="dialog" aria-modal="true" aria-labelledby="staff-form-title" style={modalOverlayStyle}>
           <form onSubmit={submitForm} style={modalPanelStyle}>
-            <h2 id="staff-form-title" style={{ marginTop: 0 }}>Add Staff Member</h2>
-            <p style={{ color: "#666" }}>The staff member will receive the normal Supabase invitation flow.</p>
+            <h2 id="staff-form-title" style={{ marginTop: 0 }}>{editingMember ? "Edit Staff Member" : "Add Staff Member"}</h2>
+            <p style={{ color: "#666" }}>{editingMember ? "Update the staff profile and role assignment." : "The staff member will receive the normal Supabase invitation flow."}</p>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 16 }}>
               <label style={{ display: "grid", gap: 6 }}>
@@ -232,10 +304,17 @@ export default function StaffPage() {
                 <span>Last Name</span>
                 <input required style={inputStyle} value={form.last_name} onChange={(event) => updateForm("last_name", event.target.value)} />
               </label>
-              <label style={{ display: "grid", gap: 6 }}>
-                <span>Email</span>
-                <input required type="email" style={inputStyle} value={form.email} onChange={(event) => updateForm("email", event.target.value)} />
-              </label>
+              {!editingMember ? (
+                <label style={{ display: "grid", gap: 6 }}>
+                  <span>Email</span>
+                  <input required type="email" style={inputStyle} value={form.email} onChange={(event) => updateForm("email", event.target.value)} />
+                </label>
+              ) : (
+                <label style={{ display: "grid", gap: 6 }}>
+                  <span>Email</span>
+                  <input type="email" style={inputStyle} value={form.email} onChange={(event) => updateForm("email", event.target.value)} disabled />
+                </label>
+              )}
               <label style={{ display: "grid", gap: 6 }}>
                 <span>Phone (optional)</span>
                 <input style={inputStyle} value={form.phone} onChange={(event) => updateForm("phone", event.target.value)} />
@@ -246,11 +325,29 @@ export default function StaffPage() {
                   {roles.map((role) => <option key={role} value={role}>{role}</option>)}
                 </select>
               </label>
+              {editingMember ? (
+                <label style={{ display: "grid", gap: 6 }}>
+                  <span>Status</span>
+                  <select
+                    style={inputStyle}
+                    value={editingMember.status === "Active" ? "Active" : "Inactive"}
+                    onChange={async (event) => {
+                      const nextStatus = event.target.value as (typeof statusOptions)[number];
+                      if (nextStatus !== (editingMember.status ?? "Inactive")) {
+                        await toggleStaffStatus(editingMember.id, nextStatus);
+                        await loadStaff();
+                      }
+                    }}
+                  >
+                    {statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+                  </select>
+                </label>
+              ) : null}
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 24 }}>
-              <button type="button" onClick={() => setIsFormOpen(false)}>Cancel</button>
-              <button type="submit" disabled={saving}>{saving ? "Creating..." : "Create / Invite"}</button>
+              <button type="button" onClick={() => { setIsFormOpen(false); setEditingMember(null); }}>Cancel</button>
+              <button type="submit" disabled={saving}>{saving ? (editingMember ? "Saving..." : "Creating...") : (editingMember ? "Save Changes" : "Create / Invite")}</button>
             </div>
           </form>
         </div>

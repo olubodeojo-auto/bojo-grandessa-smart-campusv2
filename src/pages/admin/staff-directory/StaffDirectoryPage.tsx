@@ -198,7 +198,7 @@ export default function StaffDirectoryPage() {
 
       <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 32 }}>Staff Directory</h1>
+          <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 32 }}>Our Team / Staff Photos</h1>
           <p style={{ margin: "8px 0 0", color: "#666", fontFamily: "Poppins" }}>
             Independent team profiles for the public Our Team section.
           </p>

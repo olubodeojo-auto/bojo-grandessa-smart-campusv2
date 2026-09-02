@@ -22,7 +22,7 @@ export default function AdministratorPreviewLayout() {
     { key: "results", label: "Results", path: "/admin/results", searchPlaceholder: "Search results" },
     { key: "classes", label: "Classes", path: "/admin/classes", searchPlaceholder: "Search classes" },
     { key: "staff", label: "Staff & Users", path: "/admin/staff", searchPlaceholder: "Search staff" },
-    { key: "staff-directory", label: "Staff Directory", path: "/admin/staff-directory", searchPlaceholder: "Search staff directory" },
+    { key: "staff-directory", label: "Our Team / Staff Photos", path: "/admin/staff-directory", searchPlaceholder: "Search staff photos" },
     { key: "gallery", label: "Gallery", path: "/admin/gallery", searchPlaceholder: "Search gallery" },
     { key: "announcements", label: "Announcements", path: "/admin/announcements", searchPlaceholder: "Search announcements" },
   ];
