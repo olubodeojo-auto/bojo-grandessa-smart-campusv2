@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   GraduationCap,
   Search,
   Bell,
   ChevronDown,
-  Settings,
+  KeyRound,
   LogOut,
   Menu,
 } from "lucide-react";
@@ -49,6 +50,7 @@ const AppHeader = ({
   notificationCount = 0,
 }: AppHeaderProps) => {
   const { role, fullName, isAuthenticated, loading, error, signOut } = useAuth();
+  const navigate = useNavigate();
 
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -272,29 +274,19 @@ const AppHeader = ({
                       }}
                       className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       role="menuitem"
-                      onClick={() => setIsMenuOpen(false)}
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        navigate("/change-password");
+                      }}
                     >
-                      <Settings className="h-4 w-4" />
-                      Settings
+                      <KeyRound className="h-4 w-4" />
+                      Change password
                     </button>
 
                     <button
                       type="button"
                       ref={(element) => {
                         menuItemRefs.current[1] = element;
-                      }}
-                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      role="menuitem"
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      <Settings className="h-4 w-4" />
-                      Account
-                    </button>
-
-                    <button
-                      type="button"
-                      ref={(element) => {
-                        menuItemRefs.current[2] = element;
                       }}
                       className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500"
                       role="menuitem"
