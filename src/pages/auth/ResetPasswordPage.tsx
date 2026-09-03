@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
-import { updatePassword } from "../../services/authService";
+import { getFriendlyAuthError, updatePassword } from "../../services/authService";
+import PasswordInput from "../../components/auth/PasswordInput";
 
 const MIN_PASSWORD_LENGTH = 8;
 
 export default function ResetPasswordPage() {
-  const navigate = useNavigate();
   const [hasRecoverySession, setHasRecoverySession] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [password, setPassword] = useState("");
@@ -26,7 +26,7 @@ export default function ResetPasswordPage() {
       }
 
       if (sessionError) {
-        setError(sessionError.message);
+        setError(getFriendlyAuthError(sessionError, "This recovery link is invalid or has expired. Request a new link."));
       }
 
       setHasRecoverySession(Boolean(data.session));
@@ -76,9 +76,8 @@ export default function ResetPasswordPage() {
       setPassword("");
       setConfirmPassword("");
       setMessage("Your password has been changed successfully.");
-      navigate("/admin", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to update your password.");
+      setError(getFriendlyAuthError(err, "Unable to update your password. Please request a new link and try again."));
     } finally {
       setLoading(false);
     }
@@ -94,24 +93,23 @@ export default function ResetPasswordPage() {
           <p style={{ color: "red" }}>This recovery link is invalid or has expired. Request a new link.</p>
         ) : null}
 
-        <input
-          type="password"
-          placeholder="New password"
+        <p>Use at least {MIN_PASSWORD_LENGTH} characters.</p>
+        <PasswordInput
+          id="reset-password"
+          label="New password"
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          onChange={setPassword}
           autoComplete="new-password"
           minLength={MIN_PASSWORD_LENGTH}
-          required
           disabled={checkingSession || !hasRecoverySession || loading || Boolean(message)}
         />
-        <input
-          type="password"
-          placeholder="Confirm new password"
+        <PasswordInput
+          id="reset-password-confirm"
+          label="Confirm new password"
           value={confirmPassword}
-          onChange={(event) => setConfirmPassword(event.target.value)}
+          onChange={setConfirmPassword}
           autoComplete="new-password"
           minLength={MIN_PASSWORD_LENGTH}
-          required
           disabled={checkingSession || !hasRecoverySession || loading || Boolean(message)}
         />
 

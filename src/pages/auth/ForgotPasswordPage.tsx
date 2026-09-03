@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { resetPassword } from "../../services/authService";
+import { getFriendlyAuthError, resetPassword } from "../../services/authService";
 
 export default function ForgotPasswordPage() {
 	const [email, setEmail] = useState("");
@@ -26,7 +26,7 @@ export default function ForgotPasswordPage() {
 			await resetPassword(normalizedEmail);
 			setMessage("If an account exists for this email, a password recovery link has been sent.");
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Unable to send the recovery email.");
+			setError(getFriendlyAuthError(err, "We could not send the recovery email. Please try again."));
 		} finally {
 			setLoading(false);
 		}
@@ -38,7 +38,9 @@ export default function ForgotPasswordPage() {
 				<h2>Reset your password</h2>
 				<p>Enter your email address and we will send you a recovery link.</p>
 
+				<label htmlFor="forgot-password-email">Email address</label>
 				<input
+					id="forgot-password-email"
 					type="email"
 					placeholder="Email"
 					value={email}

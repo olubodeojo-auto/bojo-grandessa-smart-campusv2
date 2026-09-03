@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
+import { getFriendlyAuthError } from "../../services/authService";
+import PasswordInput from "../../components/auth/PasswordInput";
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -25,7 +27,7 @@ export default function CompleteAccountPage() {
       }
 
       if (sessionError) {
-        setError(sessionError.message);
+        setError(getFriendlyAuthError(sessionError, "This invitation link is invalid or has expired. Please request a new invitation."));
         setCheckingSession(false);
         return;
       }
@@ -94,9 +96,9 @@ export default function CompleteAccountPage() {
       setPassword("");
       setConfirmPassword("");
       setMessage("Your account is set up successfully.");
-      navigate("/login", { replace: true });
+      navigate("/admin", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to complete the account setup.");
+      setError(getFriendlyAuthError(err, "Unable to complete the account setup. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -121,25 +123,23 @@ export default function CompleteAccountPage() {
           </p>
         ) : null}
 
-        <input
-          type="password"
-          placeholder="New Password"
+        <p>Choose a password with at least {MIN_PASSWORD_LENGTH} characters.</p>
+        <PasswordInput
+          id="complete-account-password"
+          label="New password"
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          onChange={setPassword}
           autoComplete="new-password"
           minLength={MIN_PASSWORD_LENGTH}
-          required
           disabled={checkingSession || !userEmail || loading || Boolean(message)}
         />
-
-        <input
-          type="password"
-          placeholder="Confirm Password"
+        <PasswordInput
+          id="complete-account-password-confirm"
+          label="Confirm new password"
           value={confirmPassword}
-          onChange={(event) => setConfirmPassword(event.target.value)}
+          onChange={setConfirmPassword}
           autoComplete="new-password"
           minLength={MIN_PASSWORD_LENGTH}
-          required
           disabled={checkingSession || !userEmail || loading || Boolean(message)}
         />
 

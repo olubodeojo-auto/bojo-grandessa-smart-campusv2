@@ -1,5 +1,7 @@
 import { supabase } from "../lib/supabase";
 
+const STAFF_ACCOUNT_REDIRECT_URL = "https://grandessaschool.com.ng/complete-account";
+
 export type StaffRole = "Administrator" | "Proprietress" | "Super Admin" | "Accountant" | "Teacher";
 
 export interface StaffUser {
@@ -53,10 +55,11 @@ export async function getStaffUsers(): Promise<StaffUser[]> {
 }
 
 export async function createStaffUser(input: CreateStaffInput): Promise<StaffUser> {
-  const redirectTo = typeof window !== "undefined"
-    ? `${window.location.origin}/complete-account`
-    : undefined;
-  const response = await invokeStaffFunction<{ user: StaffUser }>({ action: "create", ...input, redirect_to: redirectTo });
+  const response = await invokeStaffFunction<{ user: StaffUser }>({
+    action: "create",
+    ...input,
+    redirect_to: STAFF_ACCOUNT_REDIRECT_URL,
+  });
   if (!response.user) throw new Error("Staff user was not returned by the server. Invitation may have been sent.");
   return response.user;
 }
@@ -68,11 +71,11 @@ export async function updateStaffUser(id: string, input: StaffUpdateInput): Prom
 }
 
 export async function resendStaffInvitation(id: string): Promise<StaffUser> {
-  const redirectTo = typeof window !== "undefined"
-    ? `${window.location.origin}/complete-account`
-    : undefined;
-
-  const response = await invokeStaffFunction<{ user: StaffUser }>({ action: "resend_invitation", id, redirect_to: redirectTo });
+  const response = await invokeStaffFunction<{ user: StaffUser }>({
+    action: "resend_invitation",
+    id,
+    redirect_to: STAFF_ACCOUNT_REDIRECT_URL,
+  });
   if (!response.user) throw new Error("Staff user was not returned by the server.");
   return response.user;
 }

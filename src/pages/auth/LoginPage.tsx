@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
+import { getFriendlyAuthError } from "../../services/authService";
+import PasswordInput from "../../components/auth/PasswordInput";
 
 export default function LoginPage() {
   const { user } = useAuth();
@@ -21,16 +23,14 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      setError(error.message);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    } catch (err) {
+      setError(getFriendlyAuthError(err, "We could not sign you in. Check your details and try again."));
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   return (
@@ -52,18 +52,21 @@ export default function LoginPage() {
       >
         <h2>Grandessa Login</h2>
 
+        <label htmlFor="login-email">Email address</label>
         <input
+          id="login-email"
           type="email"
-          placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
 
-        <input
-          type="password"
-          placeholder="Password"
+        <PasswordInput
+          id="login-password"
+          label="Password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={setPassword}
+          autoComplete="current-password"
+          disabled={loading}
         />
 
         <Link to="/forgot-password">Forgot Password?</Link>

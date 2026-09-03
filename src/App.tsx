@@ -11,6 +11,7 @@ import LoginPage from "./pages/auth/LoginPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import CompleteAccountPage from "./pages/auth/CompleteAccountPage";
+import ChangePasswordPage from "./pages/auth/ChangePasswordPage";
 import AdministratorPreviewLayout from "./components/adminPreview/AdministratorPreviewLayout";
 import AdministratorPreviewModulePage from "./components/adminPreview/AdministratorPreviewModulePage";
 import AdministratorPreviewDashboard from "./pages/admin-preview/AdministratorPreviewDashboard";
@@ -44,6 +45,7 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/complete-account" element={<CompleteAccountPage />} />
+      <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
 
       <Route path="/administrator-preview" element={<AdministratorPreviewLayout />}>
         <Route index element={<AdministratorPreviewDashboard />} />

@@ -125,6 +125,23 @@ export default function AdministratorPreviewLayout() {
 
               <button
                 type="button"
+                onClick={() => navigate("/change-password")}
+                style={{
+                  marginLeft: "0.75rem",
+                  border: "1px solid rgba(15, 107, 53, 0.18)",
+                  background: "#ffffff",
+                  color: "#0f6b35",
+                  borderRadius: "999px",
+                  padding: "0.55rem 0.9rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Change password
+              </button>
+
+              <button
+                type="button"
                 onClick={handleSignOut}
                 style={{
                   marginLeft: "0.75rem",

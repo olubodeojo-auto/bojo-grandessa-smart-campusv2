@@ -14,30 +14,12 @@ import type {
   Session,
   User,
   AuthChangeEvent,
-  AuthError,
-  PostgrestError,
 } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { getFriendlyAuthError } from "../services/authService";
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === "object" && error !== null) {
-    const authError = error as Partial<AuthError>;
-    const postgrestError = error as Partial<PostgrestError>;
-
-    if (typeof authError.message === "string" && authError.message.trim()) {
-      return authError.message;
-    }
-
-    if (typeof postgrestError.message === "string" && postgrestError.message.trim()) {
-      return postgrestError.message;
-    }
-  }
-
-  return "Something went wrong. Please try again.";
+  return getFriendlyAuthError(error);
 }
 
 export interface Profile {
