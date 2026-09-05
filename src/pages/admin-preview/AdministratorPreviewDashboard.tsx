@@ -1,8 +1,12 @@
 import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../../hooks/useAuth";
 
 
 export default function AdministratorPreviewDashboard() {
+  const { profile } = useAuth();
+  const firstName = profile?.first_name?.trim();
+
   const adminModules = [
     { title: "Dashboard", subtitle: "Overview", path: "/admin" },
     { title: "Students", subtitle: "Manage student records", path: "/admin/students" },
@@ -23,7 +27,7 @@ export default function AdministratorPreviewDashboard() {
     <section className="admin-preview-page">
       <header className="admin-preview-page-header">
         <div>
-          <h1>Hello, Administrator.</h1>
+          <h1>{firstName ? `Hello, ${firstName} 👋` : "Hello, Administrator."}</h1>
           <p>Welcome to Grandessa Smart Campus.</p>
         </div>
       </header>

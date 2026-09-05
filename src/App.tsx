@@ -26,6 +26,7 @@ import AnnouncementsPage from "./pages/admin/announcements/AnnouncementsPage";
 import ClassesPage from "./pages/admin/classes/ClassesPage";
 import StaffPage from "./pages/admin/staff/StaffPage";
 import StaffDirectoryPage from "./pages/admin/staff-directory/StaffDirectoryPage";
+import CommunicationsPage from "./pages/admin/CommunicationsPage";
 import ParentReportsPage from "./pages/portal/ParentReportsPage";
 import OurTeam from "./pages/OurTeam";
 
@@ -64,6 +65,8 @@ export default function App() {
         <Route path="classes" element={<ProtectedRoute allowedRoles={["Super Admin", "School Admin", "super_admin", "school_admin", "admin", "Admin", "Administrator"]}><ClassesPage /></ProtectedRoute>} />
 
         <Route path="staff" element={<ProtectedRoute allowedRoles={["Proprietress", "Super Admin", "Administrator", "School Admin", "super_admin", "school_admin", "admin", "Admin"]}><StaffPage /></ProtectedRoute>} />
+
+        <Route path="communications" element={<ProtectedRoute allowedRoles={["Proprietress", "Super Admin", "Administrator", "School Admin", "super_admin", "school_admin", "admin", "Admin"]}><CommunicationsPage /></ProtectedRoute>} />
 
         <Route path="staff-directory" element={<ProtectedRoute allowedRoles={["Proprietress", "Super Admin", "Administrator", "School Admin", "super_admin", "school_admin", "admin", "Admin"]}><StaffDirectoryPage /></ProtectedRoute>} />
 

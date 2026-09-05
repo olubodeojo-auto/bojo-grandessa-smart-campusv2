@@ -1,8 +1,10 @@
+import { useState, type FormEvent } from "react";
 import FeatureCard from "../components/homepage/FeatureCard";
 import PublicFooter from "../components/homepage/PublicFooter";
 import PublicNavigation from "../components/homepage/PublicNavigation";
 import PublicWhatsAppButton from "../components/homepage/PublicWhatsAppButton";
 import SectionHeading from "../components/homepage/SectionHeading";
+import { supabase } from "../lib/supabase";
 import "./homepage.css";
 import "./contact.css";
 
@@ -33,6 +35,39 @@ const visitHighlights = [
 ];
 
 export default function Contact() {
+  const [form, setForm] = useState({ name: "", phone: "", email: "", message: "" });
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [formSuccess, setFormSuccess] = useState("");
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setFormError("");
+    setFormSuccess("");
+    const name = form.name.trim();
+    const email = form.email.trim();
+    const message = form.message.trim();
+    if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !message) {
+      setFormError("Please enter your name, a valid email address, and a message.");
+      return;
+    }
+    if (name.length > 120 || message.length > 5000 || form.phone.trim().length > 40) {
+      setFormError("Please shorten the details and try again.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.functions.invoke("send-contact-enquiry", { body: { ...form, name, email, message, phone: form.phone.trim() } });
+      if (error) throw error;
+      setForm({ name: "", phone: "", email: "", message: "" });
+      setFormSuccess("Thank you. Your enquiry has been sent to Grandessa School.");
+    } catch {
+      setFormError("Your enquiry could not be sent right now. Please try again later.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <main className="contact-page">
       <PublicNavigation active="contact" />
@@ -67,7 +102,8 @@ export default function Contact() {
           <article className="homepage-card-soft">
             <SectionHeading eyebrow="School Contact" title="Speak with Admissions" />
             <p><strong>Phone:</strong> 0818 673 9390, 0913 929 0283</p>
-            <p><strong>Email:</strong> grandessaschool@gmail.com</p>
+            <p><strong>General Enquiries:</strong> <a className="contact-link" href="mailto:info@grandessaschool.com.ng">info@grandessaschool.com.ng</a></p>
+            <p><strong>School Email:</strong> <a className="contact-link" href="mailto:grandessaschool@gmail.com">grandessaschool@gmail.com</a></p>
             <p>
               <strong>Address:</strong> No. 4, ADLAS Arisa Way, Alhaja Taibat Agbaje Street,
               Idi-Iroko Area, Ikorodu Local Government Area, Lagos State, Nigeria.
@@ -106,24 +142,26 @@ export default function Contact() {
           <SectionHeading
             eyebrow="Contact Form"
             title="Send us a message"
-            description="This form is for demonstration purposes and does not submit data."
+            description="Send an enquiry to the Grandessa School team."
           />
 
-          <form className="contact-form" onSubmit={(event) => event.preventDefault()}>
+          <form className="contact-form" onSubmit={(event) => void handleSubmit(event)}>
             <label htmlFor="contact-name">Name</label>
-            <input id="contact-name" name="name" type="text" placeholder="Your full name" />
+            <input id="contact-name" name="name" type="text" placeholder="Your full name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} maxLength={120} required />
 
             <label htmlFor="contact-phone">Phone</label>
-            <input id="contact-phone" name="phone" type="tel" placeholder="Your phone number" />
+            <input id="contact-phone" name="phone" type="tel" placeholder="Your phone number" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} maxLength={40} />
 
             <label htmlFor="contact-email">Email</label>
-            <input id="contact-email" name="email" type="email" placeholder="Your email address" />
+            <input id="contact-email" name="email" type="email" placeholder="Your email address" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} required />
 
             <label htmlFor="contact-message">Message</label>
-            <textarea id="contact-message" name="message" rows={5} placeholder="How can we help you?" />
+            <textarea id="contact-message" name="message" rows={5} placeholder="How can we help you?" value={form.message} onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))} maxLength={5000} required />
 
-            <button className="homepage-button homepage-button--primary" type="button">
-              Send Message
+            {formError ? <p role="alert" className="contact-form__message contact-form__message--error">{formError}</p> : null}
+            {formSuccess ? <p role="status" className="contact-form__message contact-form__message--success">{formSuccess}</p> : null}
+            <button className="homepage-button homepage-button--primary" type="submit" disabled={submitting}>
+              {submitting ? "Sending..." : "Send Message"}
             </button>
           </form>
         </div>

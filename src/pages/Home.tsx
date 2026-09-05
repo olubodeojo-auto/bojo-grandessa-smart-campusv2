@@ -255,7 +255,8 @@ function Home() {
                     <article className="homepage-card-soft">
                         <SectionHeading eyebrow="Contact" title="Speak with Admissions" />
                         <p><strong>Phone:</strong> 0818 673 9390, 0913 929 0283</p>
-                        <p><strong>Email:</strong> grandessaschool@gmail.com</p>
+                        <p><strong>General Enquiries:</strong> info@grandessaschool.com.ng</p>
+                        <p><strong>School Email:</strong> grandessaschool@gmail.com</p>
                         <p><strong>Instagram:</strong> @grandessaschool</p>
                         <p><strong>Facebook:</strong> grandessaschool</p>
                     </article>

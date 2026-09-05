@@ -30,7 +30,10 @@ export default function PublicFooter() {
             <li>0818 673 9390</li>
             <li>0913 929 0283</li>
             <li>
-              <a href="mailto:grandessaschool@gmail.com">grandessaschool@gmail.com</a>
+              General Enquiries: <a href="mailto:info@grandessaschool.com.ng">info@grandessaschool.com.ng</a>
+            </li>
+            <li>
+              School Email: <a href="mailto:grandessaschool@gmail.com">grandessaschool@gmail.com</a>
             </li>
           </ul>
         </section>
