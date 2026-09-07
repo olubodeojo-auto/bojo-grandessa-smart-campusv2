@@ -26,6 +26,7 @@ export interface CommunicationUsage {
 export interface CommunicationTarget {
   audience: CommunicationAudience;
   class_id?: string;
+  assignment_id?: string;
   people?: Array<{ source: CommunicationPersonSource; id: string }>;
   custom_emails?: string[];
 }
@@ -86,6 +87,20 @@ export async function sendCommunication(input: CommunicationTarget & { subject: 
     ...input,
     idempotency_key: crypto.randomUUID(),
   });
+}
+
+export interface AssignmentNotificationStatus {
+  assignment_id: string;
+  notified: boolean;
+  status: "accepted" | "reserved" | "failed" | null;
+  accepted_count: number;
+  recipient_count: number;
+  created_at: string | null;
+}
+
+export async function getAssignmentNotificationStatuses(assignmentIds: string[]): Promise<AssignmentNotificationStatus[]> {
+  if (assignmentIds.length === 0) return [];
+  return invokeCommunication<AssignmentNotificationStatus[]>({ action: "assignment-statuses", assignment_ids: assignmentIds });
 }
 
 export async function sendCommunicationTest(input: {

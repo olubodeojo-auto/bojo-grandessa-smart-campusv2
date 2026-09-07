@@ -49,32 +49,38 @@ export async function getClasses(): Promise<SchoolClass[]> {
   const teacherMap = new Map<string, SchoolClass["class_teacher"]>();
 
   if (teacherIds.length > 0) {
-    const { data: assignments, error: assignmentError } = await supabase
-      .from("user_roles")
-      .select("user_id, role_id")
-      .in("user_id", teacherIds)
-      .eq("is_active", true);
+    try {
+      const { data: assignments, error: assignmentError } = await supabase
+        .from("user_roles")
+        .select("user_id, role_id")
+        .in("user_id", teacherIds)
+        .eq("is_active", true);
 
-    if (assignmentError) throw assignmentError;
+      if (assignmentError) throw assignmentError;
 
-    const roleIds = (assignments ?? []).map((assignment) => assignment.role_id);
-    const { data: roles, error: roleError } = await supabase.from("roles").select("id, name").in("id", roleIds);
-    if (roleError) throw roleError;
+      const roleIds = (assignments ?? []).map((assignment) => assignment.role_id);
+      if (roleIds.length > 0) {
+        const { data: roles, error: roleError } = await supabase.from("roles").select("id, name").in("id", roleIds);
+        if (roleError) throw roleError;
 
-    const teacherRoleIds = new Set((roles ?? []).filter((role) => role.name === "Teacher").map((role) => role.id));
-    const activeTeacherIds = (assignments ?? [])
-      .filter((assignment) => teacherRoleIds.has(assignment.role_id))
-      .map((assignment) => assignment.user_id);
+        const teacherRoleIds = new Set((roles ?? []).filter((role) => role.name.toLowerCase() === "teacher").map((role) => role.id));
+        const activeTeacherIds = (assignments ?? [])
+          .filter((assignment) => teacherRoleIds.has(assignment.role_id))
+          .map((assignment) => assignment.user_id);
 
-    if (activeTeacherIds.length > 0) {
-      const { data: teachers, error: teacherError } = await supabase
-        .from("users")
-        .select("id, first_name, last_name, status")
-        .in("id", activeTeacherIds)
-        .eq("status", "Active");
+        if (activeTeacherIds.length > 0) {
+          const { data: teachers, error: teacherError } = await supabase
+            .from("users")
+            .select("id, first_name, last_name, status")
+            .in("id", activeTeacherIds)
+            .eq("status", "Active");
 
-      if (teacherError) throw teacherError;
-      (teachers ?? []).forEach((teacher) => teacherMap.set(teacher.id, teacher));
+          if (teacherError) throw teacherError;
+          (teachers ?? []).forEach((teacher) => teacherMap.set(teacher.id, teacher));
+        }
+      }
+    } catch (teacherLookupError) {
+      console.warn("Unable to resolve class teachers.", teacherLookupError);
     }
   }
 

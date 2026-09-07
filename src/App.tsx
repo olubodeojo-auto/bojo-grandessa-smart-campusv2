@@ -27,7 +27,9 @@ import ClassesPage from "./pages/admin/classes/ClassesPage";
 import StaffPage from "./pages/admin/staff/StaffPage";
 import StaffDirectoryPage from "./pages/admin/staff-directory/StaffDirectoryPage";
 import CommunicationsPage from "./pages/admin/CommunicationsPage";
+import AssignmentsPage from "./pages/admin/assignments/AssignmentsPage";
 import ParentReportsPage from "./pages/portal/ParentReportsPage";
+import ParentAssignmentsPage from "./pages/portal/ParentAssignmentsPage";
 import OurTeam from "./pages/OurTeam";
 
 export default function App() {
@@ -68,6 +70,8 @@ export default function App() {
 
         <Route path="communications" element={<ProtectedRoute allowedRoles={["Proprietress", "Super Admin", "Administrator", "School Admin", "super_admin", "school_admin", "admin", "Admin"]}><CommunicationsPage /></ProtectedRoute>} />
 
+        <Route path="assignments" element={<ProtectedRoute allowedRoles={["Proprietress", "Super Admin", "Administrator", "School Admin", "Teacher", "super_admin", "school_admin", "teacher", "admin", "Admin"]}><AssignmentsPage /></ProtectedRoute>} />
+
         <Route path="staff-directory" element={<ProtectedRoute allowedRoles={["Proprietress", "Super Admin", "Administrator", "School Admin", "super_admin", "school_admin", "admin", "Admin"]}><StaffDirectoryPage /></ProtectedRoute>} />
 
         <Route path="reports" element={<ProtectedRoute allowedRoles={["Super Admin", "School Admin", "Teacher", "super_admin", "school_admin", "teacher", "admin", "Admin", "Administrator"]}><ReportCardsPage /></ProtectedRoute>} />
@@ -81,6 +85,7 @@ export default function App() {
         path="/portal/reports"
         element={<ParentReportsPage />}
       />
+      <Route path="/portal/assignments" element={<ProtectedRoute allowedRoles={["Parent", "parent"]}><ParentAssignmentsPage /></ProtectedRoute>} />
     </Routes>
   );
 }

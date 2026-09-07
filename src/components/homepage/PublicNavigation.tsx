@@ -78,7 +78,7 @@ export default function PublicNavigation({ active }: PublicNavigationProps) {
           </li>
 
           <li>
-            <NavLink to="/portal/reports">Parent Portal</NavLink>
+            <NavLink to="/portal/assignments">Parent Portal</NavLink>
           </li>
         </ul>
 

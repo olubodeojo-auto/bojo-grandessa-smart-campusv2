@@ -17,9 +17,11 @@ type PersonSource = "contact" | "staff" | "student";
 
 type PersonRef = { source: PersonSource; id: string };
 type RequestPayload = {
-  action?: "directory" | "preview" | "send" | "test";
+  action?: "directory" | "preview" | "send" | "test" | "assignment-statuses";
   audience?: Audience;
   class_id?: string;
+  assignment_id?: string;
+  assignment_ids?: string[];
   people?: PersonRef[];
   custom_emails?: string[];
   subject?: string;
@@ -330,6 +332,32 @@ Deno.serve(async (request) => {
       return response(body);
     }
 
+    if (payload.action === "assignment-statuses") {
+      const assignmentIds = Array.isArray(payload.assignment_ids) ? payload.assignment_ids.filter((id): id is string => typeof id === "string" && id.trim().length > 0) : [];
+      if (!assignmentIds.length) return response([]);
+      const { data, error } = await adminClient
+        .from("communication_sends")
+        .select("assignment_id, status, accepted_count, recipient_count, created_at")
+        .in("assignment_id", assignmentIds)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      const latestByAssignment = new Map<string, Record<string, unknown>>();
+      for (const row of data ?? []) {
+        if (row.assignment_id && !latestByAssignment.has(row.assignment_id)) latestByAssignment.set(row.assignment_id, row);
+      }
+      return response(assignmentIds.map((assignmentId) => {
+        const row = latestByAssignment.get(assignmentId);
+        return {
+          assignment_id: assignmentId,
+          notified: row?.status === "accepted",
+          status: row?.status ?? null,
+          accepted_count: Number(row?.accepted_count ?? 0),
+          recipient_count: Number(row?.recipient_count ?? 0),
+          created_at: typeof row?.created_at === "string" ? row.created_at : null,
+        };
+      }));
+    }
+
     if (payload.action === "test") {
       const testEmail = normalizeEmail(payload.test_email);
       const subject = payload.subject?.trim() ?? "";
@@ -390,6 +418,7 @@ Deno.serve(async (request) => {
       p_audience: payload.audience ?? "",
       p_subject: subject,
       p_recipient_count: summary.recipient_count,
+        p_assignment_id: payload.assignment_id ?? null,
     });
     if (reservationError) {
       if (reservationError.message.includes("Daily communication email limit")) return errorResponse("Today’s 100-email limit has been reached.", 429);

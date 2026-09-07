@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ClipboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ClipboardEvent } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Bold, Eye, ImagePlus, Italic, Link2, Mail, Paperclip, Redo2, Send, Underline, Undo2, X } from "lucide-react";
 import {
   getCommunicationDirectory,
@@ -225,6 +225,20 @@ export default function CommunicationsPage() {
   useEffect(() => {
     if (!testEmail && user?.email) setTestEmail(user.email);
   }, [testEmail, user?.email]);
+
+  useLayoutEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    editor.dir = "ltr";
+    editor.style.direction = "ltr";
+    editor.style.textAlign = "left";
+    editor.style.unicodeBidi = "embed";
+    editor.setAttribute("spellcheck", "true");
+    if (editor.innerHTML !== messageHtml) {
+      editor.innerHTML = messageHtml;
+    }
+  }, [messageHtml]);
 
   useEffect(() => {
     sessionStorage.setItem(COMMUNICATION_DRAFT_KEY, JSON.stringify({
@@ -489,8 +503,8 @@ export default function CommunicationsPage() {
             role="textbox"
             aria-multiline="true"
             onInput={(event) => { setMessageHtml(event.currentTarget.innerHTML); setMessage(htmlToText(event.currentTarget.innerHTML)); }}
-            dangerouslySetInnerHTML={{ __html: messageHtml }}
-            style={{ minHeight: 220, padding: 14, border: "1px solid #cbd5e1", borderRadius: "0 0 10px 10px", outline: 0, background: "#fff", direction: "ltr", textAlign: "left", unicodeBidi: "normal" }}
+            suppressContentEditableWarning
+            style={{ minHeight: 220, padding: 14, border: "1px solid #cbd5e1", borderRadius: "0 0 10px 10px", outline: 0, background: "#fff", direction: "ltr", textAlign: "left", unicodeBidi: "embed", writingMode: "horizontal-tb" }}
             data-placeholder="Write your message here..."
           />
           <input ref={imageInputRef} type="file" accept="image/png,image/jpeg" hidden onChange={(event) => void handleAttachment(event, true)} />
