@@ -5,7 +5,7 @@ import grandessaGradingScale from "../config/grandessaGrading";
 import { supabase } from "../lib/supabase";
 import { getResults } from "./resultService";
 import { getAcademicCalendarByYear, getSchoolSettings } from "./schoolSettingsService";
-import { getStudents } from "./studentService";
+import { getParentStudents, getStudents } from "./studentService";
 import { getSubjects } from "./subjectService";
 import { computeTotal, gradeFromTotal, remarkFromGrade } from "../utils/resultCalculations";
 import { resolveTemplateForClass } from "./reportTemplateEngine";
@@ -30,11 +30,13 @@ type ReportDependencies = {
 };
 
 let dependenciesCache: Promise<ReportDependencies> | null = null;
+let parentDependenciesCache: Promise<ReportDependencies> | null = null;
 
-function loadReportDependencies(): Promise<ReportDependencies> {
-  if (!dependenciesCache) {
-    dependenciesCache = Promise.all([
-      getStudents(),
+function loadReportDependencies(parentScoped = false): Promise<ReportDependencies> {
+  const cache = parentScoped ? parentDependenciesCache : dependenciesCache;
+  if (!cache) {
+    const request = Promise.all([
+      parentScoped ? getParentStudents() : getStudents(),
       getClasses(),
       getSubjects(),
       getResults(),
@@ -44,9 +46,12 @@ function loadReportDependencies(): Promise<ReportDependencies> {
       subjects,
       results,
     }));
+    if (parentScoped) parentDependenciesCache = request;
+    else dependenciesCache = request;
+    return request;
   }
 
-  return dependenciesCache;
+  return cache;
 }
 
 function normalizeTerm(term: string): ReportTerm {
@@ -148,8 +153,8 @@ async function getReportCardRecord(
   }
 }
 
-export async function getReportHistoryByStudent(studentId: string): Promise<ReportHistoryBySession[]> {
-  const { results: allResults, classes } = await loadReportDependencies();
+export async function getReportHistoryByStudent(studentId: string, options: { parentScoped?: boolean } = {}): Promise<ReportHistoryBySession[]> {
+  const { results: allResults, classes } = await loadReportDependencies(options.parentScoped);
   const classMap = new Map(classes.map((item) => [item.id, { class_name: item.class_name }]));
 
   const rows = allResults
@@ -203,10 +208,11 @@ export async function getReportHistoryByStudent(studentId: string): Promise<Repo
 export async function buildStudentReportCard(
   studentId: string,
   academicYear: string,
-  term: ReportTerm
+  term: ReportTerm,
+  options: { parentScoped?: boolean } = {}
 ): Promise<ReportCardData | null> {
   const [{ students, classes, subjects, results: allResults }, attendanceRows] = await Promise.all([
-    loadReportDependencies(),
+    loadReportDependencies(options.parentScoped),
     getAttendanceByStudent(studentId),
   ]);
 

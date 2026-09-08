@@ -20,4 +20,7 @@ Rules
 
 Current Status
 
-Schema documentation will be expanded alongside Results module implementation.
+The active migration `20260908000000_parent_portal_child_scoping.sql` restricts
+parent reads of students, attendance, report cards, results, and assignments to
+students linked through `contacts.auth_user_id = auth.uid()`. Staff policies
+remain school-scoped. The Result Access Code flow remains a legacy fallback.

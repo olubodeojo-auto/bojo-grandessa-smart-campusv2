@@ -6,15 +6,20 @@ import { getFriendlyAuthError } from "../../services/authService";
 import PasswordInput from "../../components/auth/PasswordInput";
 
 export default function LoginPage() {
-  const { user } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  if (user && authLoading) {
+    return <div style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>Loading...</div>;
+  }
+
   if (user) {
-    return <Navigate to="/admin" replace />;
+    const destination = role?.name.trim().toLowerCase() === "parent" ? "/portal" : "/admin";
+    return <Navigate to={destination} replace />;
   }
 
   async function handleLogin(e: React.FormEvent) {

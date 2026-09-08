@@ -35,19 +35,20 @@ export default function ParentAssignmentsPage() {
   }
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: 20 }}>
-      <div className="card" style={{ marginBottom: 16 }}><h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>Assignments</h1><p style={{ marginTop: 8, color: "#666" }}>Published work for your children is collected here.</p></div>
+    <main className="parent-portal-page">
+      <section className="parent-portal-page-heading"><p className="parent-portal-eyebrow">Schoolwork</p><h1>Assignments</h1><p>Keep track of your child&apos;s current published school work.</p></section>
       {error ? <p role="alert" style={{ color: "#991b1b" }}>{error}</p> : null}
       {loading ? <SectionCard><p>Loading assignments...</p></SectionCard> : assignments.length === 0 ? <EmptyState title="No assignments available" description="Published assignments for your children will appear here." /> : (
-        <div style={{ display: "grid", gap: 16 }}>
-          {assignments.map((assignment) => <SectionCard key={assignment.id}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><div><p style={{ margin: 0, color: "#0f6b35", fontWeight: 700 }}>{assignment.subject_name} · {assignment.class_name}</p><h2 style={{ margin: "6px 0" }}>{assignment.title}</h2></div><span style={{ color: "#64748b" }}>{assignment.frequency}</span></div>
-            <p style={{ margin: "8px 0" }}><strong>Posted:</strong> {assignment.published_at?.slice(0, 10) ?? assignment.created_at.slice(0, 10)} · <strong>Due:</strong> {assignment.due_date}</p>
-            <p style={{ whiteSpace: "pre-wrap" }}>{assignment.instructions || "No instructions added."}</p>
-            {assignment.files.length ? <div style={{ display: "grid", gap: 8, marginTop: 14 }}>{assignment.files.map((file) => <button key={file.id} type="button" onClick={() => void download(file)} disabled={openingFile === file.id} style={{ display: "inline-flex", alignItems: "center", gap: 8, width: "fit-content" }}><Paperclip size={16} />{file.file_name}<Download size={16} />{openingFile === file.id ? "Opening..." : "Download"}</button>)}</div> : null}
-          </SectionCard>)}
+        <div style={{ display: "grid", gap: 14 }}>
+          {assignments.map((assignment) => <article className="parent-assignment-card" key={assignment.id}>
+            <span className="parent-status-pill">Published assignment</span>
+            <h2>{assignment.title}</h2>
+            <div className="parent-assignment-card__meta">{assignment.subject_name || "Schoolwork"} {assignment.class_name ? `· ${assignment.class_name}` : ""} · Due {assignment.due_date}</div>
+            <p style={{ margin: 0, whiteSpace: "pre-wrap", color: "#52675b" }}>{assignment.instructions || "No instructions added."}</p>
+            {assignment.files.length ? <div style={{ display: "grid", gap: 8 }}>{assignment.files.map((file) => <button key={file.id} type="button" onClick={() => void download(file)} disabled={openingFile === file.id} style={{ display: "inline-flex", alignItems: "center", gap: 8, width: "fit-content" }}><Paperclip size={16} />{file.file_name}<Download size={16} />{openingFile === file.id ? "Opening..." : "Open attachment"}</button>)}</div> : null}
+          </article>)}
         </div>
       )}
-    </div>
+    </main>
   );
 }

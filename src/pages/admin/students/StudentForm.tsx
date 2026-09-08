@@ -5,6 +5,7 @@ import { createStudent, updateStudent, type StudentDatabaseWrite } from "../../.
 import { getClasses } from "../../../services/classService";
 import { createContact, updateContact, getContact } from "../../../services/contactService";
 import { removeStudentPassportPhoto, uploadStudentPassportPhoto } from "../../../services/studentPassportService";
+import { createParentPortalAccount, getParentPortalAccountStatus, resendParentPortalInvite } from "../../../services/parentAccountService";
 import type { Gender, Student, StudentStatus } from "../../../types/student";
 import type { SchoolClass } from "../../../types/class";
 
@@ -27,7 +28,11 @@ type StudentFormState = {
   blood_group: string;
   photo_url: string;
   primary_contact_id: string | null;
+  primary_auth_user_id: string | null;
+  primary_account_status: "not_created" | "invited" | "active";
   secondary_contact_id: string | null;
+  secondary_auth_user_id: string | null;
+  secondary_account_status: "not_created" | "invited" | "active";
   primary_first_name: string;
   primary_last_name: string;
   primary_relationship: string;
@@ -60,7 +65,11 @@ function createInitialState(student?: Student | null): StudentFormState {
     blood_group: student?.blood_group ?? "",
     photo_url: student?.photo_url ?? "",
     primary_contact_id: student?.primary_contact_id ?? null,
+    primary_auth_user_id: null,
+    primary_account_status: "not_created",
     secondary_contact_id: student?.secondary_contact_id ?? null,
+    secondary_auth_user_id: null,
+    secondary_account_status: "not_created",
     primary_first_name: "",
     primary_last_name: "",
     primary_relationship: "",
@@ -89,6 +98,7 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
   const [form, setForm] = useState<StudentFormState>(() => createInitialState(student));
   const hasUserEditedRef = useRef(false);
   const [classesList, setClassesList] = useState<SchoolClass[]>([]);
+  const [parentAccountLoading, setParentAccountLoading] = useState<"primary" | "secondary" | "">("");
 
   useEffect(() => {
     hasUserEditedRef.current = false;
@@ -129,6 +139,7 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
             setForm((prev) => ({
               ...prev,
               primary_contact_id: primary.id,
+              primary_auth_user_id: primary.auth_user_id ?? null,
               primary_first_name: primary.first_name || "",
               primary_last_name: primary.last_name || "",
               primary_relationship: primary.relationship || "",
@@ -137,6 +148,10 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
               primary_email: primary.email || "",
               primary_address: primary.address || "",
             }));
+            const accountStatus = await getParentPortalAccountStatus(primary.id);
+            if (!cancelled && !hasUserEditedRef.current) {
+              setForm((prev) => ({ ...prev, primary_account_status: accountStatus.status }));
+            }
           }
         }
 
@@ -147,6 +162,7 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
             setForm((prev) => ({
               ...prev,
               secondary_contact_id: secondary.id,
+              secondary_auth_user_id: secondary.auth_user_id ?? null,
               secondary_first_name: secondary.first_name || "",
               secondary_last_name: secondary.last_name || "",
               secondary_relationship: secondary.relationship || "",
@@ -155,6 +171,10 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
               secondary_email: secondary.email || "",
               secondary_address: secondary.address || "",
             }));
+            const accountStatus = await getParentPortalAccountStatus(secondary.id);
+            if (!cancelled && !hasUserEditedRef.current) {
+              setForm((prev) => ({ ...prev, secondary_account_status: accountStatus.status }));
+            }
           }
         }
       } catch {
@@ -222,6 +242,34 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
       event.target.value = "";
     } finally {
       setIsPhotoUploading(false);
+    }
+  }
+
+  async function handleParentAccount(kind: "primary" | "secondary"): Promise<void> {
+    const contactId = kind === "primary" ? form.primary_contact_id : form.secondary_contact_id;
+    const email = kind === "primary" ? form.primary_email.trim() : form.secondary_email.trim();
+    const authUserId = kind === "primary" ? form.primary_auth_user_id : form.secondary_auth_user_id;
+    if (!contactId) {
+      alert("Save the student and contact information before creating a parent portal account.");
+      return;
+    }
+    if (!email) {
+      alert("Add an email address to this contact before creating a parent portal account.");
+      return;
+    }
+    setParentAccountLoading(kind);
+    try {
+      const result = authUserId
+        ? await resendParentPortalInvite(contactId)
+        : await createParentPortalAccount(contactId);
+      setForm((current) => kind === "primary"
+        ? { ...current, primary_auth_user_id: result.contact.auth_user_id, primary_account_status: result.status }
+        : { ...current, secondary_auth_user_id: result.contact.auth_user_id, secondary_account_status: result.status });
+      alert(result.invited ? "Parent portal invitation sent." : "Parent portal account is already linked.");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Unable to manage the parent portal account.");
+    } finally {
+      setParentAccountLoading("");
     }
   }
 
@@ -540,6 +588,15 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
           onChange={(event) => update("primary_email", event.target.value)}
         />
 
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" onClick={() => void handleParentAccount("primary")} disabled={parentAccountLoading === "primary" || form.primary_account_status === "active"}>
+            {parentAccountLoading === "primary" ? "Working..." : form.primary_account_status === "active" ? "Use Forgot Password" : form.primary_account_status === "invited" ? "Resend Invite" : "Create Parent Portal Account"}
+          </button>
+          <span style={{ color: form.primary_account_status === "active" ? "#2e7d32" : "#64748b", fontSize: 12 }}>
+            {form.primary_account_status === "active" ? "Active account" : form.primary_account_status === "invited" ? "Invitation pending" : "No portal account"}
+          </span>
+        </div>
+
         <input
           style={inputStyle}
           placeholder="Primary Address"
@@ -597,6 +654,15 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
           value={form.secondary_email}
           onChange={(event) => update("secondary_email", event.target.value)}
         />
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" onClick={() => void handleParentAccount("secondary")} disabled={parentAccountLoading === "secondary" || form.secondary_account_status === "active"}>
+            {parentAccountLoading === "secondary" ? "Working..." : form.secondary_account_status === "active" ? "Use Forgot Password" : form.secondary_account_status === "invited" ? "Resend Invite" : "Create Parent Portal Account"}
+          </button>
+          <span style={{ color: form.secondary_account_status === "active" ? "#2e7d32" : "#64748b", fontSize: 12 }}>
+            {form.secondary_account_status === "active" ? "Active account" : form.secondary_account_status === "invited" ? "Invitation pending" : "No portal account"}
+          </span>
+        </div>
 
         <input
           style={inputStyle}

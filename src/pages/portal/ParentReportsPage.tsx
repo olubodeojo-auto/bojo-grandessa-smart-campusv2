@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import Button from "../../components/ui/Button";
 import ReportCardDocument from "../../components/reports/ReportCardDocument";
@@ -9,13 +9,16 @@ import EmptyState from "../../components/ui/EmptyState";
 import SectionCard from "../../components/ui/SectionCard";
 import FormField, { inputStyle } from "../../components/forms/FormField";
 import { buildStudentReportCard, getReportHistoryByStudent } from "../../services/reportCardService";
-import { getStudentByAccessCode } from "../../services/studentService";
+import { getStudentByAccessCode, getParentStudents } from "../../services/studentService";
+import { useAuth } from "../../hooks/useAuth";
 import type { ReportCardData, ReportHistoryBySession, ReportTerm } from "../../types/reportCard";
 import type { Student } from "../../types/student";
 
 export default function ParentReportsPage() {
+  const { isAuthenticated } = useAuth();
   const [studentCode, setStudentCode] = useState("");
   const [student, setStudent] = useState<Student | null>(null);
+  const [linkedStudents, setLinkedStudents] = useState<Student[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [history, setHistory] = useState<ReportHistoryBySession[]>([]);
   const [academicYear, setAcademicYear] = useState("");
@@ -23,6 +26,81 @@ export default function ParentReportsPage() {
   const [report, setReport] = useState<ReportCardData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let active = true;
+    setLoading(true);
+    void getParentStudents()
+      .then((students) => {
+        if (!active) return;
+        setLinkedStudents(students);
+        const firstStudent = students[0] ?? null;
+        setStudent(firstStudent);
+        setSelectedStudentId(firstStudent?.id ?? "");
+        if (!firstStudent) setError("No linked student is available for this parent account.");
+      })
+      .catch((loadError) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : "Unable to load linked students.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !selectedStudentId) return;
+
+    let active = true;
+    setLoading(true);
+    setError("");
+
+    void getReportHistoryByStudent(selectedStudentId, { parentScoped: true })
+      .then(async (rows) => {
+        if (!active) return;
+        setHistory(rows);
+        const nextYear = rows[0]?.academicYear ?? "";
+        const nextTerm = rows[0]?.entries[0]?.term ?? "First";
+        setAcademicYear(nextYear);
+        setTerm(nextTerm);
+        if (!nextYear) {
+          setReport(null);
+          setError("No report is available for this student yet.");
+          return;
+        }
+        const data = await buildStudentReportCard(selectedStudentId, nextYear, nextTerm, { parentScoped: true });
+        if (!active) return;
+        setReport(data);
+        if (!data) setError("No report is available for this student yet.");
+      })
+      .catch((loadError) => {
+        if (active) {
+          setReport(null);
+          setError(loadError instanceof Error ? loadError.message : "Unable to load this report.");
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated, selectedStudentId]);
+
+  function handleLinkedStudentChange(nextStudentId: string): void {
+    const nextStudent = linkedStudents.find((item) => item.id === nextStudentId) ?? null;
+    setStudent(nextStudent);
+    setSelectedStudentId(nextStudentId);
+    setHistory([]);
+    setAcademicYear("");
+    setReport(null);
+  }
 
   async function handleLookup(): Promise<void> {
     const normalizedCode = studentCode.trim().toUpperCase();
@@ -52,7 +130,7 @@ export default function ParentReportsPage() {
         return;
       }
 
-      const rows = await getReportHistoryByStudent(matchedStudent.id);
+      const rows = await getReportHistoryByStudent(matchedStudent.id, { parentScoped: true });
       setStudent(matchedStudent);
       setSelectedStudentId(matchedStudent.id);
       setHistory(rows);
@@ -68,7 +146,7 @@ export default function ParentReportsPage() {
         return;
       }
 
-      const data = await buildStudentReportCard(matchedStudent.id, nextYear, nextTerm);
+      const data = await buildStudentReportCard(matchedStudent.id, nextYear, nextTerm, { parentScoped: true });
       setReport(data);
       if (!data) {
         setError("No report is available for this student yet.");
@@ -92,7 +170,7 @@ export default function ParentReportsPage() {
     setError("");
 
     try {
-      const data = await buildStudentReportCard(selectedStudentId, academicYear, nextTerm);
+      const data = await buildStudentReportCard(selectedStudentId, academicYear, nextTerm, { parentScoped: true });
       setReport(data);
       if (!data) {
         setError("No report is available for this session and term.");
@@ -121,7 +199,7 @@ export default function ParentReportsPage() {
     setError("");
 
     try {
-      const data = await buildStudentReportCard(selectedStudentId, nextYear, nextTerm);
+      const data = await buildStudentReportCard(selectedStudentId, nextYear, nextTerm, { parentScoped: true });
       setReport(data);
       if (!data) {
         setError("No report is available for this session and term.");
@@ -146,20 +224,38 @@ export default function ParentReportsPage() {
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "20px" }}>
       <div className="card" style={{ marginBottom: 16 }}>
         <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>Parent Report Portal</h1>
-        <p style={{ marginTop: 8, color: "#666" }}>Enter the Result Access Code provided by the school.</p>
+        <p style={{ marginTop: 8, color: "#666" }}>{isAuthenticated ? "Reports for your linked children." : "Enter the Result Access Code provided by the school."}</p>
       </div>
 
       <SectionCard>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 }}>
-          <FormField label="Result Access Code">
-            <input
-              style={inputStyle}
-              value={studentCode}
-              onChange={(event) => setStudentCode(event.target.value.toUpperCase())}
-              placeholder="e.g. GRC-2D7F9A"
-              aria-label="Result access code"
-            />
-          </FormField>
+          {isAuthenticated ? (
+            <FormField label="Child">
+              <select
+                style={inputStyle}
+                value={selectedStudentId}
+                onChange={(event) => handleLinkedStudentChange(event.target.value)}
+                disabled={!linkedStudents.length || loading}
+                aria-label="Select child"
+              >
+                {linkedStudents.map((linkedStudent) => (
+                  <option key={linkedStudent.id} value={linkedStudent.id}>
+                    {[linkedStudent.first_name, linkedStudent.last_name].filter(Boolean).join(" ")}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+          ) : (
+            <FormField label="Result Access Code">
+              <input
+                style={inputStyle}
+                value={studentCode}
+                onChange={(event) => setStudentCode(event.target.value.toUpperCase())}
+                placeholder="e.g. GRC-2D7F9A"
+                aria-label="Result access code"
+              />
+            </FormField>
+          )}
 
           <FormField label="Session">
             <select
@@ -192,11 +288,13 @@ export default function ParentReportsPage() {
           </FormField>
         </div>
 
-        <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
-          <Button type="button" onClick={() => void handleLookup()} disabled={loading}>
-            {loading ? "Loading..." : "View Result"}
-          </Button>
-        </div>
+        {!isAuthenticated ? (
+          <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
+            <Button type="button" onClick={() => void handleLookup()} disabled={loading}>
+              {loading ? "Loading..." : "View Result"}
+            </Button>
+          </div>
+        ) : null}
       </SectionCard>
 
       {student ? (

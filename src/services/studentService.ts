@@ -82,6 +82,37 @@ export async function getStudents(
   return (data ?? []).map((row) => mapStudentRow(row, classesById.get((row as { class_id?: string }).class_id ?? "")));
 }
 
+export async function getParentStudents(): Promise<Student[]> {
+  const { data, error } = await supabase
+    .from("students")
+    .select("id, admission_number, first_name, middle_name, last_name, class_id, admission_date, status")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  const classIds = [...new Set((data ?? []).map((row) => row.class_id).filter((id): id is string => Boolean(id)))];
+  if (classIds.length === 0) return (data ?? []).map((row) => mapStudentRow(row));
+
+  const { data: classRows, error: classError } = await supabase
+    .from("classes")
+    .select("id, class_name, class_teacher_id")
+    .in("id", classIds);
+  if (classError) throw classError;
+
+  const teacherIds = [...new Set((classRows ?? []).map((row) => row.class_teacher_id).filter((id): id is string => Boolean(id)))];
+  const { data: teachers, error: teacherError } = teacherIds.length > 0
+    ? await supabase.from("users").select("id, first_name, last_name, status").in("id", teacherIds).eq("status", "Active")
+    : { data: [], error: null };
+  if (teacherError) throw teacherError;
+
+  const teachersById = new Map((teachers ?? []).map((teacher) => [teacher.id, teacher]));
+  const classesById = new Map((classRows ?? []).map((schoolClass) => [schoolClass.id, {
+    ...schoolClass,
+    class_teacher: schoolClass.class_teacher_id ? teachersById.get(schoolClass.class_teacher_id) ?? null : null,
+  }]));
+  return (data ?? []).map((row) => mapStudentRow(row, classesById.get(row.class_id ?? "")));
+}
+
 export async function getStudent(id: string): Promise<Student | null> {
   const { data, error } = await supabase
     .from("students")
@@ -96,7 +127,17 @@ export async function getStudent(id: string): Promise<Student | null> {
   return mapStudentRow(data, classes.find((schoolClass) => schoolClass.id === (data as { class_id?: string }).class_id));
 }
 
-function mapStudentRow(row: Record<string, unknown>, schoolClass?: Awaited<ReturnType<typeof getClasses>>[number]): Student {
+function mapStudentRow(
+  row: Record<string, unknown>,
+  schoolClass?: {
+    class_name?: string;
+    class_teacher?: {
+      first_name: string | null;
+      last_name: string | null;
+      status?: string | null;
+    } | null;
+  },
+): Student {
   return {
     ...(row as unknown as Student),
     class_name: schoolClass?.class_name || (row.class_name as string | undefined) || "",

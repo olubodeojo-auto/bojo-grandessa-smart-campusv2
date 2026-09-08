@@ -142,6 +142,7 @@ const AppHeader = ({
     try {
       await signOut();
       setIsMenuOpen(false);
+      navigate("/login", { replace: true });
     } catch {
       setIsMenuOpen(false);
     } finally {

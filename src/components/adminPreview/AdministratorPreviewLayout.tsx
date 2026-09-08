@@ -14,11 +14,14 @@ export default function AdministratorPreviewLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut } = useAuthContext();
+  const { signOut, role } = useAuthContext();
+
+  const canManageParentAccounts = ["proprietress", "super admin", "administrator", "school admin", "super_admin", "school_admin", "admin"].includes(role?.name.trim().toLowerCase() ?? "");
 
   const adminNavigation = [
     { key: "dashboard", label: "Dashboard", path: "/admin", searchPlaceholder: "Search dashboard" },
     { key: "students", label: "Students", path: "/admin/students", searchPlaceholder: "Search students" },
+    { key: "parent-accounts", label: "Parent Accounts", path: "/admin/parent-accounts", searchPlaceholder: "Search parent accounts" },
     { key: "results", label: "Results", path: "/admin/results", searchPlaceholder: "Search results" },
     { key: "classes", label: "Classes", path: "/admin/classes", searchPlaceholder: "Search classes" },
     { key: "staff", label: "Staff & Users", path: "/admin/staff", searchPlaceholder: "Search staff" },
@@ -37,7 +40,7 @@ export default function AdministratorPreviewLayout() {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate("/");
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -61,7 +64,7 @@ export default function AdministratorPreviewLayout() {
           </div>
 
           <nav className="admin-preview-sidebar__nav" aria-label="Administrator Navigation">
-            {adminNavigation.map((item) => (
+            {adminNavigation.filter((item) => item.key !== "parent-accounts" || canManageParentAccounts).map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}

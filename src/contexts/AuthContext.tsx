@@ -165,12 +165,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const roleSelect =
           "id, user_id, role_id, start_date, end_date, is_active, created_at, roles(id, name)";
 
-        const { data: roleData, error: roleError } = await supabase
+        const queryResult = await supabase
           .from("user_roles")
           .select(roleSelect)
           .eq("user_id", userId)
           .eq("is_active", true)
-          .maybeSingle<UserRoleJoinRow>();
+          .order("created_at", { ascending: false });
+
+        const { data: allRoles, error: roleError } = queryResult as {
+          data: UserRoleJoinRow[] | null;
+          error: unknown;
+        };
 
         if (roleError) {
           throw roleError;
@@ -179,6 +184,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!isMountedRef.current || requestId !== profileRequestIdRef.current) {
           return;
         }
+
+        const roleData: UserRoleJoinRow | null = (allRoles ?? [])[0] ?? null;
 
         if (roleData?.roles) {
           setRole({
@@ -346,6 +353,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
             }
 
             case "TOKEN_REFRESHED": {
+              const previousUserId = sessionRef.current?.user?.id ?? null;
+
               sessionRef.current = newSession;
               userRef.current = newSession?.user ?? null;
 
@@ -354,7 +363,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
               if (
                 newSession?.user &&
-                (sessionRef.current?.user?.id !== newSession.user.id ||
+                (previousUserId !== newSession.user.id ||
                   !profileRef.current ||
                   profileRef.current.id !== newSession.user.id ||
                   !roleRef.current)
