@@ -8,8 +8,11 @@ const corsHeaders = {
 };
 
 type ParentRequest = {
-  action?: "create" | "resend_invitation" | "status" | "directory";
+  action?: "create" | "resend_invitation" | "status" | "directory" | "link" | "unlink" | "accounts" | "links";
   contact_id?: string;
+  student_id?: string;
+  auth_user_id?: string;
+  relationship?: string | null;
   redirect_to?: string;
 };
 
@@ -148,6 +151,160 @@ async function handleStatus(adminClient: ReturnType<typeof createClient>, reques
   return response({ contact: { id: contact.id, auth_user_id: contact.auth_user_id }, invited: !completed, status: completed ? "active" : "invited" });
 }
 
+async function handleLink(adminClient: ReturnType<typeof createClient>, request: ParentRequest, callerId: string): Promise<Response> {
+  if (!request.student_id) return errorResponse("A student id is required.", 400);
+  if (!request.auth_user_id) return errorResponse("An auth user id is required.", 400);
+
+  const { data: student, error: studentError } = await adminClient.from("students").select("id").eq("id", request.student_id).maybeSingle();
+  if (studentError) throw studentError;
+  if (!student) return errorResponse("Student not found.", 404);
+
+  const { data: authUser, error: authLookupError } = await adminClient.auth.admin.getUserById(request.auth_user_id);
+  if (authLookupError) throw authLookupError;
+  if (!authUser.user) return errorResponse("Authenticated parent account not found.", 404);
+
+  const parentRole = await getParentRole(adminClient);
+  const { data: parentRoleRows, error: roleRowsError } = await adminClient
+    .from("user_roles")
+    .select("id")
+    .eq("user_id", request.auth_user_id)
+    .eq("role_id", parentRole.id)
+    .eq("is_active", true)
+    .limit(1);
+  if (roleRowsError) throw roleRowsError;
+  if (!parentRoleRows || parentRoleRows.length === 0) {
+    return errorResponse("The selected user does not currently hold an active Parent role.", 409);
+  }
+
+  const { data: parentUser, error: parentUserError } = await adminClient.from("users").select("id, status").eq("id", request.auth_user_id).maybeSingle();
+  if (parentUserError) throw parentUserError;
+  if (!parentUser || parentUser.status !== "Active") return errorResponse("The selected parent account is not active.", 409);
+
+  const { data: existing, error: listError } = await adminClient
+    .from("parent_student_links")
+    .select("id")
+    .eq("student_id", request.student_id)
+    .eq("auth_user_id", request.auth_user_id)
+    .limit(1)
+    .maybeSingle();
+  if (listError) throw listError;
+  if (existing?.id) {
+    return response({ ok: true, already_linked: true, message: "This parent account is already linked to this student." });
+  }
+
+  const { error: linkError } = await adminClient
+    .from("parent_student_links")
+    .insert({
+      student_id: request.student_id,
+      auth_user_id: request.auth_user_id,
+      relationship: request.relationship ?? null,
+      created_by: callerId,
+    });
+
+  if (linkError) {
+    if (String(linkError.message).toLowerCase().includes("duplicate")) {
+      return response({ ok: true, already_linked: true, message: "This parent account is already linked to this student." });
+    }
+    throw linkError;
+  }
+
+  return response({ ok: true, already_linked: false, auth_user_id: request.auth_user_id, student_id: request.student_id, relationship: request.relationship ?? null });
+}
+
+async function handleUnlink(adminClient: ReturnType<typeof createClient>, request: ParentRequest): Promise<Response> {
+  if (!request.student_id) return errorResponse("A student id is required.", 400);
+  if (!request.auth_user_id) return errorResponse("An auth user id is required.", 400);
+
+  const { error } = await adminClient
+    .from("parent_student_links")
+    .delete()
+    .eq("student_id", request.student_id)
+    .eq("auth_user_id", request.auth_user_id);
+
+  if (error) throw error;
+  return response({ ok: true });
+}
+
+async function handleAccounts(adminClient: ReturnType<typeof createClient>): Promise<Response> {
+  const parentRole = await getParentRole(adminClient);
+  const { data: roleRows, error: roleRowsError } = await adminClient
+    .from("user_roles")
+    .select("user_id")
+    .eq("role_id", parentRole.id)
+    .eq("is_active", true);
+  if (roleRowsError) throw roleRowsError;
+
+  const userIds = [...new Set((roleRows ?? []).map((row) => row.user_id).filter(Boolean))];
+  if (userIds.length === 0) return response({ accounts: [] });
+
+  const { data: profileRows, error: profilesError } = await adminClient
+    .from("users")
+    .select("id, first_name, last_name, status")
+    .in("id", userIds)
+    .eq("status", "Active");
+  if (profilesError) throw profilesError;
+
+  const profileById = new Map((profileRows ?? []).map((row) => [row.id, row]));
+  const accounts = [] as Array<{ auth_user_id: string; first_name: string | null; last_name: string | null; email: string | null }>;
+
+  let page = 1;
+  while (true) {
+    const { data: authPage, error: authPageError } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 });
+    if (authPageError) throw authPageError;
+    for (const authUser of authPage.users) {
+      if (!userIds.includes(authUser.id)) continue;
+      const profile = profileById.get(authUser.id);
+      if (!profile) continue;
+      accounts.push({
+        auth_user_id: authUser.id,
+        email: authUser.email ?? null,
+        first_name: profile.first_name ?? authUser.user_metadata?.first_name ?? null,
+        last_name: profile.last_name ?? authUser.user_metadata?.last_name ?? null,
+      });
+    }
+    if (authPage.users.length < 1000) break;
+    page += 1;
+  }
+
+  return response({ accounts });
+}
+
+async function handleLinks(adminClient: ReturnType<typeof createClient>, request: ParentRequest): Promise<Response> {
+  if (!request.student_id) return errorResponse("A student id is required.", 400);
+
+  const { data: rows, error } = await adminClient
+    .from("parent_student_links")
+    .select("student_id, auth_user_id, relationship, created_at")
+    .eq("student_id", request.student_id)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const links = [] as Array<Record<string, unknown>>;
+  for (const row of rows ?? []) {
+    const { data: userRecord, error: userRecordError } = await adminClient
+      .from("users")
+      .select("id, first_name, last_name, status")
+      .eq("id", row.auth_user_id)
+      .maybeSingle();
+    if (userRecordError) throw userRecordError;
+
+    const { data: authUser, error: authLookupError } = await adminClient.auth.admin.getUserById(row.auth_user_id);
+    if (authLookupError) throw authLookupError;
+
+    links.push({
+      student_id: row.student_id,
+      auth_user_id: row.auth_user_id,
+      relationship: row.relationship,
+      email: authUser.user?.email ?? null,
+      created_at: row.created_at,
+      first_name: userRecord?.first_name ?? null,
+      last_name: userRecord?.last_name ?? null,
+    });
+  }
+
+  return response({ links });
+}
+
 async function handleDirectory(adminClient: ReturnType<typeof createClient>): Promise<Response> {
   const [{ data: contacts, error: contactsError }, { data: students, error: studentsError }] = await Promise.all([
     adminClient.from("contacts").select("id, first_name, last_name, relationship, email, phone, auth_user_id"),
@@ -234,6 +391,10 @@ Deno.serve(async (request) => {
     if (payload.action === "resend_invitation") return await handleResend(authClient, adminClient, payload);
     if (payload.action === "status") return await handleStatus(adminClient, payload);
     if (payload.action === "directory") return await handleDirectory(adminClient);
+    if (payload.action === "link") return await handleLink(adminClient, payload, authData.user.id);
+    if (payload.action === "unlink") return await handleUnlink(adminClient, payload);
+    if (payload.action === "accounts") return await handleAccounts(adminClient);
+    if (payload.action === "links") return await handleLinks(adminClient, payload);
     return errorResponse("Unsupported parent account action.", 400);
   } catch (error) {
     console.error(error);

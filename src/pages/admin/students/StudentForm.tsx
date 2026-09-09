@@ -5,7 +5,7 @@ import { createStudent, updateStudent, type StudentDatabaseWrite } from "../../.
 import { getClasses } from "../../../services/classService";
 import { createContact, updateContact, getContact } from "../../../services/contactService";
 import { removeStudentPassportPhoto, uploadStudentPassportPhoto } from "../../../services/studentPassportService";
-import { createParentPortalAccount, getParentPortalAccountStatus, resendParentPortalInvite } from "../../../services/parentAccountService";
+import { createParentPortalAccount, getParentPortalAccountStatus, resendParentPortalInvite, listParentPortalAccounts, listParentPortalLinks, linkParentAccountToStudent, unlinkParentAccountFromStudent } from "../../../services/parentAccountService";
 import type { Gender, Student, StudentStatus } from "../../../types/student";
 import type { SchoolClass } from "../../../types/class";
 
@@ -99,6 +99,15 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
   const hasUserEditedRef = useRef(false);
   const [classesList, setClassesList] = useState<SchoolClass[]>([]);
   const [parentAccountLoading, setParentAccountLoading] = useState<"primary" | "secondary" | "">("");
+  const [portalAccounts, setPortalAccounts] = useState<Array<{ auth_user_id: string; first_name: string | null; last_name: string | null; email: string | null }>>([]);
+  const [portalLinks, setPortalLinks] = useState<Array<{ student_id: string; auth_user_id: string; relationship: string | null; email: string | null; first_name: string | null; last_name: string | null; created_at: string }>>([]);
+  const [linkAccountUserId, setLinkAccountUserId] = useState<string>("");
+  const [linkRelationship, setLinkRelationship] = useState<string>("");
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [unlinkBusy, setUnlinkBusy] = useState<string>("");
+  const [portalAccountsLoading, setPortalAccountsLoading] = useState(false);
+  const [portalLinksLoading, setPortalLinksLoading] = useState(false);
+  const [portalAccessError, setPortalAccessError] = useState<string>("");
 
   useEffect(() => {
     hasUserEditedRef.current = false;
@@ -129,6 +138,33 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
               class_id: foundClass.id,
               class_name: foundClass.class_name,
             }));
+          }
+        }
+
+        if (student?.id && !cancelled && !hasUserEditedRef.current) {
+          try {
+            setPortalAccountsLoading(true);
+            setPortalLinksLoading(true);
+            setPortalAccessError("");
+            const [accounts, links] = await Promise.all([
+              listParentPortalAccounts(),
+              listParentPortalLinks(student.id),
+            ]);
+            if (!cancelled && !hasUserEditedRef.current) {
+              setPortalAccounts(accounts);
+              setPortalLinks(links);
+            }
+          } catch (loadError) {
+            if (!cancelled && !hasUserEditedRef.current) {
+              setPortalAccessError(loadError instanceof Error ? loadError.message : "Unable to load parent portal access records.");
+              setPortalAccounts([]);
+              setPortalLinks([]);
+            }
+          } finally {
+            if (!cancelled && !hasUserEditedRef.current) {
+              setPortalAccountsLoading(false);
+              setPortalLinksLoading(false);
+            }
           }
         }
 
@@ -270,6 +306,77 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
       alert(error instanceof Error ? error.message : "Unable to manage the parent portal account.");
     } finally {
       setParentAccountLoading("");
+    }
+  }
+
+  async function refreshParentAccess(): Promise<void> {
+    if (!student?.id) return;
+    setPortalAccountsLoading(true);
+    setPortalLinksLoading(true);
+    setPortalAccessError("");
+    try {
+      const [accounts, links] = await Promise.all([
+        listParentPortalAccounts(),
+        listParentPortalLinks(student.id),
+      ]);
+      setPortalAccounts(accounts);
+      setPortalLinks(links);
+    } catch (error) {
+      setPortalAccessError(error instanceof Error ? error.message : "Unable to refresh parent portal access.");
+    } finally {
+      setPortalAccountsLoading(false);
+      setPortalLinksLoading(false);
+    }
+  }
+
+  async function handleLinkExistingParent(): Promise<void> {
+    if (!student?.id) {
+      alert("Save the student first before linking an existing parent account.");
+      return;
+    }
+    if (!linkAccountUserId) {
+      alert("Select an existing parent portal account first.");
+      return;
+    }
+    if (!linkRelationship.trim()) {
+      alert("Choose a relationship for this parent account.");
+      return;
+    }
+    setLinkBusy(true);
+    setPortalAccessError("");
+    try {
+      const result = await linkParentAccountToStudent(student.id, linkAccountUserId, linkRelationship || null);
+      const payload = result as { ok?: boolean; already_linked?: boolean; message?: string };
+      if (payload.already_linked || payload.message?.toLowerCase().includes("already linked")) {
+        alert("This parent account is already linked to this student.");
+      } else if (payload.ok === false) {
+        alert(payload.message ?? "Unable to link the parent account.");
+      } else {
+        alert("Parent account linked successfully.");
+      }
+      await refreshParentAccess();
+      setLinkAccountUserId("");
+      setLinkRelationship("");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Unable to link the parent account.");
+    } finally {
+      setLinkBusy(false);
+    }
+  }
+
+  async function handleUnlinkParent(authUserId: string): Promise<void> {
+    if (!student?.id) return;
+    if (!window.confirm("Unlink this parent account from this student only?")) return;
+    setUnlinkBusy(authUserId);
+    setPortalAccessError("");
+    try {
+      await unlinkParentAccountFromStudent(student.id, authUserId);
+      await refreshParentAccess();
+      alert("Parent account unlinked from this student.");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Unable to unlink the parent account.");
+    } finally {
+      setUnlinkBusy("");
     }
   }
 
@@ -534,7 +641,11 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
           {photoError ? <span style={{ color: "#b91c1c" }}>{photoError}</span> : null}
         </div>
 
-        <h3 style={{ gridColumn: "1 / -1", margin: "8px 0 0" }}>Parent / Guardian Information</h3>
+        <h3 style={{ gridColumn: "1 / -1", margin: "8px 0 0" }}>Contact Information</h3>
+
+        <div style={{ gridColumn: "1 / -1", display: "grid", gap: 8 }}>
+          <strong>Primary Contact</strong>
+        </div>
 
         {/* Primary contact */}
         <input
@@ -670,6 +781,50 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
           value={form.secondary_address}
           onChange={(event) => update("secondary_address", event.target.value)}
         />
+
+        <div style={{ gridColumn: "1 / -1", display: "grid", gap: 12, marginTop: 12, padding: "12px", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+          <h3 style={{ margin: "0 0 4px" }}>Parent Portal Access</h3>
+          {portalAccessError ? <div role="alert" style={{ color: "#b91c1c" }}>{portalAccessError}</div> : null}
+          <div style={{ display: "grid", gap: 10 }}>
+            {portalLinksLoading ? <div style={{ color: "#64748b" }}>Loading linked portal accounts...</div> : portalLinks.length === 0 ? <div style={{ color: "#64748b" }}>No linked portal accounts yet.</div> : portalLinks.map((link) => (
+              <div key={link.auth_user_id} style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "10px 0", borderBottom: "1px solid #f1f5f9" }}>
+                <span style={{ fontWeight: 700 }}>{[link.first_name, link.last_name].filter(Boolean).join(" ") || "Parent"}</span>
+                <span style={{ color: "#64748b" }}>{link.email || "No email"}</span>
+                <span style={{ color: "#64748b" }}>{link.relationship || "Relationship"}</span>
+                <button type="button" disabled={unlinkBusy === link.auth_user_id} onClick={() => void handleUnlinkParent(link.auth_user_id)}>
+                  {unlinkBusy === link.auth_user_id ? "Unlinking..." : "Unlink"}
+                </button>
+              </div>
+            ))}
+
+            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+              <strong>Link Existing Parent Account</strong>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <select value={linkAccountUserId} onChange={(event) => setLinkAccountUserId(event.target.value)} style={inputStyle} aria-label="Select existing parent portal account" disabled={portalAccountsLoading}>
+                  <option value="">Select existing parent account</option>
+                  {portalAccounts
+                    .filter((account) => !portalLinks.some((link) => link.auth_user_id === account.auth_user_id))
+                    .map((account) => (
+                      <option key={account.auth_user_id} value={account.auth_user_id}>{[account.first_name, account.last_name].filter(Boolean).join(" ") || account.email || account.auth_user_id} — {account.email || "unknown email"}</option>
+                    ))}
+                </select>
+                <select value={linkRelationship} onChange={(event) => setLinkRelationship(event.target.value)} style={inputStyle} aria-label="Parent relationship" disabled={portalAccountsLoading}>
+                  <option value="">Relationship</option>
+                  <option value="Father">Father</option>
+                  <option value="Mother">Mother</option>
+                  <option value="Guardian">Guardian</option>
+                  <option value="Uncle">Uncle</option>
+                  <option value="Aunt">Aunt</option>
+                  <option value="Sponsor">Sponsor</option>
+                  <option value="Other">Other</option>
+                </select>
+                <button type="button" disabled={linkBusy || !student?.id || !linkAccountUserId || !linkRelationship.trim()} onClick={() => void handleLinkExistingParent()}>
+                  {linkBusy ? "Working..." : "Link Parent Account"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <select
           style={inputStyle}
