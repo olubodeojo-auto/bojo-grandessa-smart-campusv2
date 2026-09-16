@@ -10,7 +10,7 @@ const corsHeaders = {
 const managedRoles = ["Administrator", "Proprietress", "Super Admin", "Accountant", "Teacher"] as const;
 const managerRoles = new Set(["Administrator", "Proprietress", "Super Admin"]);
 type ManagedRole = (typeof managedRoles)[number];
-type StaffAction = "list" | "create" | "update" | "resend_invitation" | "set_status" | "delete";
+type StaffAction = "list" | "find_existing" | "create" | "update" | "resend_invitation" | "set_status" | "delete";
 
 type StaffRequest = {
   action?: StaffAction;
@@ -40,7 +40,6 @@ type UserRow = {
 
 type RoleRow = { id: string; name: string };
 type UserRoleRow = { id?: string; user_id: string; role_id: string; is_active: boolean | null };
-
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: corsHeaders });
 }
@@ -123,7 +122,7 @@ async function assertAuthorizedCaller(
 async function listStaff(adminClient: ReturnType<typeof createClient>, caller: CallerInfo): Promise<Response> {
   const [{ data: users, error: usersError }, { data: assignments, error: assignmentsError }] = await Promise.all([
     adminClient.from("users").select("id, first_name, last_name, phone, status").order("last_name"),
-    adminClient.from("user_roles").select("user_id, role_id, is_active"),
+    adminClient.from("user_roles").select("user_id, role_id, is_active").eq("is_active", true),
   ]);
 
   if (usersError) throw usersError;
@@ -168,6 +167,54 @@ async function listStaff(adminClient: ReturnType<typeof createClient>, caller: C
   });
 
   return response({ staff });
+}
+
+async function findExistingAccount(
+  adminClient: ReturnType<typeof createClient>,
+  request: StaffRequest,
+): Promise<Response> {
+  const email = request.email?.trim().toLowerCase();
+  if (!email) return errorResponse("An email address is required.", 400);
+
+  let matchingAuthUser: { id: string; email?: string | null } | null = null;
+  let page = 1;
+  while (!matchingAuthUser) {
+    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw error;
+    matchingAuthUser = data.users.find((user) => user.email?.toLowerCase() === email) ?? null;
+    if (data.users.length < 1000) break;
+    page += 1;
+  }
+
+  if (!matchingAuthUser) return response({ existing: null });
+
+  const [{ data: profile, error: profileError }, { data: assignments, error: assignmentsError }] = await Promise.all([
+    adminClient.from("users").select("id, first_name, last_name, phone").eq("id", matchingAuthUser.id).maybeSingle(),
+    adminClient.from("user_roles").select("role_id, is_active").eq("user_id", matchingAuthUser.id).eq("is_active", true),
+  ]);
+
+  if (profileError) throw profileError;
+  if (assignmentsError) throw assignmentsError;
+  if (!profile) return response({ existing: null });
+
+  const roleMap = await getRoleMap(
+    adminClient,
+    ((assignments ?? []) as Pick<UserRoleRow, "role_id">[]).map((assignment) => assignment.role_id),
+  );
+  const roleName = (assignments ?? [])
+    .map((assignment: Pick<UserRoleRow, "role_id">) => roleMap.get(assignment.role_id))
+    .find((value): value is string => Boolean(value)) ?? null;
+
+  return response({
+    existing: {
+      id: profile.id,
+      first_name: profile.first_name,
+      last_name: profile.last_name,
+      phone: profile.phone,
+      email: matchingAuthUser.email ?? email,
+      role_name: roleName,
+    },
+  });
 }
 
 async function createStaff(
@@ -612,6 +659,7 @@ Deno.serve(async (request) => {
 
     const payload = (await request.json()) as StaffRequest;
     if (payload.action === "list") return await listStaff(adminClient, caller);
+    if (payload.action === "find_existing") return await findExistingAccount(adminClient, payload);
     if (payload.action === "create") return await createStaff(adminClient, caller, payload);
     if (payload.action === "update") return await updateStaff(adminClient, caller, payload);
     if (payload.action === "resend_invitation") return await resendInvitation(authClient, adminClient, caller, payload);

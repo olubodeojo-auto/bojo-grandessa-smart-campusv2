@@ -15,6 +15,15 @@ export interface StaffUser {
   role_name: StaffRole;
 }
 
+export interface ExistingStaffAccount {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  email: string;
+  role_name: string | null;
+}
+
 export type CreateStaffInput = {
   first_name: string;
   last_name: string;
@@ -23,7 +32,7 @@ export type CreateStaffInput = {
   role_name: StaffRole;
 };
 
-type StaffFunctionResponse = { staff?: StaffUser[]; user?: StaffUser };
+type StaffFunctionResponse = { staff?: StaffUser[]; user?: StaffUser; existing?: ExistingStaffAccount | null };
 
 async function invokeStaffFunction<T extends StaffFunctionResponse>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke("manage-staff", { body });
@@ -127,4 +136,12 @@ export async function getActiveTeacherUsers(): Promise<StaffUser[]> {
       role_name: roleName,
     }];
   });
+}
+
+export async function findExistingStaffAccount(email: string): Promise<ExistingStaffAccount | null> {
+  const response = await invokeStaffFunction<{ existing?: ExistingStaffAccount | null }>({
+    action: "find_existing",
+    email: email.trim(),
+  });
+  return response.existing ?? null;
 }

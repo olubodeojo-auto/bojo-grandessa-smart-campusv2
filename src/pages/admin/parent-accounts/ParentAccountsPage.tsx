@@ -12,12 +12,14 @@ import {
 const statusLabels: Record<ParentAccountStatus | "all", string> = {
   all: "All",
   not_created: "No Account",
+  inactive: "No Active Parent Account",
   invited: "Invitation Pending",
   active: "Active",
 };
 
 const statusColors: Record<ParentAccountStatus, { background: string; color: string }> = {
   not_created: { background: "#f1f5f9", color: "#475569" },
+  inactive: { background: "#f1f5f9", color: "#475569" },
   invited: { background: "#fef3c7", color: "#92400e" },
   active: { background: "#dcfce7", color: "#166534" },
 };
@@ -187,6 +189,8 @@ export default function ParentAccountsPage() {
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                           {entry.account_status === "active" ? (
                             <span style={{ color: "#166534", fontSize: 13, fontWeight: 700 }}>Active</span>
+                          ) : entry.account_status === "inactive" ? (
+                            <span style={{ color: "#475569", fontSize: 13 }}>No active Parent role</span>
                           ) : (
                             <button type="button" onClick={() => void manageAccount(entry)} disabled={working}>
                               {working ? "Working..." : entry.account_status === "invited" ? "Resend Invite" : "Create Account"}

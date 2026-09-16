@@ -1,6 +1,6 @@
 import { supabase } from "../lib/supabase";
 
-export type ParentAccountStatus = "not_created" | "invited" | "active";
+export type ParentAccountStatus = "not_created" | "inactive" | "invited" | "active";
 
 export type LinkedParentStudent = {
   id: string;

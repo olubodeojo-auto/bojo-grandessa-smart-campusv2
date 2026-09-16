@@ -306,12 +306,22 @@ async function handleLinks(adminClient: ReturnType<typeof createClient>, request
 }
 
 async function handleDirectory(adminClient: ReturnType<typeof createClient>): Promise<Response> {
-  const [{ data: contacts, error: contactsError }, { data: students, error: studentsError }] = await Promise.all([
+  const [{ data: contacts, error: contactsError }, { data: students, error: studentsError }, parentRole] = await Promise.all([
     adminClient.from("contacts").select("id, first_name, last_name, relationship, email, phone, auth_user_id"),
     adminClient.from("students").select("id, first_name, last_name, admission_number, class_id, primary_contact_id, secondary_contact_id"),
+    getParentRole(adminClient),
   ]);
   if (contactsError) throw contactsError;
   if (studentsError) throw studentsError;
+
+  const { data: activeParentAssignments, error: activeParentAssignmentsError } = await adminClient
+    .from("user_roles")
+    .select("user_id")
+    .eq("role_id", parentRole.id)
+    .eq("is_active", true);
+  if (activeParentAssignmentsError) throw activeParentAssignmentsError;
+
+  const activeParentUserIds = new Set((activeParentAssignments ?? []).map((assignment) => assignment.user_id));
 
   const authUsers = new Map<string, { emailConfirmed: boolean; signedIn: boolean }>();
   let page = 1;
@@ -365,7 +375,13 @@ async function handleDirectory(adminClient: ReturnType<typeof createClient>): Pr
           phone: contact.phone,
         },
         students: linkedStudents.get(contact.id) ?? [],
-        account_status: contact.auth_user_id ? (completed ? "active" : "invited") : "not_created",
+        account_status: !contact.auth_user_id
+          ? "not_created"
+          : !activeParentUserIds.has(contact.auth_user_id)
+            ? "inactive"
+            : completed
+              ? "active"
+              : "invited",
       };
     });
 
