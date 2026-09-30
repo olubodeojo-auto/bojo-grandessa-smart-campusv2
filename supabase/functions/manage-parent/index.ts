@@ -65,9 +65,43 @@ async function getParentRole(adminClient: ReturnType<typeof createClient>): Prom
   return data;
 }
 
+async function ensureContactStudentLinks(
+  adminClient: ReturnType<typeof createClient>,
+  contact: { id: string; relationship?: string | null },
+  authUserId: string,
+): Promise<void> {
+  const parentRole = await getParentRole(adminClient);
+  const [{ data: user, error: userError }, { data: assignments, error: assignmentError }] = await Promise.all([
+    adminClient.from("users").select("status").eq("id", authUserId).maybeSingle(),
+    adminClient.from("user_roles").select("id").eq("user_id", authUserId).eq("role_id", parentRole.id).eq("is_active", true).limit(1),
+  ]);
+  if (userError) throw userError;
+  if (assignmentError) throw assignmentError;
+  if (!user || user.status !== "Active" || !assignments?.length) return;
+
+  const { data: students, error: studentsError } = await adminClient
+    .from("students")
+    .select("id")
+    .or(`primary_contact_id.eq.${contact.id},secondary_contact_id.eq.${contact.id}`);
+  if (studentsError) throw studentsError;
+  if (!students?.length) return;
+
+  const { error: linkError } = await adminClient
+    .from("parent_student_links")
+    .upsert(
+      students.map((student) => ({
+        student_id: student.id,
+        auth_user_id: authUserId,
+        relationship: contact.relationship ?? null,
+      })),
+      { onConflict: "student_id,auth_user_id", ignoreDuplicates: true },
+    );
+  if (linkError) throw linkError;
+}
+
 async function handleCreate(adminClient: ReturnType<typeof createClient>, request: ParentRequest): Promise<Response> {
   if (!request.contact_id) return errorResponse("A contact id is required.", 400);
-  const { data: contact, error: contactError } = await adminClient.from("contacts").select("id, first_name, last_name, email, auth_user_id").eq("id", request.contact_id).maybeSingle();
+  const { data: contact, error: contactError } = await adminClient.from("contacts").select("id, first_name, last_name, email, relationship, auth_user_id").eq("id", request.contact_id).maybeSingle();
   if (contactError) throw contactError;
   if (!contact) return errorResponse("Contact not found.", 404);
   const email = contact.email?.trim().toLowerCase();
@@ -75,6 +109,7 @@ async function handleCreate(adminClient: ReturnType<typeof createClient>, reques
   if (contact.auth_user_id) {
     const { data: authUserResult, error: authError } = await adminClient.auth.admin.getUserById(contact.auth_user_id);
     if (authError) throw authError;
+    await ensureContactStudentLinks(adminClient, contact, contact.auth_user_id);
     const completed = Boolean(authUserResult.user?.email_confirmed_at || authUserResult.user?.last_sign_in_at);
     return response({ contact: { id: contact.id, auth_user_id: contact.auth_user_id }, invited: false, status: completed ? "active" : "invited" });
   }
@@ -119,6 +154,7 @@ async function handleCreate(adminClient: ReturnType<typeof createClient>, reques
   }
   const { error: linkError } = await adminClient.from("contacts").update({ auth_user_id: authUserId }).eq("id", contact.id);
   if (linkError) throw linkError;
+  await ensureContactStudentLinks(adminClient, contact, authUserId);
   return response({ contact: { id: contact.id, auth_user_id: authUserId }, invited, status: "invited" });
 }
 
