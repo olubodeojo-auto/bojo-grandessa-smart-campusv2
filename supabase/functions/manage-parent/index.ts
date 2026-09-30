@@ -342,13 +342,25 @@ async function handleLinks(adminClient: ReturnType<typeof createClient>, request
 }
 
 async function handleDirectory(adminClient: ReturnType<typeof createClient>): Promise<Response> {
-  const [{ data: contacts, error: contactsError }, { data: students, error: studentsError }, parentRole] = await Promise.all([
+  type DirectoryContact = {
+    id: string;
+    first_name: string;
+    last_name: string;
+    relationship: string | null;
+    email: string | null;
+    phone: string | null;
+    auth_user_id: string | null;
+  };
+
+  const [{ data: contacts, error: contactsError }, { data: students, error: studentsError }, { data: parentLinks, error: parentLinksError }, parentRole] = await Promise.all([
     adminClient.from("contacts").select("id, first_name, last_name, relationship, email, phone, auth_user_id"),
     adminClient.from("students").select("id, first_name, last_name, admission_number, class_id, primary_contact_id, secondary_contact_id"),
+    adminClient.from("parent_student_links").select("student_id, auth_user_id, relationship"),
     getParentRole(adminClient),
   ]);
   if (contactsError) throw contactsError;
   if (studentsError) throw studentsError;
+  if (parentLinksError) throw parentLinksError;
 
   const { data: activeParentAssignments, error: activeParentAssignmentsError } = await adminClient
     .from("user_roles")
@@ -358,6 +370,11 @@ async function handleDirectory(adminClient: ReturnType<typeof createClient>): Pr
   if (activeParentAssignmentsError) throw activeParentAssignmentsError;
 
   const activeParentUserIds = new Set((activeParentAssignments ?? []).map((assignment) => assignment.user_id));
+  const studentsCoveredByActiveParent = new Set(
+    (parentLinks ?? [])
+      .filter((link) => activeParentUserIds.has(link.auth_user_id))
+      .map((link) => link.student_id),
+  );
 
   const authUsers = new Map<string, { emailConfirmed: boolean; signedIn: boolean }>();
   let page = 1;
@@ -379,7 +396,8 @@ async function handleDirectory(adminClient: ReturnType<typeof createClient>): Pr
   if (classesError) throw classesError;
   for (const row of classRows ?? []) classes.set(row.id, row.class_name);
 
-  const linkedStudents = new Map<string, Array<Record<string, unknown>>>();
+  const studentById = new Map<string, Record<string, unknown>>();
+  const studentsByContact = new Map<string, Map<string, Record<string, unknown>>>();
   for (const student of students ?? []) {
     const studentData = {
       id: student.id,
@@ -388,38 +406,66 @@ async function handleDirectory(adminClient: ReturnType<typeof createClient>): Pr
       admission_number: student.admission_number,
       class_name: classes.get(student.class_id) ?? null,
     };
+    studentById.set(student.id, studentData);
     for (const contactId of [student.primary_contact_id, student.secondary_contact_id]) {
       if (!contactId) continue;
-      const current = linkedStudents.get(contactId) ?? [];
-      if (!current.some((linkedStudent) => linkedStudent.id === student.id)) current.push(studentData);
-      linkedStudents.set(contactId, current);
+      const current = studentsByContact.get(contactId) ?? new Map<string, Record<string, unknown>>();
+      current.set(student.id, studentData);
+      studentsByContact.set(contactId, current);
     }
   }
 
-  const entries = (contacts ?? [])
-    .filter((contact) => linkedStudents.has(contact.id))
-    .map((contact) => {
-      const authUser = contact.auth_user_id ? authUsers.get(contact.auth_user_id) : undefined;
-      const completed = Boolean(authUser?.emailConfirmed || authUser?.signedIn);
-      return {
-        contact: {
-          id: contact.id,
-          first_name: contact.first_name,
-          last_name: contact.last_name,
-          relationship: contact.relationship,
-          email: contact.email,
-          phone: contact.phone,
-        },
-        students: linkedStudents.get(contact.id) ?? [],
-        account_status: !contact.auth_user_id
-          ? "not_created"
-          : !activeParentUserIds.has(contact.auth_user_id)
-            ? "inactive"
-            : completed
-              ? "active"
-              : "invited",
-      };
-    });
+  const authenticatedContacts = new Map<string, DirectoryContact>();
+  for (const contact of contacts ?? []) {
+    if (contact.auth_user_id && !authenticatedContacts.has(contact.auth_user_id)) {
+      authenticatedContacts.set(contact.auth_user_id, contact);
+    }
+  }
+
+  const studentsByAuthUser = new Map<string, Map<string, Record<string, unknown>>>();
+  for (const link of parentLinks ?? []) {
+    const studentData = studentById.get(link.student_id);
+    if (!studentData) continue;
+
+    const accountStudents = studentsByAuthUser.get(link.auth_user_id) ?? new Map<string, Record<string, unknown>>();
+    accountStudents.set(link.student_id, studentData);
+    studentsByAuthUser.set(link.auth_user_id, accountStudents);
+  }
+
+  const accountStatus = (authUserId: string): "inactive" | "invited" | "active" => {
+    if (!activeParentUserIds.has(authUserId)) return "inactive";
+    const authUser = authUsers.get(authUserId);
+    return authUser?.emailConfirmed || authUser?.signedIn ? "active" : "invited";
+  };
+  const contactData = (contact: DirectoryContact) => ({
+    id: contact.id,
+    first_name: contact.first_name,
+    last_name: contact.last_name,
+    relationship: contact.relationship,
+    email: contact.email,
+    phone: contact.phone,
+  });
+
+  const entries = [...authenticatedContacts.entries()]
+    .filter(([authUserId, contact]) => studentsByAuthUser.has(authUserId) || studentsByContact.has(contact.id))
+    .map(([authUserId, contact]) => ({
+      contact: contactData(contact),
+      students: [...(studentsByAuthUser.get(authUserId)?.values() ?? [])],
+      account_status: accountStatus(authUserId),
+    }));
+
+  for (const contact of contacts ?? []) {
+    if (contact.auth_user_id) continue;
+    const contactStudents = studentsByContact.get(contact.id);
+    if (!contactStudents?.size) continue;
+
+    const uncoveredStudents = [...contactStudents.entries()]
+      .filter(([studentId]) => !studentsCoveredByActiveParent.has(studentId))
+      .map(([, student]) => student);
+    if (uncoveredStudents.length > 0) {
+      entries.push({ contact: contactData(contact), students: uncoveredStudents, account_status: "not_created" });
+    }
+  }
 
   return response({ entries });
 }
