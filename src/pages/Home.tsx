@@ -64,6 +64,35 @@ const lifeHighlights = [
 function Home() {
     return (
         <main className="homepage">
+            {/* TEMPORARY: Remove this banner after the Independence Day campaign. */}
+            <aside className="independence-banner" aria-label="Nigeria Independence Day">
+                <div className="homepage-container independence-banner__inner">
+                    <div className="independence-banner__heading">
+                        <h2>
+                            <span className="independence-banner__flag" aria-hidden="true">
+                                <svg viewBox="0 0 3 2" focusable="false">
+                                    <rect width="1" height="2" fill="#008751" />
+                                    <rect x="1" width="1" height="2" fill="#ffffff" />
+                                    <rect x="2" width="1" height="2" fill="#008751" />
+                                </svg>
+                            </span>
+                            HAPPY INDEPENDENCE DAY
+                            <span className="independence-banner__flag" aria-hidden="true">
+                                <svg viewBox="0 0 3 2" focusable="false">
+                                    <rect width="1" height="2" fill="#008751" />
+                                    <rect x="1" width="1" height="2" fill="#ffffff" />
+                                    <rect x="2" width="1" height="2" fill="#008751" />
+                                </svg>
+                            </span>
+                        </h2>
+                        <p className="independence-banner__slogan">Celebrating Nigeria. Inspiring Tomorrow.</p>
+                    </div>
+                    <p className="independence-banner__message">
+                        From all of us at Grandessa School, we wish our wonderful students, parents and friends a joyful Independence Day.
+                    </p>
+                </div>
+            </aside>
+
             <PublicNavigation active="home" />
 
             <section className="homepage-hero" id="top">
