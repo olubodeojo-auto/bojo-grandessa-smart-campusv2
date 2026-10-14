@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { isClassTeacherRole } from "./staffService";
 import type {
   CreateClassData,
   SchoolClass,
@@ -63,7 +64,7 @@ export async function getClasses(): Promise<SchoolClass[]> {
         const { data: roles, error: roleError } = await supabase.from("roles").select("id, name").in("id", roleIds);
         if (roleError) throw roleError;
 
-        const teacherRoleIds = new Set((roles ?? []).filter((role) => role.name.toLowerCase() === "teacher").map((role) => role.id));
+        const teacherRoleIds = new Set((roles ?? []).filter((role) => isClassTeacherRole(role.name)).map((role) => role.id));
         const activeTeacherIds = (assignments ?? [])
           .filter((assignment) => teacherRoleIds.has(assignment.role_id))
           .map((assignment) => assignment.user_id);

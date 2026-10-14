@@ -2,6 +2,14 @@ import { Bell, ChevronDown, Menu, Search, X } from "lucide-react";
 import { type CSSProperties, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuthContext } from "../../contexts/AuthContext";
+import {
+  administratorRoles,
+  assignmentRoles,
+  classManagementRoles,
+  reportRoles,
+  resultsRoles,
+  staffManagementRoles,
+} from "../../config/routeRoles";
 import "../../styles/admin-preview.css";
 
 const activeLinkStyle: CSSProperties = {
@@ -10,28 +18,28 @@ const activeLinkStyle: CSSProperties = {
   borderColor: "rgba(15, 107, 53, 0.22)",
 };
 
+const adminNavigation = [
+  { key: "dashboard", label: "Dashboard", path: "/admin", searchPlaceholder: "Search dashboard", allowedRoles: administratorRoles },
+  { key: "students", label: "Students", path: "/admin/students", searchPlaceholder: "Search students", allowedRoles: administratorRoles },
+  { key: "parent-accounts", label: "Parent Accounts", path: "/admin/parent-accounts", searchPlaceholder: "Search parent accounts", allowedRoles: administratorRoles },
+  { key: "results", label: "Results", path: "/admin/results", searchPlaceholder: "Search results", allowedRoles: resultsRoles },
+  { key: "classes", label: "Classes", path: "/admin/classes", searchPlaceholder: "Search classes", allowedRoles: classManagementRoles },
+  { key: "staff", label: "Staff & Users", path: "/admin/staff", searchPlaceholder: "Search staff", allowedRoles: staffManagementRoles },
+  { key: "communications", label: "Communications", path: "/admin/communications", searchPlaceholder: "Search communications", allowedRoles: staffManagementRoles },
+  { key: "assignments", label: "Assignments", path: "/admin/assignments", searchPlaceholder: "Search assignments", allowedRoles: assignmentRoles },
+  { key: "reports", label: "Reports", path: "/admin/reports", searchPlaceholder: "Search reports", allowedRoles: reportRoles },
+  { key: "staff-directory", label: "Our Team / Staff Photos", path: "/admin/staff-directory", searchPlaceholder: "Search staff photos", allowedRoles: staffManagementRoles },
+  { key: "gallery", label: "Gallery", path: "/admin/gallery", searchPlaceholder: "Search gallery", allowedRoles: administratorRoles },
+  { key: "announcements", label: "Announcements", path: "/admin/announcements", searchPlaceholder: "Search announcements", allowedRoles: administratorRoles },
+];
+
 export default function AdministratorPreviewLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut, role } = useAuthContext();
+  const { signOut, hasRole } = useAuthContext();
 
-  const canManageParentAccounts = ["proprietress", "super admin", "administrator", "school admin", "super_admin", "school_admin", "admin"].includes(role?.name.trim().toLowerCase() ?? "");
-
-  const adminNavigation = [
-    { key: "dashboard", label: "Dashboard", path: "/admin", searchPlaceholder: "Search dashboard" },
-    { key: "students", label: "Students", path: "/admin/students", searchPlaceholder: "Search students" },
-    { key: "parent-accounts", label: "Parent Accounts", path: "/admin/parent-accounts", searchPlaceholder: "Search parent accounts" },
-    { key: "results", label: "Results", path: "/admin/results", searchPlaceholder: "Search results" },
-    { key: "classes", label: "Classes", path: "/admin/classes", searchPlaceholder: "Search classes" },
-    { key: "staff", label: "Staff & Users", path: "/admin/staff", searchPlaceholder: "Search staff" },
-    { key: "communications", label: "Communications", path: "/admin/communications", searchPlaceholder: "Search communications" },
-    { key: "assignments", label: "Assignments", path: "/admin/assignments", searchPlaceholder: "Search assignments" },
-    { key: "staff-directory", label: "Our Team / Staff Photos", path: "/admin/staff-directory", searchPlaceholder: "Search staff photos" },
-    { key: "gallery", label: "Gallery", path: "/admin/gallery", searchPlaceholder: "Search gallery" },
-    { key: "announcements", label: "Announcements", path: "/admin/announcements", searchPlaceholder: "Search announcements" },
-  ];
-
+  const visibleNavigation = adminNavigation.filter((item) => item.allowedRoles.some(hasRole));
   const currentItem = useMemo(() => adminNavigation.find((item) => item.path === location.pathname) ?? adminNavigation[0], [location.pathname]);
 
   const breadcrumbItems = useMemo(() => {
@@ -64,7 +72,7 @@ export default function AdministratorPreviewLayout() {
           </div>
 
           <nav className="admin-preview-sidebar__nav" aria-label="Administrator Navigation">
-            {adminNavigation.filter((item) => item.key !== "parent-accounts" || canManageParentAccounts).map((item) => (
+            {visibleNavigation.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}

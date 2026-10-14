@@ -73,11 +73,11 @@ function Detail({ label, value }: { label: string; value: string }) {
 
 export default function ResultsPage() {
   const navigate = useNavigate();
-  const { role } = useAuth();
+  const { roles } = useAuth();
 
-  const normalizedRole = normalizeRole(role?.name);
-  const canManage = ["teacher", "school_admin", "super_admin", "admin", "administrator"].includes(normalizedRole);
-  const canPublish = ["teacher", "school_admin", "super_admin", "admin", "administrator"].includes(normalizedRole);
+  const normalizedRoles = new Set(roles.map((assignedRole) => normalizeRole(assignedRole.name)));
+  const canManage = ["teacher", "school_admin", "super_admin", "admin", "administrator"].some((name) => normalizedRoles.has(name));
+  const canPublish = ["teacher", "school_admin", "super_admin", "admin", "administrator"].some((name) => normalizedRoles.has(name));
 
   const [loading, setLoading] = useState<boolean>(true);
   const [results, setResults] = useState<Result[]>([]);

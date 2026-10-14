@@ -19,6 +19,7 @@ type StaffRequest = {
   email?: string;
   phone?: string;
   role_name?: ManagedRole;
+  role_names?: ManagedRole[];
   id?: string;
   status?: "Active" | "Inactive";
   redirect_to?: string;
@@ -144,17 +145,37 @@ async function listStaff(adminClient: ReturnType<typeof createClient>, caller: C
     page += 1;
   }
 
-  const staff = userRoleRows.flatMap((assignment: UserRoleRow) => {
+  const staffByUser = new Map<string, {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    phone: string | null;
+    status: string | null;
+    role_id: string;
+    role_name: ManagedRole;
+    role_names: ManagedRole[];
+  }>();
+
+  userRoleRows.forEach((assignment: UserRoleRow) => {
     const user = userRows.find((candidate: UserRow) => candidate.id === assignment.user_id);
     const roleName = roleMap.get(assignment.role_id);
-    if (!user || !isManagedRole(roleName)) return [];
+    if (!user || !isManagedRole(roleName)) return;
 
     // Filter out Super Admin if caller is not Super Admin
-    if (roleName === "Super Admin" && !caller.isSuperAdmin) {
-      return [];
+    if (roleName === "Super Admin" && !caller.isSuperAdmin) return;
+
+    const existing = staffByUser.get(user.id);
+    if (existing) {
+      existing.role_names.push(roleName);
+      if (roleName === "Teacher") {
+        existing.role_name = roleName;
+        existing.role_id = assignment.role_id;
+      }
+      return;
     }
 
-    return [{
+    staffByUser.set(user.id, {
       id: user.id,
       first_name: user.first_name,
       last_name: user.last_name,
@@ -163,10 +184,11 @@ async function listStaff(adminClient: ReturnType<typeof createClient>, caller: C
       status: user.status,
       role_id: assignment.role_id,
       role_name: roleName,
-    }];
+      role_names: [roleName],
+    });
   });
 
-  return response({ staff });
+  return response({ staff: [...staffByUser.values()] });
 }
 
 async function findExistingAccount(
@@ -201,9 +223,10 @@ async function findExistingAccount(
     adminClient,
     ((assignments ?? []) as Pick<UserRoleRow, "role_id">[]).map((assignment) => assignment.role_id),
   );
-  const roleName = (assignments ?? [])
+  const roleNames = (assignments ?? [])
     .map((assignment: Pick<UserRoleRow, "role_id">) => roleMap.get(assignment.role_id))
-    .find((value): value is string => Boolean(value)) ?? null;
+    .filter((value): value is string => Boolean(value));
+  const roleName = roleNames[0] ?? null;
 
   return response({
     existing: {
@@ -213,6 +236,7 @@ async function findExistingAccount(
       phone: profile.phone,
       email: matchingAuthUser.email ?? email,
       role_name: roleName,
+      role_names: roleNames,
     },
   });
 }
@@ -341,10 +365,80 @@ async function updateStaff(
     adminClient,
     targetAssignments.map((assignment: UserRoleRow) => assignment.role_id),
   );
-  const currentRoleName = targetAssignments
-    .filter((assignment: UserRoleRow) => assignment.is_active !== false)
-    .map((assignment: UserRoleRow) => roleMap.get(assignment.role_id))
-    .find((roleName): roleName is ManagedRole => isManagedRole(roleName)) ?? null;
+  const currentManagedAssignments = targetAssignments.filter((assignment) =>
+    assignment.is_active !== false && isManagedRole(roleMap.get(assignment.role_id)),
+  );
+  const currentManagedRoleNames = new Set(
+    currentManagedAssignments.map((assignment) => roleMap.get(assignment.role_id) as ManagedRole),
+  );
+  let requestedRoleNames: Set<ManagedRole> | undefined;
+
+  if (request.role_names !== undefined) {
+    if (!Array.isArray(request.role_names) || request.role_names.some((roleName) => !isManagedRole(roleName))) {
+      return errorResponse("A valid list of staff roles is required.", 400);
+    }
+    requestedRoleNames = new Set(request.role_names);
+  } else if (request.role_name) {
+    requestedRoleNames = currentManagedRoleNames.size > 1
+      ? new Set([...currentManagedRoleNames, request.role_name])
+      : new Set([request.role_name]);
+  }
+
+  if (requestedRoleNames !== undefined) {
+    if (requestedRoleNames.size === 0) return errorResponse("At least one staff role must remain assigned.", 400);
+
+    const allTargetRoles = targetAssignments.map((assignment) => roleMap.get(assignment.role_id) ?? "");
+    if (
+      allTargetRoles.includes("Super Admin") &&
+      !caller.isSuperAdmin
+    ) {
+      return errorResponse("You are not authorized to manage Super Admin accounts.", 403);
+    }
+    if (requestedRoleNames.has("Super Admin") && !caller.isSuperAdmin) {
+      return errorResponse("You are not authorized to assign Super Admin.", 403);
+    }
+
+    const { data: requestedRoles, error: requestedRolesError } = await adminClient
+      .from("roles")
+      .select("id, name")
+      .in("name", [...requestedRoleNames]);
+    if (requestedRolesError) throw requestedRolesError;
+
+    const roleIdByName = new Map(((requestedRoles ?? []) as RoleRow[]).map((role) => [role.name, role.id]));
+    if ([...requestedRoleNames].some((roleName) => !roleIdByName.has(roleName))) {
+      return errorResponse("One or more selected roles do not exist.", 400);
+    }
+
+    for (const assignment of currentManagedAssignments) {
+      const roleName = roleMap.get(assignment.role_id);
+      if (roleName && !requestedRoleNames.has(roleName as ManagedRole) && assignment.id) {
+        const { error } = await adminClient.from("user_roles").update({ is_active: false }).eq("id", assignment.id);
+        if (error) throw error;
+      }
+    }
+
+    for (const roleName of requestedRoleNames) {
+      const roleId = roleIdByName.get(roleName);
+      if (!roleId) continue;
+      const existingAssignment = targetAssignments.find((assignment) => assignment.role_id === roleId);
+
+      if (existingAssignment?.id) {
+        if (existingAssignment.is_active !== true) {
+          const { error } = await adminClient.from("user_roles").update({ is_active: true }).eq("id", existingAssignment.id);
+          if (error) throw error;
+        }
+      } else {
+        const { error } = await adminClient.from("user_roles").insert({
+          user_id: request.id,
+          role_id: roleId,
+          start_date: new Date().toISOString().slice(0, 10),
+          end_date: null,
+          is_active: true,
+        });
+        if (error) throw error;
+      }
+    }
+  }
 
   const targetUpdates: Record<string, string | null> = {};
   if (request.first_name !== undefined) targetUpdates.first_name = request.first_name.trim() || null;
@@ -354,73 +448,6 @@ async function updateStaff(
   if (Object.keys(targetUpdates).length > 0) {
     const { error: userError } = await adminClient.from("users").update(targetUpdates).eq("id", request.id);
     if (userError) throw userError;
-  }
-
-  if (request.role_name) {
-    const targetRoles = targetAssignments.map((assignment: UserRoleRow) => roleMap.get(assignment.role_id) ?? "");
-    const isTargetSuperAdmin = targetRoles.includes("Super Admin");
-
-    if (isTargetSuperAdmin && !caller.isSuperAdmin) {
-      return errorResponse("You are not authorized to manage Super Admin accounts.", 403);
-    }
-
-    const { data: role, error: roleError } = await adminClient
-      .from("roles")
-      .select("id, name")
-      .eq("name", request.role_name)
-      .maybeSingle();
-
-    if (roleError) throw roleError;
-    if (!role) return errorResponse("Selected role does not exist.", 400);
-
-    const selectedRoleExists = targetAssignments.some((assignment: UserRoleRow) => assignment.role_id === role.id);
-    const roleIsUnchanged = currentRoleName === request.role_name;
-
-    if (roleIsUnchanged) {
-      const existingRoleAssignment = targetAssignments.find((assignment: UserRoleRow) => assignment.role_id === role.id);
-      if (existingRoleAssignment?.id) {
-        const { error: reactivateError } = await adminClient
-          .from("user_roles")
-          .update({ is_active: true })
-          .eq("id", existingRoleAssignment.id);
-        if (reactivateError) throw reactivateError;
-      } else {
-        const { error: insertError } = await adminClient.from("user_roles").insert({
-          user_id: request.id,
-          role_id: role.id,
-          start_date: new Date().toISOString().slice(0, 10),
-          end_date: null,
-          is_active: true,
-        });
-        if (insertError) throw insertError;
-      }
-    } else {
-      const { error: deactivateError } = await adminClient
-        .from("user_roles")
-        .update({ is_active: false })
-        .eq("user_id", request.id);
-      if (deactivateError) throw deactivateError;
-
-      if (selectedRoleExists) {
-        const existingRoleAssignment = targetAssignments.find((assignment: UserRoleRow) => assignment.role_id === role.id);
-        if (existingRoleAssignment?.id) {
-          const { error: activateError } = await adminClient
-            .from("user_roles")
-            .update({ is_active: true })
-            .eq("id", existingRoleAssignment.id);
-          if (activateError) throw activateError;
-        }
-      } else {
-        const { error: assignError } = await adminClient.from("user_roles").insert({
-          user_id: request.id,
-          role_id: role.id,
-          start_date: new Date().toISOString().slice(0, 10),
-          end_date: null,
-          is_active: true,
-        });
-        if (assignError) throw assignError;
-      }
-    }
   }
 
   const { data: user, error: fetchError } = await adminClient
@@ -444,8 +471,17 @@ async function updateStaff(
   if (activeAssignmentsError) throw activeAssignmentsError;
 
   const authEmail = authListResult.data.users.find((candidate: { id: string }) => candidate.id === request.id)?.email ?? null;
-  const activeRoleId = (activeAssignments ?? [])[0]?.role_id ?? null;
-  const activeRoleName = activeRoleId ? await getRoleName(adminClient, activeRoleId) : null;
+  const activeRoleMap = await getRoleMap(
+    adminClient,
+    (activeAssignments ?? []).map((assignment) => assignment.role_id),
+  );
+  const activeRoleNames = (activeAssignments ?? [])
+    .map((assignment) => activeRoleMap.get(assignment.role_id))
+    .filter((roleName): roleName is ManagedRole => isManagedRole(roleName));
+  const activeRoleId = (activeAssignments ?? []).find((assignment) =>
+    isManagedRole(activeRoleMap.get(assignment.role_id))
+  )?.role_id ?? null;
+  const activeRoleName = activeRoleId ? activeRoleMap.get(activeRoleId) : null;
 
   return response({
     user: {
@@ -456,7 +492,8 @@ async function updateStaff(
       phone: user.phone,
       status: user.status,
       role_id: activeRoleId ?? "",
-      role_name: activeRoleName ?? "Teacher",
+      role_name: isManagedRole(activeRoleName) ? activeRoleName : "Teacher",
+      role_names: activeRoleNames,
     },
   });
 }

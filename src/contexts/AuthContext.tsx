@@ -42,6 +42,8 @@ export interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   role: Role | null;
+  roles: Role[];
+  hasRole: (roleName: string) => boolean;
   fullName: string;
   isAuthenticated: boolean;
   loading: boolean;
@@ -85,6 +87,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<Role | null>(null);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,6 +96,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const userRef = useRef<User | null>(null);
   const profileRef = useRef<Profile | null>(null);
   const roleRef = useRef<Role | null>(null);
+  const rolesRef = useRef<Role[]>([]);
   const profileLoadPromiseRef = useRef<Promise<void> | null>(null);
   const profileRequestIdRef = useRef<number>(0);
   const activeProfileUserIdRef = useRef<string | null>(null);
@@ -120,6 +124,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     roleRef.current = role;
   }, [role]);
+
+  useEffect(() => {
+    rolesRef.current = roles;
+  }, [roles]);
 
   const loadProfile = useCallback(async (userId: string): Promise<void> => {
     if (!userId) {
@@ -156,6 +164,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!profileData) {
           setProfile(null);
           setRole(null);
+          setRoles([]);
           setError(null);
           return;
         }
@@ -185,16 +194,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
           return;
         }
 
-        const roleData: UserRoleJoinRow | null = (allRoles ?? [])[0] ?? null;
-
-        if (roleData?.roles) {
-          setRole({
-            id: roleData.roles.id,
-            name: roleData.roles.name,
-          });
-        } else {
-          setRole(null);
-        }
+        const activeRoles = (allRoles ?? [])
+          .flatMap((assignment) => assignment.roles ? [assignment.roles] : [])
+          .filter((assignedRole, index, assignedRoles) =>
+            assignedRoles.findIndex((candidate) => candidate.id === assignedRole.id) === index
+          );
+        setRoles(activeRoles);
+        setRole(activeRoles[0] ?? null);
 
         setError(null);
       } catch (err) {
@@ -205,6 +211,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setError(getErrorMessage(err as Error));
         setProfile(null);
         setRole(null);
+        setRoles([]);
       }
     })();
 
@@ -248,11 +255,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       userRef.current = null;
       profileRef.current = null;
       roleRef.current = null;
+      rolesRef.current = [];
 
       setUser(null);
       setSession(null);
       setProfile(null);
       setRole(null);
+      setRoles([]);
       setError(null);
     } catch (err) {
       if (!isMountedRef.current) {
@@ -342,11 +351,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
               userRef.current = null;
               profileRef.current = null;
               roleRef.current = null;
+              rolesRef.current = [];
 
               setSession(null);
               setUser(null);
               setProfile(null);
               setRole(null);
+              setRoles([]);
               setLoading(false);
 
               break;
@@ -366,7 +377,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 (previousUserId !== newSession.user.id ||
                   !profileRef.current ||
                   profileRef.current.id !== newSession.user.id ||
-                  !roleRef.current)
+                  !roleRef.current ||
+                  rolesRef.current.length === 0)
               ) {
                 await loadProfile(newSession.user.id);
               }
@@ -427,12 +439,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return nameParts.join(" ").trim();
   }, [profile]);
 
+  const hasRole = useCallback(
+    (roleName: string): boolean => {
+      const normalizedRoleName = roleName.trim().toLowerCase();
+      return roles.some((assignedRole) => assignedRole.name.trim().toLowerCase() === normalizedRoleName);
+    },
+    [roles],
+  );
+
   const value = useMemo<AuthContextType>(
     () => ({
       user,
       session,
       profile,
       role,
+      roles,
+      hasRole,
       fullName,
       isAuthenticated: Boolean(session),
       loading,
@@ -440,7 +462,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       signOut,
       refreshProfile,
     }),
-    [user, session, profile, role, fullName, loading, error, signOut, refreshProfile]
+    [user, session, profile, role, roles, hasRole, fullName, loading, error, signOut, refreshProfile]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

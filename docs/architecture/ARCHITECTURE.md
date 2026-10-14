@@ -103,6 +103,8 @@ user_roles
 ↓
 roles
 
+`user_roles` is a many-to-many assignment: authorization must check membership across all active roles rather than assume one role per user.
+
 Enable Row Level Security wherever applicable.
 
 Never expose sensitive data.

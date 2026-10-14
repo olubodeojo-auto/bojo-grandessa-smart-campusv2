@@ -17,11 +17,11 @@ const links = [
 ];
 
 export default function ParentPortalLayout({ children }: { children: ReactNode }) {
-  const { isAuthenticated, role, signOut } = useAuthContext();
+  const { isAuthenticated, hasRole, signOut } = useAuthContext();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [childCount, setChildCount] = useState(0);
-  const isParent = isAuthenticated && role?.name.trim().toLowerCase() === "parent";
+  const isParent = isAuthenticated && hasRole("Parent");
 
   useEffect(() => {
     if (!isParent) return undefined;

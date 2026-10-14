@@ -32,13 +32,29 @@ export default function ClassForm({ mode, schoolClass, onClose, onSaved }: Props
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<ClassFormState>(() => createInitialState(schoolClass));
   const [teachers, setTeachers] = useState<StaffUser[]>([]);
+  const [teacherLoadError, setTeacherLoadError] = useState(false);
 
   useEffect(() => {
     setForm(createInitialState(schoolClass));
   }, [schoolClass]);
 
   useEffect(() => {
-    void getActiveTeacherUsers().then(setTeachers).catch(() => setTeachers([]));
+    let active = true;
+    void getActiveTeacherUsers()
+      .then((activeTeachers) => {
+        if (active) setTeachers(activeTeachers);
+      })
+      .catch((error: unknown) => {
+        console.error("Unable to load class teachers.", error);
+        if (active) {
+          setTeachers([]);
+          setTeacherLoadError(true);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   function update<K extends keyof ClassFormState>(field: K, value: ClassFormState[K]): void {
@@ -134,6 +150,7 @@ export default function ClassForm({ mode, schoolClass, onClose, onSaved }: Props
               </option>
             ))}
           </select>
+          {teacherLoadError && <span role="alert">Unable to load class teachers. Please refresh and try again.</span>}
         </label>
 
         <label style={{ display: "flex", flexDirection: "column", gap: 8 }}>

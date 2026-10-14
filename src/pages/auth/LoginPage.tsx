@@ -4,9 +4,10 @@ import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import { getFriendlyAuthError } from "../../services/authService";
 import PasswordInput from "../../components/auth/PasswordInput";
+import { administratorRoles } from "../../config/routeRoles";
 
 export default function LoginPage() {
-  const { user, role, loading: authLoading } = useAuth();
+  const { user, hasRole, loading: authLoading } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,7 +19,14 @@ export default function LoginPage() {
   }
 
   if (user) {
-    const destination = role?.name.trim().toLowerCase() === "parent" ? "/portal" : "/admin";
+    const hasAdminRole = administratorRoles.some(hasRole);
+    const destination = hasAdminRole
+      ? "/admin"
+      : hasRole("Teacher")
+        ? "/admin/assignments"
+        : hasRole("Parent")
+          ? "/portal"
+          : "/admin";
     return <Navigate to={destination} replace />;
   }
 

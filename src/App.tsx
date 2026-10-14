@@ -35,9 +35,16 @@ import ParentHomePage from "./pages/portal/ParentHomePage";
 import ParentStudentsPage from "./pages/portal/ParentStudentsPage";
 import ParentPortalLayout from "./components/portal/ParentPortalLayout";
 import OurTeam from "./pages/OurTeam";
-
-const administratorRoles = ["Proprietress", "Super Admin", "Administrator", "School Admin", "super_admin", "school_admin", "admin", "Admin"];
-const adminShellRoles = [...administratorRoles, "Teacher", "teacher"];
+import {
+  adminShellRoles,
+  administratorRoles,
+  assignmentRoles,
+  classManagementRoles,
+  parentRoles,
+  reportRoles,
+  resultsRoles,
+  staffManagementRoles,
+} from "./config/routeRoles";
 
 export default function App() {
   return (
@@ -65,38 +72,38 @@ export default function App() {
 
       {/* Admin workspace (Administrator Preview shell used as real admin layout) */}
       <Route path="/admin" element={<ProtectedRoute allowedRoles={adminShellRoles}><AdministratorPreviewLayout /></ProtectedRoute>}>
-        <Route index element={<ProtectedRoute><AdministratorPreviewDashboard /></ProtectedRoute>} />
+        <Route index element={<ProtectedRoute allowedRoles={administratorRoles}><AdministratorPreviewDashboard /></ProtectedRoute>} />
 
         <Route path="students" element={<ProtectedRoute allowedRoles={administratorRoles}><StudentsPage /></ProtectedRoute>} />
 
         <Route path="parent-accounts" element={<ProtectedRoute allowedRoles={administratorRoles}><ParentAccountsPage /></ProtectedRoute>} />
 
-        <Route path="results" element={<ProtectedRoute allowedRoles={["Super Admin", "School Admin", "Teacher", "super_admin", "school_admin", "teacher", "admin", "Admin", "Administrator"]}><ResultsPage /></ProtectedRoute>} />
+        <Route path="results" element={<ProtectedRoute allowedRoles={resultsRoles}><ResultsPage /></ProtectedRoute>} />
 
-        <Route path="classes" element={<ProtectedRoute allowedRoles={["Super Admin", "School Admin", "super_admin", "school_admin", "admin", "Admin", "Administrator"]}><ClassesPage /></ProtectedRoute>} />
+        <Route path="classes" element={<ProtectedRoute allowedRoles={classManagementRoles}><ClassesPage /></ProtectedRoute>} />
 
-        <Route path="staff" element={<ProtectedRoute allowedRoles={["Proprietress", "Super Admin", "Administrator", "School Admin", "super_admin", "school_admin", "admin", "Admin"]}><StaffPage /></ProtectedRoute>} />
+        <Route path="staff" element={<ProtectedRoute allowedRoles={staffManagementRoles}><StaffPage /></ProtectedRoute>} />
 
-        <Route path="communications" element={<ProtectedRoute allowedRoles={["Proprietress", "Super Admin", "Administrator", "School Admin", "super_admin", "school_admin", "admin", "Admin"]}><CommunicationsPage /></ProtectedRoute>} />
+        <Route path="communications" element={<ProtectedRoute allowedRoles={staffManagementRoles}><CommunicationsPage /></ProtectedRoute>} />
 
-        <Route path="assignments" element={<ProtectedRoute allowedRoles={["Proprietress", "Super Admin", "Administrator", "School Admin", "Teacher", "super_admin", "school_admin", "teacher", "admin", "Admin"]}><AssignmentsPage /></ProtectedRoute>} />
+        <Route path="assignments" element={<ProtectedRoute allowedRoles={assignmentRoles}><AssignmentsPage /></ProtectedRoute>} />
 
-        <Route path="staff-directory" element={<ProtectedRoute allowedRoles={["Proprietress", "Super Admin", "Administrator", "School Admin", "super_admin", "school_admin", "admin", "Admin"]}><StaffDirectoryPage /></ProtectedRoute>} />
+        <Route path="staff-directory" element={<ProtectedRoute allowedRoles={staffManagementRoles}><StaffDirectoryPage /></ProtectedRoute>} />
 
-        <Route path="reports" element={<ProtectedRoute allowedRoles={["Super Admin", "School Admin", "Teacher", "super_admin", "school_admin", "teacher", "admin", "Admin", "Administrator"]}><ReportCardsPage /></ProtectedRoute>} />
+        <Route path="reports" element={<ProtectedRoute allowedRoles={reportRoles}><ReportCardsPage /></ProtectedRoute>} />
 
         <Route path="gallery" element={<ProtectedRoute allowedRoles={administratorRoles}><GalleryPage /></ProtectedRoute>} />
 
         <Route path="announcements" element={<ProtectedRoute allowedRoles={administratorRoles}><AnnouncementsPage /></ProtectedRoute>} />
       </Route>
 
-      <Route path="/portal" element={<ParentPortalLayout><ProtectedRoute allowedRoles={["Parent", "parent"]}><ParentHomePage /></ProtectedRoute></ParentPortalLayout>} />
-      <Route path="/portal/students" element={<ParentPortalLayout><ProtectedRoute allowedRoles={["Parent", "parent"]}><ParentStudentsPage /></ProtectedRoute></ParentPortalLayout>} />
+      <Route path="/portal" element={<ParentPortalLayout><ProtectedRoute allowedRoles={parentRoles}><ParentHomePage /></ProtectedRoute></ParentPortalLayout>} />
+      <Route path="/portal/students" element={<ParentPortalLayout><ProtectedRoute allowedRoles={parentRoles}><ParentStudentsPage /></ProtectedRoute></ParentPortalLayout>} />
       <Route
           path="/portal/reports"
-          element={<ParentPortalLayout><ProtectedRoute allowedRoles={["Parent", "parent"]}><ParentReportsPage /></ProtectedRoute></ParentPortalLayout>}
+          element={<ParentPortalLayout><ProtectedRoute allowedRoles={parentRoles}><ParentReportsPage /></ProtectedRoute></ParentPortalLayout>}
       />
-      <Route path="/portal/assignments" element={<ParentPortalLayout><ProtectedRoute allowedRoles={["Parent", "parent"]}><ParentAssignmentsPage /></ProtectedRoute></ParentPortalLayout>} />
+      <Route path="/portal/assignments" element={<ParentPortalLayout><ProtectedRoute allowedRoles={parentRoles}><ParentAssignmentsPage /></ProtectedRoute></ParentPortalLayout>} />
     </Routes>
   );
 }

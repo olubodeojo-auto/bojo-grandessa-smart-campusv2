@@ -99,6 +99,40 @@ async function ensureContactStudentLinks(
   if (linkError) throw linkError;
 }
 
+async function ensureParentRole(
+  adminClient: ReturnType<typeof createClient>,
+  authUserId: string,
+  roleId: string,
+): Promise<void> {
+  const { data: assignments, error: assignmentsError } = await adminClient
+    .from("user_roles")
+    .select("id, is_active")
+    .eq("user_id", authUserId)
+    .eq("role_id", roleId);
+  if (assignmentsError) throw assignmentsError;
+
+  if ((assignments ?? []).some((assignment) => assignment.is_active === true)) return;
+
+  const existingAssignment = assignments?.[0];
+  if (existingAssignment?.id) {
+    const { error } = await adminClient
+      .from("user_roles")
+      .update({ is_active: true })
+      .eq("id", existingAssignment.id);
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await adminClient.from("user_roles").insert({
+    user_id: authUserId,
+    role_id: roleId,
+    start_date: new Date().toISOString().slice(0, 10),
+    end_date: null,
+    is_active: true,
+  });
+  if (error) throw error;
+}
+
 async function handleCreate(adminClient: ReturnType<typeof createClient>, request: ParentRequest): Promise<Response> {
   if (!request.contact_id) return errorResponse("A contact id is required.", 400);
   const { data: contact, error: contactError } = await adminClient.from("contacts").select("id, first_name, last_name, email, relationship, auth_user_id").eq("id", request.contact_id).maybeSingle();
@@ -109,6 +143,8 @@ async function handleCreate(adminClient: ReturnType<typeof createClient>, reques
   if (contact.auth_user_id) {
     const { data: authUserResult, error: authError } = await adminClient.auth.admin.getUserById(contact.auth_user_id);
     if (authError) throw authError;
+    const parentRole = await getParentRole(adminClient);
+    await ensureParentRole(adminClient, contact.auth_user_id, parentRole.id);
     await ensureContactStudentLinks(adminClient, contact, contact.auth_user_id);
     const completed = Boolean(authUserResult.user?.email_confirmed_at || authUserResult.user?.last_sign_in_at);
     return response({ contact: { id: contact.id, auth_user_id: contact.auth_user_id }, invited: false, status: completed ? "active" : "invited" });
@@ -135,23 +171,7 @@ async function handleCreate(adminClient: ReturnType<typeof createClient>, reques
   const role = await getParentRole(adminClient);
   const { error: userError } = await adminClient.from("users").upsert({ id: authUserId, first_name: contact.first_name, last_name: contact.last_name, status: "Active" }, { onConflict: "id" });
   if (userError) throw userError;
-  
-  const { error: deactivateError } = await adminClient
-    .from("user_roles")
-    .update({ is_active: false })
-    .eq("user_id", authUserId)
-    .neq("role_id", role.id);
-  if (deactivateError) throw deactivateError;
-  
-  const { data: existingRole, error: roleCheckError } = await adminClient.from("user_roles").select("id").eq("user_id", authUserId).eq("role_id", role.id).maybeSingle();
-  if (roleCheckError) throw roleCheckError;
-  if (existingRole?.id) {
-    const { error } = await adminClient.from("user_roles").update({ is_active: true }).eq("id", existingRole.id);
-    if (error) throw error;
-  } else {
-    const { error } = await adminClient.from("user_roles").insert({ user_id: authUserId, role_id: role.id, start_date: new Date().toISOString().slice(0, 10), end_date: null, is_active: true });
-    if (error) throw error;
-  }
+  await ensureParentRole(adminClient, authUserId, role.id);
   const { error: linkError } = await adminClient.from("contacts").update({ auth_user_id: authUserId }).eq("id", contact.id);
   if (linkError) throw linkError;
   await ensureContactStudentLinks(adminClient, contact, authUserId);

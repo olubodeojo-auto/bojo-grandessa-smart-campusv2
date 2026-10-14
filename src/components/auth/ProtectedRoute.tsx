@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function ProtectedRoute({ children, allowedRoles, allowUnauthenticated = false }: Props) {
-  const { isAuthenticated, loading, role } = useAuth();
+  const { isAuthenticated, loading, roles } = useAuth();
   const navigate = useNavigate();
 
   if (loading) {
@@ -33,17 +33,8 @@ export default function ProtectedRoute({ children, allowedRoles, allowUnauthenti
     return <>{children}</>;
   }
 
-  const currentRole = role?.name.trim().toLowerCase();
-  console.log("GRANDESSA PORTAL AUTH:", {
-    pathname: typeof window !== "undefined" ? window.location.pathname : "N/A",
-    isAuthenticated,
-    loading,
-    role,
-    currentRole,
-    allowedRoles,
-    normalizedAllowed: allowedRoles?.map(r => r.trim().toLowerCase()),
-  });
-  const hasAccess = allowedRoles.some((allowedRole) => currentRole === allowedRole.trim().toLowerCase());
+  const activeRoleNames = roles.map((assignedRole) => assignedRole.name.trim().toLowerCase());
+  const hasAccess = allowedRoles.some((allowedRole) => activeRoleNames.includes(allowedRole.trim().toLowerCase()));
 
   if (!hasAccess) {
     return (

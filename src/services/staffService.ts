@@ -12,7 +12,8 @@ export interface StaffUser {
   phone: string | null;
   status: string | null;
   role_id: string;
-  role_name: StaffRole;
+  role_name: string;
+  role_names: string[];
 }
 
 export interface ExistingStaffAccount {
@@ -22,6 +23,7 @@ export interface ExistingStaffAccount {
   phone: string | null;
   email: string;
   role_name: string | null;
+  role_names: string[];
 }
 
 export type CreateStaffInput = {
@@ -55,6 +57,7 @@ export type StaffUpdateInput = {
   last_name?: string;
   phone?: string;
   role_name?: StaffRole;
+  role_names?: StaffRole[];
   status?: "Active" | "Inactive";
 };
 
@@ -97,6 +100,18 @@ export async function deleteStaffUser(id: string): Promise<void> {
   await invokeStaffFunction({ action: "delete", id });
 }
 
+export function isClassTeacherRole(roleName: string): boolean {
+  const normalizedRole = roleName.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return [
+    "teacher",
+    "administrator",
+    "school_admin",
+    "super_admin",
+    "admin",
+    "proprietress",
+  ].includes(normalizedRole);
+}
+
 export async function getActiveTeacherUsers(): Promise<StaffUser[]> {
   const { data, error } = await supabase
     .from("user_roles")
@@ -116,16 +131,27 @@ export async function getActiveTeacherUsers(): Promise<StaffUser[]> {
   if (rolesError) throw rolesError;
   if (usersError) throw usersError;
 
-  const roleById = new Map((roles ?? []).map((role) => [role.id, role.name as StaffRole]));
+  const roleById = new Map((roles ?? []).map((role) => [role.id, role.name]));
   const userById = new Map((users ?? []).map((user) => [user.id, user]));
+  const eligibleUsers = new Map<string, StaffUser>();
 
-  return (data ?? []).flatMap((row) => {
+  for (const row of data ?? []) {
     const roleName = roleById.get(row.role_id);
     const user = userById.get(row.user_id);
 
-    if (roleName !== "Teacher" || !user || user.status !== "Active") return [];
+    if (!roleName || !isClassTeacherRole(roleName) || !user || user.status !== "Active") continue;
 
-    return [{
+    const existing = eligibleUsers.get(user.id);
+    if (existing) {
+      if (!existing.role_names.includes(roleName)) existing.role_names.push(roleName);
+      if (roleName === "Teacher") {
+        existing.role_name = roleName;
+        existing.role_id = row.role_id;
+      }
+      continue;
+    }
+
+    eligibleUsers.set(user.id, {
       id: user.id,
       first_name: user.first_name,
       last_name: user.last_name,
@@ -134,8 +160,11 @@ export async function getActiveTeacherUsers(): Promise<StaffUser[]> {
       status: user.status,
       role_id: row.role_id,
       role_name: roleName,
-    }];
-  });
+      role_names: [roleName],
+    });
+  }
+
+  return [...eligibleUsers.values()];
 }
 
 export async function findExistingStaffAccount(email: string): Promise<ExistingStaffAccount | null> {

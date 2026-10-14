@@ -49,7 +49,7 @@ const AppHeader = ({
   onSearch,
   notificationCount = 0,
 }: AppHeaderProps) => {
-  const { role, fullName, isAuthenticated, loading, error, signOut } = useAuth();
+  const { roles, fullName, isAuthenticated, loading, error, signOut } = useAuth();
   const navigate = useNavigate();
 
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
@@ -72,8 +72,8 @@ const AppHeader = ({
 
   const displayRole = loading
     ? ""
-    : role?.name
-      ? role.name
+    : roles.length > 0
+      ? roles.map((assignedRole) => assignedRole.name).join(", ")
       : "No Role Assigned";
 
   useEffect(() => {

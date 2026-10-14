@@ -53,20 +53,27 @@ const inputStyle: CSSProperties = {
   fontSize: 14,
 };
 
-type FormState = Omit<CreateStaffInput, "phone"> & { phone: string };
+type FormState = Omit<CreateStaffInput, "phone" | "role_name"> & {
+  phone: string;
+  role_names: StaffRole[];
+};
 
 const initialForm: FormState = {
   first_name: "",
   last_name: "",
   email: "",
   phone: "",
-  role_name: "Teacher",
+  role_names: ["Teacher"],
 };
 
 const statusOptions = ["Active", "Inactive"] as const;
 
 function displayName(staff: StaffUser): string {
   return [staff.first_name, staff.last_name].filter(Boolean).join(" ") || "Unnamed user";
+}
+
+function displayRoles(staff: StaffUser): string {
+  return staff.role_names?.join(", ") || staff.role_name;
 }
 
 function statusLabel(status: string | null): string {
@@ -106,7 +113,7 @@ export default function StaffPage() {
     if (!term) return staff;
 
     return staff.filter((member) =>
-      [displayName(member), member.email, member.phone, member.role_name, statusLabel(member.status)]
+      [displayName(member), member.email, member.phone, displayRoles(member), statusLabel(member.status)]
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(term)),
     );
@@ -129,7 +136,9 @@ export default function StaffPage() {
       last_name: member.last_name ?? "",
       email: member.email ?? "",
       phone: member.phone ?? "",
-      role_name: member.role_name,
+      role_names: (member.role_names ?? [member.role_name]).filter((roleName): roleName is StaffRole =>
+        roles.includes(roleName as StaffRole)
+      ),
     });
     setIsFormOpen(true);
   }
@@ -144,7 +153,7 @@ export default function StaffPage() {
           first_name: form.first_name.trim() || undefined,
           last_name: form.last_name.trim() || undefined,
           phone: form.phone.trim() || undefined,
-          role_name: form.role_name,
+          role_names: form.role_names,
         });
 
         if (editingMember.status !== "Active" && editingMember.status !== "Inactive") {
@@ -155,9 +164,9 @@ export default function StaffPage() {
         const existingAccount = await findExistingStaffAccount(email);
 
         if (existingAccount) {
-          if (existingAccount.role_name === "Parent") {
+          if (existingAccount.role_names.some((roleName) => roleName === "Parent" || roleName === "parent")) {
             const confirmed = window.confirm(
-              "Existing Parent Account Found\n\nThis email is already registered as a Grandessa Parent account. Convert this existing account to the selected staff role without creating a new login?",
+              "Existing Parent Account Found\n\nAdd the selected staff role to this account while preserving its Parent access and linked children?",
             );
             if (!confirmed) return;
 
@@ -165,11 +174,30 @@ export default function StaffPage() {
               first_name: form.first_name.trim() || undefined,
               last_name: form.last_name.trim() || undefined,
               phone: form.phone.trim() || undefined,
-              role_name: form.role_name,
+              role_names: [
+                ...new Set([
+                  ...(existingAccount.role_names ?? [existingAccount.role_name ?? ""]).filter((roleName): roleName is StaffRole =>
+                    roles.includes(roleName as StaffRole)
+                  ),
+                  ...form.role_names,
+                ]),
+              ],
             });
           } else {
-            alert(`This email is already assigned to ${existingAccount.role_name ?? "an existing account"}.`);
-            return;
+            const currentStaffRoles = (existingAccount.role_names ?? [existingAccount.role_name ?? ""]).filter((roleName): roleName is StaffRole =>
+              roles.includes(roleName as StaffRole)
+            );
+            if (form.role_names.some((roleName) => currentStaffRoles.includes(roleName))) {
+              alert(`This email already has ${existingAccount.role_names.join(", ")} access.`);
+              return;
+            }
+
+            await updateStaffUser(existingAccount.id, {
+              first_name: form.first_name.trim() || undefined,
+              last_name: form.last_name.trim() || undefined,
+              phone: form.phone.trim() || undefined,
+              role_names: [...new Set([...currentStaffRoles, ...form.role_names])],
+            });
           }
         } else {
           await createStaffUser({
@@ -177,7 +205,7 @@ export default function StaffPage() {
             last_name: form.last_name.trim(),
             email,
             phone: form.phone.trim() || undefined,
-            role_name: form.role_name,
+            role_name: form.role_names[0],
           });
         }
       }
@@ -286,7 +314,7 @@ export default function StaffPage() {
                     <td style={{ padding: "14px 8px", fontWeight: 600 }}>{displayName(member)}</td>
                     <td style={{ padding: "14px 8px" }}>{member.email || "Not available"}</td>
                     <td style={{ padding: "14px 8px" }}>{member.phone || "Not provided"}</td>
-                    <td style={{ padding: "14px 8px" }}>{member.role_name}</td>
+                    <td style={{ padding: "14px 8px" }}>{displayRoles(member)}</td>
                     <td style={{ padding: "14px 8px" }}>{statusLabel(member.status)}</td>
                     <td style={{ padding: "14px 8px", display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button type="button" onClick={() => openEditForm(member)} style={{ display: "inline-flex", alignItems: "center", gap: 6 }} title="Edit staff member">
@@ -316,7 +344,7 @@ export default function StaffPage() {
         <div role="dialog" aria-modal="true" aria-labelledby="staff-form-title" style={modalOverlayStyle}>
           <form onSubmit={submitForm} style={modalPanelStyle}>
             <h2 id="staff-form-title" style={{ marginTop: 0 }}>{editingMember ? "Edit Staff Member" : "Add Staff Member"}</h2>
-            <p style={{ color: "#666" }}>{editingMember ? "Update the staff profile and role assignment." : "The staff member will receive the normal Supabase invitation flow."}</p>
+            <p style={{ color: "#666" }}>{editingMember ? "Update the staff profile and active roles." : "The staff member will receive the normal Supabase invitation flow."}</p>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 16 }}>
               <label style={{ display: "grid", gap: 6 }}>
@@ -343,10 +371,24 @@ export default function StaffPage() {
                 <input style={inputStyle} value={form.phone} onChange={(event) => updateForm("phone", event.target.value)} />
               </label>
               <label style={{ display: "grid", gap: 6 }}>
-                <span>Role</span>
-                <select style={inputStyle} value={form.role_name} onChange={(event) => updateForm("role_name", event.target.value as StaffRole)}>
-                  {roles.map((role) => <option key={role} value={role}>{role}</option>)}
-                </select>
+                <span>Roles</span>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {roles.map((role) => (
+                    <label key={role} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={form.role_names.includes(role)}
+                        onChange={(event) => {
+                          const selectedRoles = event.target.checked
+                            ? [...form.role_names, role]
+                            : form.role_names.filter((selectedRole) => selectedRole !== role);
+                          if (selectedRoles.length > 0) updateForm("role_names", selectedRoles);
+                        }}
+                      />
+                      {role}
+                    </label>
+                  ))}
+                </div>
               </label>
               {editingMember ? (
                 <label style={{ display: "grid", gap: 6 }}>
