@@ -2,7 +2,7 @@ import type { ReportTerm, ReportType } from "../types/reportCard";
 import type { Result } from "../types/result";
 import { calculateResult, validateAssessmentMarks } from "./resultCalculations";
 import type { SavedReportCard } from "../services/reportCardService";
-import { canPublishResult } from "./resultPermissions";
+import { getResultPublishBlockReason, type ResultPublicationEvidence } from "./resultPermissions";
 
 export type ReportCenterPeriod = {
   key: string;
@@ -34,6 +34,20 @@ export type ReportPublishVerification = {
   publishedResultIds: string[];
   failures: ReportPublishFailure[];
   verificationError: string | null;
+};
+
+export type ReportUnpublishVerification = {
+  refreshedResults: Result[] | null;
+  returnedResultIds: string[];
+  failures: ReportPublishFailure[];
+  verificationError: string | null;
+};
+
+export type ReportPeriodDeleteResult = {
+  cancelled: boolean;
+  deletedResultIds: string[];
+  failures: ReportPublishFailure[];
+  deletedSavedReport: boolean;
 };
 
 export function acquireReportPublishLock(
@@ -98,6 +112,134 @@ export async function publishReportResultsAndVerify(
     failures: [...failures.entries()].map(([resultId, message]) => ({ resultId, message })),
     verificationError: null,
   };
+}
+
+export async function unpublishReportResultsAndVerify(
+  publishedResults: Result[],
+  unpublishResult: (resultId: string, reason?: string) => Promise<void>,
+  refreshResults: () => Promise<Result[]>,
+  reason?: string,
+): Promise<ReportUnpublishVerification> {
+  const failures = new Map<string, string>();
+  for (const result of publishedResults) {
+    try {
+      await unpublishResult(result.id, reason);
+    } catch (error) {
+      failures.set(
+        result.id,
+        error instanceof Error ? error.message : "The unpublish request failed.",
+      );
+    }
+  }
+
+  let refreshedResults: Result[];
+  try {
+    refreshedResults = await refreshResults();
+  } catch (error) {
+    return {
+      refreshedResults: null,
+      returnedResultIds: [],
+      failures: publishedResults.map((result) => ({
+        resultId: result.id,
+        message: failures.get(result.id) ?? "The saved status could not be verified.",
+      })),
+      verificationError: error instanceof Error ? error.message : "Unable to reload saved result statuses.",
+    };
+  }
+
+  const refreshedById = new Map(refreshedResults.map((result) => [result.id, result]));
+  const returnedResultIds: string[] = [];
+  for (const result of publishedResults) {
+    const refreshed = refreshedById.get(result.id);
+    if (refreshed?.status === "Returned") {
+      returnedResultIds.push(result.id);
+      continue;
+    }
+    failures.set(
+      result.id,
+      failures.get(result.id)
+        ?? `The unpublish request returned without an error, but the saved status is ${refreshed?.status ?? "missing"}.`,
+    );
+  }
+
+  return {
+    refreshedResults,
+    returnedResultIds,
+    failures: [...failures.entries()].map(([resultId, message]) => ({ resultId, message })),
+    verificationError: null,
+  };
+}
+
+export function canDeleteDraftReportPeriod(
+  period: ReportCenterPeriod,
+  isAdministrator: boolean,
+): boolean {
+  return isAdministrator
+    && period.results.length > 0
+    && period.results.every((result) => result.status === "Draft");
+}
+
+export function canDeleteReportPeriod(
+  period: ReportCenterPeriod,
+  isAdministrator: boolean,
+): boolean {
+  return isAdministrator && (period.results.length > 0 || Boolean(period.savedReport));
+}
+
+export function getReportPeriodResults(period: ReportCenterPeriod, results: Result[]): Result[] {
+  return results.filter((result) =>
+    result.student_id === period.studentId
+    && result.class_id === period.classId
+    && result.academic_year === period.academicYear
+    && result.term === period.term
+    && (period.reportType === "Midterm"
+      ? result.assessment_type === "CA"
+      : result.assessment_type === "Combined" || result.assessment_type === "Examination"),
+  );
+}
+
+export async function deleteReportPeriodRecords(
+  period: ReportCenterPeriod,
+  isAdministrator: boolean,
+  confirmDeletion: () => boolean,
+  deleteSubjectResult: (resultId: string) => Promise<void>,
+  deleteSavedReport: (reportId: string) => Promise<void>,
+): Promise<ReportPeriodDeleteResult> {
+  if (!isAdministrator) {
+    throw new Error("Only an administrator can delete report periods.");
+  }
+  if (!confirmDeletion()) {
+    return { cancelled: true, deletedResultIds: [], failures: [], deletedSavedReport: false };
+  }
+
+  const failures: ReportPublishFailure[] = [];
+  const deletedResultIds: string[] = [];
+  for (const result of period.results) {
+    try {
+      await deleteSubjectResult(result.id);
+      deletedResultIds.push(result.id);
+    } catch (error) {
+      failures.push({
+        resultId: result.id,
+        message: error instanceof Error ? error.message : "The subject-result delete request failed.",
+      });
+    }
+  }
+
+  let deletedSavedReport = false;
+  if (failures.length === 0 && period.savedReport) {
+    try {
+      await deleteSavedReport(period.savedReport.id);
+      deletedSavedReport = true;
+    } catch (error) {
+      failures.push({
+        resultId: period.savedReport.id,
+        message: error instanceof Error ? error.message : "The saved report-card delete request failed.",
+      });
+    }
+  }
+
+  return { cancelled: false, deletedResultIds, failures, deletedSavedReport };
 }
 
 export function discoverReportCenterPeriods(
@@ -254,14 +396,19 @@ export function getReportCenterPublishBlockReason(
   period: ReportCenterPeriod,
   allResults: Result[],
   isAdministrator: boolean,
+  publicationEvidence: ReadonlyMap<string, ResultPublicationEvidence> = new Map(),
 ): string {
   const completeness = getReportCenterCompleteness(period, allResults);
   if (!completeness.complete) return completeness.reason;
   const unpublished = period.results.filter((result) => result.status !== "Published");
   if (unpublished.length === 0) return "All subject results in this report period are already published.";
-  if (unpublished.some((result) => !canPublishResult(result, isAdministrator))) {
-    return "One or more result rows are not eligible for publishing under the existing review workflow.";
-  }
+  const blockers = unpublished.flatMap((result) => {
+    const reason = getResultPublishBlockReason(result, isAdministrator, publicationEvidence.get(result.id));
+    return reason
+      ? [`${result.subject_name?.trim() || result.subject_id || "Subject result"}: ${reason}`]
+      : [];
+  });
+  if (blockers.length > 0) return blockers.join(" ");
   return "";
 }
 
@@ -269,6 +416,24 @@ export function canPublishReportCenterPeriod(
   period: ReportCenterPeriod,
   allResults: Result[] = period.results,
   isAdministrator = true,
+  publicationEvidence: ReadonlyMap<string, ResultPublicationEvidence> = new Map(),
 ): boolean {
-  return getReportCenterPublishBlockReason(period, allResults, isAdministrator) === "";
+  return getReportCenterPublishBlockReason(period, allResults, isAdministrator, publicationEvidence) === "";
+}
+
+export function getReportCenterPublishActionState(
+  period: ReportCenterPeriod,
+  allResults: Result[],
+  isAdministrator: boolean,
+  isPublishing = false,
+  verificationError = "",
+  publicationEvidence: ReadonlyMap<string, ResultPublicationEvidence> = new Map(),
+  publicationEvidenceError = "",
+): { visible: boolean; disabled: boolean; reason: string } {
+  const reason = getReportCenterPublishBlockReason(period, allResults, isAdministrator, publicationEvidence);
+  return {
+    visible: isAdministrator,
+    disabled: !isAdministrator || Boolean(reason) || isPublishing || Boolean(verificationError) || Boolean(publicationEvidenceError),
+    reason: verificationError || publicationEvidenceError || reason,
+  };
 }

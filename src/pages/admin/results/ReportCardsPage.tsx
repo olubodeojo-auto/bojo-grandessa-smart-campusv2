@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import ReportCardDocument from "../../../components/reports/ReportCardDocument";
 import ReportCardToolbar from "../../../components/reports/ReportCardToolbar";
+import AppModal from "../../../components/modals/AppModal";
 import EmptyState from "../../../components/ui/EmptyState";
 import FormField, { inputStyle } from "../../../components/forms/FormField";
 import SectionCard from "../../../components/ui/SectionCard";
@@ -13,7 +14,7 @@ import { type AcademicCalendarConfig } from "../../../config/grandessaCalendar";
 import { buildStudentReportCard, deleteReportCard, getSavedReportCards, saveReportCardDetails, type SavedReportCard } from "../../../services/reportCardService";
 import { getAcademicSessionSetups, saveAcademicSessionSetup } from "../../../services/academicSessionService";
 import { getClasses } from "../../../services/classService";
-import { getResults, publishResult } from "../../../services/resultService";
+import { deleteResult, getResultPublicationEvidence, getResults, publishResult, reviewResult } from "../../../services/resultService";
 import {
   getAcademicCalendarByYear,
   getSchoolSettings,
@@ -30,14 +31,20 @@ import type { SchoolSettings } from "../../../types/schoolSettings";
 import type { Student } from "../../../types/student";
 import type { SchoolClass } from "../../../types/class";
 import type { Result } from "../../../types/result";
+import type { ResultPublicationEvidence } from "../../../utils/resultPermissions";
 import {
-  canPublishReportCenterPeriod,
+  canDeleteReportPeriod,
+  canDeleteDraftReportPeriod,
   acquireReportPublishLock,
+  deleteReportPeriodRecords,
   discoverReportCenterPeriods,
   getReportCenterCompleteness,
   getReportCenterPublishBlockReason,
+  getReportCenterPublishActionState,
   getReportCenterPeriodStatus,
+  getReportPeriodResults,
   publishReportResultsAndVerify,
+  unpublishReportResultsAndVerify,
   type ReportCenterPeriod,
 } from "../../../utils/reportCenter";
 
@@ -135,10 +142,17 @@ export default function ReportCardsPage() {
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [savedReports, setSavedReports] = useState<SavedReportCard[]>([]);
   const [results, setResults] = useState<Result[]>([]);
+  const [publicationEvidence, setPublicationEvidence] = useState<Map<string, ResultPublicationEvidence>>(() => new Map());
+  const [publicationEvidenceError, setPublicationEvidenceError] = useState("");
   const [loadingPeriods, setLoadingPeriods] = useState(true);
   const [publishingKey, setPublishingKey] = useState("");
   const publishInFlightPeriods = useRef(new Set<string>());
+  const [unpublishingKey, setUnpublishingKey] = useState("");
+  const unpublishInFlightPeriods = useRef(new Set<string>());
+  const [deletingKey, setDeletingKey] = useState("");
+  const deleteInFlightPeriods = useRef(new Set<string>());
   const [publishVerificationErrors, setPublishVerificationErrors] = useState<Record<string, string>>({});
+  const [unpublishVerificationErrors, setUnpublishVerificationErrors] = useState<Record<string, string>>({});
   const [reportSearch, setReportSearch] = useState("");
   const [academicYear, setAcademicYear] = useState<string>(searchParams.get("academicYear") ?? "");
   const [calendarConfig, setCalendarConfig] = useState<AcademicCalendarConfig | null>(null);
@@ -153,6 +167,7 @@ export default function ReportCardsPage() {
   const [success, setSuccess] = useState("");
   const [uploadingBranding, setUploadingBranding] = useState<string>("");
   const [savingComments, setSavingComments] = useState(false);
+  const savingCommentsInFlight = useRef(false);
   const [editingReportDetails, setEditingReportDetails] = useState(false);
 
   // Preview override fields (manual, not persisted)
@@ -179,39 +194,56 @@ export default function ReportCardsPage() {
       setError(err instanceof Error ? err.message : "Unable to load saved report cards.");
     }
   }, []);
-  // Initialize preview overrides when a report is loaded
-  useEffect(() => {
-    if (!report) {
-      setEditedTimesPresent("");
-      setEditedTimesAbsent("");
-      setEditedMaximumAttendance("");
-      setEditedTermEnding("");
-      setEditedNextTermBegins("");
-      setEditedClassTeacherName("");
-      setEditedClassTeacherComment("");
-      setEditedHeadTeacherComment("");
-      setEditedClassAverage("");
-      setEditedTotalMarksObtained("");
-      setEditedTotalMarksObtainable("");
-      setEditedStudentPercentage("");
-      setReportCalculationMode("Manual");
-      return;
-    }
 
-    setReportCalculationMode(report.calculationMode);
-    setEditedTimesPresent(report.attendance?.timesPresent != null ? String(report.attendance.timesPresent) : "");
-    setEditedTimesAbsent(report.attendance?.timesAbsent != null ? String(report.attendance.timesAbsent) : "");
-    setEditedMaximumAttendance(report.attendance?.maximumAttendance != null ? String(report.attendance.maximumAttendance) : "");
-    setEditedTermEnding(report.termEnding);
-    setEditedNextTermBegins(report.nextTermBegins);
-    setEditedClassTeacherName(report.classTeacherName);
-    setEditedClassTeacherComment(report.classTeacherComment ?? "");
-    setEditedHeadTeacherComment(report.headTeacherComment ?? "");
-    setEditedClassAverage(report.classAverage !== null ? String(report.classAverage) : "");
-    setEditedTotalMarksObtained(String(report.reportTotalMarksObtained ?? ""));
-    setEditedTotalMarksObtainable(String(report.reportTotalMarksObtainable ?? ""));
-    setEditedStudentPercentage(String(report.reportStudentPercentage ?? ""));
-  }, [report]);
+  const resetReportDetailsFields = useCallback((data: ReportCardData | null): void => {
+    setReportCalculationMode(data?.calculationMode ?? "Manual");
+    setEditedTimesPresent(data?.attendance?.timesPresent != null ? String(data.attendance.timesPresent) : "");
+    setEditedTimesAbsent(data?.attendance?.timesAbsent != null ? String(data.attendance.timesAbsent) : "");
+    setEditedMaximumAttendance(data?.attendance?.maximumAttendance != null ? String(data.attendance.maximumAttendance) : "");
+    setEditedTermEnding(data?.termEnding ?? "");
+    setEditedNextTermBegins(data?.nextTermBegins ?? "");
+    setEditedClassTeacherName(data?.classTeacherName ?? "");
+    setEditedClassTeacherComment(data?.classTeacherComment ?? "");
+    setEditedHeadTeacherComment(data?.headTeacherComment ?? "");
+    setEditedClassAverage(data?.classAverage != null ? String(data.classAverage) : "");
+    setEditedTotalMarksObtained(data?.reportTotalMarksObtained != null ? String(data.reportTotalMarksObtained) : "");
+    setEditedTotalMarksObtainable(data?.reportTotalMarksObtainable != null ? String(data.reportTotalMarksObtainable) : "");
+    setEditedStudentPercentage(data?.reportStudentPercentage != null ? String(data.reportStudentPercentage) : "");
+  }, [
+    setEditedClassAverage,
+    setEditedClassTeacherComment,
+    setEditedClassTeacherName,
+    setEditedHeadTeacherComment,
+    setEditedMaximumAttendance,
+    setEditedNextTermBegins,
+    setEditedStudentPercentage,
+    setEditedTermEnding,
+    setEditedTimesAbsent,
+    setEditedTimesPresent,
+    setEditedTotalMarksObtainable,
+    setEditedTotalMarksObtained,
+    setReportCalculationMode,
+  ]);
+
+  const reportDetailsDirty = Boolean(report && (
+    reportCalculationMode !== report.calculationMode
+    || editedTimesPresent !== (report.attendance?.timesPresent != null ? String(report.attendance.timesPresent) : "")
+    || editedTimesAbsent !== (report.attendance?.timesAbsent != null ? String(report.attendance.timesAbsent) : "")
+    || editedMaximumAttendance !== (report.attendance?.maximumAttendance != null ? String(report.attendance.maximumAttendance) : "")
+    || editedTermEnding !== report.termEnding
+    || editedNextTermBegins !== report.nextTermBegins
+    || editedClassTeacherName !== report.classTeacherName
+    || editedClassTeacherComment !== report.classTeacherComment
+    || editedHeadTeacherComment !== report.headTeacherComment
+    || editedClassAverage !== (report.classAverage != null ? String(report.classAverage) : "")
+    || editedTotalMarksObtained !== (report.reportTotalMarksObtained != null ? String(report.reportTotalMarksObtained) : "")
+    || editedTotalMarksObtainable !== (report.reportTotalMarksObtainable != null ? String(report.reportTotalMarksObtainable) : "")
+    || editedStudentPercentage !== (report.reportStudentPercentage != null ? String(report.reportStudentPercentage) : "")
+  ));
+
+  useEffect(() => {
+    resetReportDetailsFields(report);
+  }, [report, resetReportDetailsFields]);
 
   useEffect(() => {
     async function loadAcademicSessions(): Promise<void> {
@@ -305,6 +337,27 @@ export default function ReportCardsPage() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const candidates = results.filter((result) => result.status === "Returned" && !result.published_at);
+    if (!isAdministrator || candidates.length === 0) {
+      setPublicationEvidence(new Map());
+      setPublicationEvidenceError("");
+      return () => { active = false; };
+    }
+
+    setPublicationEvidence(new Map());
+    setPublicationEvidenceError("");
+    void getResultPublicationEvidence(candidates)
+      .then((evidence) => { if (active) setPublicationEvidence(evidence); })
+      .catch((err: unknown) => {
+        if (!active) return;
+        setPublicationEvidence(new Map());
+        setPublicationEvidenceError(err instanceof Error ? err.message : "Unable to verify publication audit history.");
+      });
+    return () => { active = false; };
+  }, [isAdministrator, results]);
+
   const reportPeriods = useMemo(
     () => discoverReportCenterPeriods(results, savedReports),
     [results, savedReports],
@@ -358,7 +411,9 @@ export default function ReportCardsPage() {
         throw new Error("No report preview is available from the subject results in this period.");
       }
       setReport(data);
-      setSuccess(`Opened ${student.first_name} ${student.last_name} · ${period.academicYear} · ${period.term} Term · ${period.reportType === "Midterm" ? "Midterm" : "End-of-Term"}.`);
+      setSuccess(editDetails
+        ? `Opened report details for ${student.first_name} ${student.last_name} · ${period.academicYear} · ${period.term} Term.`
+        : `Opened report card preview for ${student.first_name} ${student.last_name} · ${period.academicYear} · ${period.term} Term.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to build this report preview.");
     } finally {
@@ -378,11 +433,23 @@ export default function ReportCardsPage() {
     navigate(`/admin/results?${params.toString()}`);
   }
 
+  function getPublicationEvidenceErrorForPeriod(period: ReportCenterPeriod): string {
+    return period.results.some((result) => result.status === "Returned" && !result.published_at)
+      ? publicationEvidenceError
+      : "";
+  }
+
   async function publishReportPeriod(period: ReportCenterPeriod): Promise<void> {
     const releasePublishLock = acquireReportPublishLock(publishInFlightPeriods.current, period.key);
     if (!releasePublishLock) return;
     try {
-      if (!isAdministrator || !canPublishReportCenterPeriod(period, results, isAdministrator)) return;
+      if (!isAdministrator) return;
+      const publishBlockReason = getPublicationEvidenceErrorForPeriod(period)
+        || getReportCenterPublishBlockReason(period, results, isAdministrator, publicationEvidence);
+      if (publishBlockReason) {
+        setError(`Publishing unavailable: ${publishBlockReason}`);
+        return;
+      }
       const student = students.find((candidate) => candidate.id === period.studentId);
       if (!student) {
         setError("The pupil for this report period is no longer available.");
@@ -402,6 +469,11 @@ export default function ReportCardsPage() {
       setError("");
       setSuccess("");
       setPublishVerificationErrors((current) => {
+        const next = { ...current };
+        delete next[period.key];
+        return next;
+      });
+      setUnpublishVerificationErrors((current) => {
         const next = { ...current };
         delete next[period.key];
         return next;
@@ -452,8 +524,9 @@ export default function ReportCardsPage() {
       const periodResultIds = new Set(period.results.map((result) => result.id));
       const savedPeriodResults = refreshedResults.filter((result) => periodResultIds.has(result.id));
       const publishedCount = savedPeriodResults.filter((result) => result.status === "Published").length;
+      const returnedCount = savedPeriodResults.filter((result) => result.status === "Returned").length;
       const pupil = students.find((student) => student.id === period.studentId);
-      setSuccess(`Verified saved status for ${pupil ? `${pupil.first_name} ${pupil.last_name}` : "this pupil"}: ${publishedCount} of ${period.results.length} subject result(s) are Published.`);
+      setSuccess(`Verified saved status for ${pupil ? `${pupil.first_name} ${pupil.last_name}` : "this pupil"}: ${publishedCount} Published, ${returnedCount} Returned, ${savedPeriodResults.length - publishedCount - returnedCount} other subject result(s).`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to reload saved result statuses.";
       setPublishVerificationErrors((current) => ({ ...current, [period.key]: message }));
@@ -578,7 +651,29 @@ export default function ReportCardsPage() {
   }
 
   async function saveReportDetails(): Promise<void> {
-    if (!report) return;
+    if (!report || savingCommentsInFlight.current) return;
+    const numericFields: Array<{ label: string; value: string; minimum?: number; maximum?: number }> = [
+      { label: "Class average", value: editedClassAverage, minimum: 0, maximum: 100 },
+      { label: "Total marks obtained", value: editedTotalMarksObtained, minimum: 0 },
+      { label: "Total marks obtainable", value: editedTotalMarksObtainable, minimum: 0 },
+      { label: "Student percentage", value: editedStudentPercentage, minimum: 0, maximum: 100 },
+      { label: "Maximum attendance", value: editedMaximumAttendance, minimum: 0 },
+      { label: "Times present", value: editedTimesPresent, minimum: 0 },
+      { label: "Times absent", value: editedTimesAbsent, minimum: 0 },
+    ];
+    const invalidField = numericFields.find(({ value, minimum, maximum }) => {
+      if (!value.trim()) return false;
+      const numericValue = Number(value);
+      return !Number.isFinite(numericValue)
+        || (minimum !== undefined && numericValue < minimum)
+        || (maximum !== undefined && numericValue > maximum);
+    });
+    if (invalidField) {
+      setError(`${invalidField.label} must be a valid number${invalidField.maximum !== undefined ? ` between ${invalidField.minimum} and ${invalidField.maximum}` : " greater than or equal to zero"}.`);
+      return;
+    }
+
+    savingCommentsInFlight.current = true;
     try {
       setSavingComments(true);
       setError("");
@@ -608,40 +703,284 @@ export default function ReportCardsPage() {
         classId: report.classId,
         includeUnpublished: isAdministrator,
       });
+      if (!refreshed) throw new Error("The saved report details could not be reloaded for verification.");
       setReport(refreshed);
       await refreshSavedReportCards();
+      setEditingReportDetails(false);
       setSuccess(`${report.reportType === "Midterm" ? "Midterm" : "End-of-Term"} report details saved for ${report.student.first_name} ${report.student.last_name}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save report comments.");
     } finally {
       setSavingComments(false);
+      savingCommentsInFlight.current = false;
     }
   }
 
-  async function removeSavedReportCard(record: SavedReportCard): Promise<void> {
-    if (!isAdministrator) return;
-    const pupil = students.find((candidate) => candidate.id === record.student_id);
-    const className = classes.find((candidate) => candidate.id === record.class_id)?.class_name ?? "selected class";
+  function cancelReportDetails(): void {
+    if (savingComments) return;
+    if (reportDetailsDirty && !window.confirm("Discard unsaved report-card detail changes?")) return;
+    resetReportDetailsFields(report);
+    setEditingReportDetails(false);
+  }
+
+  async function unpublishReportPeriod(period: ReportCenterPeriod): Promise<void> {
+    const releaseLock = acquireReportPublishLock(unpublishInFlightPeriods.current, period.key);
+    if (!releaseLock) return;
+    if (!isAdministrator || !period.results.length
+      || period.results.some((result) => result.status !== "Published")) {
+      releaseLock();
+      return;
+    }
+
+    const pupil = students.find((candidate) => candidate.id === period.studentId);
+    const pupilName = pupil ? `${pupil.first_name} ${pupil.last_name}`.trim() : "this pupil";
+    if (!window.confirm(`Unpublish the ${period.reportType === "Midterm" ? "Midterm" : "End-of-Term"} report card for ${pupilName}? Every subject result will move to Returned and remain unpublished until explicitly published again.`)) {
+      releaseLock();
+      return;
+    }
+    const reason = window.prompt("Optional internal note for unpublishing (up to 250 characters):");
+    if (reason === null) {
+      releaseLock();
+      return;
+    }
+    if (reason.trim().length > 250) {
+      setError("The internal note must be no more than 250 characters.");
+      releaseLock();
+      return;
+    }
+
+    setUnpublishingKey(period.key);
+    setError("");
+    setSuccess("");
+    try {
+      const outcome = await unpublishReportResultsAndVerify(
+        period.results,
+        (resultId, note) => reviewResult(resultId, "unpublish", note),
+        getResults,
+        reason.trim() || undefined,
+      );
+      if (!outcome.refreshedResults) {
+        const message = `Unpublish status could not be verified: ${outcome.verificationError ?? "Unable to reload saved result statuses."}`;
+        setUnpublishVerificationErrors((current) => ({ ...current, [period.key]: message }));
+        setError(`${message} Refresh the saved status before retrying.`);
+        return;
+      }
+      setResults(outcome.refreshedResults);
+      const returnedCount = outcome.returnedResultIds.length;
+      if (returnedCount === period.results.length) {
+        setUnpublishVerificationErrors((current) => {
+          const next = { ...current };
+          delete next[period.key];
+          return next;
+        });
+        setSuccess(`Verified: unpublished ${returnedCount} subject result(s) for ${pupilName}. They remain Returned until explicitly republished.`);
+        return;
+      }
+      const resultNames = new Map(period.results.map((result) => [result.id, result.subject_name?.trim() || result.id]));
+      const failureDetails = outcome.failures
+        .map((failure) => `${resultNames.get(failure.resultId) ?? failure.resultId}: ${failure.message}`)
+        .join(" ");
+      const message = `Verified ${returnedCount} of ${period.results.length} subject result(s) as Returned for ${pupilName}; ${period.results.length - returnedCount} remain Published. ${failureDetails}`;
+      setUnpublishVerificationErrors((current) => ({ ...current, [period.key]: message }));
+      setError(message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to unpublish this report period.");
+    } finally {
+      setUnpublishingKey((current) => current === period.key ? "" : current);
+      releaseLock();
+    }
+  }
+
+  async function deleteDraftPeriod(period: ReportCenterPeriod): Promise<void> {
+    if (!canDeleteDraftReportPeriod(period, isAdministrator)) return;
+    const releaseLock = acquireReportPublishLock(deleteInFlightPeriods.current, period.key);
+    if (!releaseLock) return;
+    const pupil = students.find((candidate) => candidate.id === period.studentId);
+    const pupilName = pupil ? `${pupil.first_name} ${pupil.last_name}`.trim() : "this pupil";
     const confirmed = window.confirm(
-      `Delete 1 saved report-card presentation record?\n\nSession: ${record.academic_year}\nTerm: ${record.term}\nReport type: ${record.report_type === "Midterm" ? "Midterm Report" : "End-of-Term Report"}\nClass: ${className}\nPupil: ${pupil ? `${pupil.first_name} ${pupil.last_name}` : "Unknown pupil"}\n\nSubject marks will not be deleted.`,
+      `Delete all ${period.results.length} draft subject result(s) for ${pupilName}?${period.savedReport ? " The saved report-card details for this draft period will also be deleted." : ""}\n\nClass: ${classes.find((candidate) => candidate.id === period.classId)?.class_name ?? "Class unavailable"}\nSession: ${period.academicYear}\nTerm: ${period.term}\nReport type: ${period.reportType}\n\nThis cannot be undone.`,
     );
-    if (!confirmed) return;
+    if (!confirmed) {
+      releaseLock();
+      return;
+    }
+
+    setDeletingKey(period.key);
+    setError("");
+    setSuccess("");
+    try {
+      const failures: string[] = [];
+      for (const result of period.results) {
+        try {
+          await deleteResult(result.id);
+        } catch (err) {
+          failures.push(`${result.subject_name ?? result.id}: ${err instanceof Error ? err.message : "Delete failed."}`);
+        }
+      }
+      if (failures.length === 0 && period.savedReport) {
+        try {
+          await deleteReportCard(period.savedReport.id);
+        } catch (err) {
+          failures.push(`Saved report-card details: ${err instanceof Error ? err.message : "Delete failed."}`);
+        }
+      }
+      const refreshedResults = await getResults();
+      setResults(refreshedResults);
+      setSavedReports(await getSavedReportCards());
+      if (report?.student.id === period.studentId
+        && report.classId === period.classId
+        && report.academicYear === period.academicYear
+        && report.term === period.term
+        && report.reportType === period.reportType) setReport(null);
+      if (failures.length > 0) {
+        setError(`Some draft results could not be deleted: ${failures.join(" ")}`);
+      } else {
+        setSuccess(`Deleted ${period.results.length} draft subject result(s)${period.savedReport ? " and their saved report-card details" : ""} for ${pupilName}.`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to refresh draft result status after deletion.");
+    } finally {
+      setDeletingKey((current) => current === period.key ? "" : current);
+      releaseLock();
+    }
+  }
+
+  async function deleteReportPeriod(period: ReportCenterPeriod): Promise<void> {
+    if (!canDeleteReportPeriod(period, isAdministrator)) return;
+    const releaseLock = acquireReportPublishLock(deleteInFlightPeriods.current, period.key);
+    if (!releaseLock) return;
+    let deletionOutcome: Awaited<ReturnType<typeof deleteReportPeriodRecords>> | null = null;
+    let affectedResultCount = period.results.length;
 
     try {
-      setError("");
-      setSuccess("");
-      await deleteReportCard(record.id);
-      if (report?.student.id === record.student_id
-        && report.classId === record.class_id
-        && report.academicYear === record.academic_year
-        && report.term === record.term
-        && report.reportType === record.report_type) {
-        setReport(null);
+      const [allResults, savedReportCards] = await Promise.all([
+        getResults(),
+        getSavedReportCards({
+          academicYear: period.academicYear,
+          term: period.term,
+          reportType: period.reportType,
+          classId: period.classId,
+        }),
+      ]);
+      const exactSavedReports = savedReportCards.filter((savedReport) =>
+        savedReport.student_id === period.studentId
+        && savedReport.class_id === period.classId
+        && savedReport.academic_year === period.academicYear
+        && savedReport.term === period.term
+        && savedReport.report_type === period.reportType,
+      );
+      if (exactSavedReports.length > 1) {
+        throw new Error("Multiple saved report cards match this pupil and period. No records were deleted.");
       }
-      await refreshSavedReportCards();
-      setSuccess("Saved report-card presentation record deleted. Subject marks were not changed.");
+
+      const currentPeriod: ReportCenterPeriod = {
+        ...period,
+        results: getReportPeriodResults(period, allResults),
+        savedReport: exactSavedReports[0],
+      };
+      affectedResultCount = currentPeriod.results.length;
+      if (!canDeleteReportPeriod(currentPeriod, isAdministrator)) {
+        throw new Error("This report period no longer has subject results or saved report-card details to delete.");
+      }
+
+      const pupil = students.find((candidate) => candidate.id === period.studentId);
+      const pupilName = pupil
+        ? `${pupil.first_name} ${pupil.last_name}`.trim()
+        : "Pupil unavailable";
+      const admissionNumber = pupil?.admission_number || "Unavailable";
+      const className = classes.find((candidate) => candidate.id === period.classId)?.class_name
+        ?? currentPeriod.results.find((result) => result.class_name)?.class_name
+        ?? "Class unavailable";
+      const currentStatus = getReportCenterPeriodStatus(currentPeriod);
+      const outcome = await deleteReportPeriodRecords(
+        currentPeriod,
+        isAdministrator,
+        () => {
+          const confirmed = window.confirm(
+            `Permanently delete this report card for ${pupilName}?\n\nAdmission number: ${admissionNumber}\nClass: ${className}\nAcademic session: ${period.academicYear}\nTerm: ${period.term} Term\nReport type: ${period.reportType}\nCurrent publication status: ${currentStatus}\nSubject-result records affected: ${currentPeriod.results.length}\nSaved report-card details: ${currentPeriod.savedReport ? "Yes" : "No"}\n\nThis permanently deletes the listed subject-result records and saved report-card details for this period only. Existing subject-result audit history is retained. This cannot be undone.`,
+          );
+          if (confirmed) {
+            setDeletingKey(period.key);
+            setError("");
+            setSuccess("");
+          }
+          return confirmed;
+        },
+        deleteResult,
+        deleteReportCard,
+      );
+      if (outcome.cancelled) return;
+      deletionOutcome = outcome;
+
+      const [refreshedResults, refreshedSavedReports] = await Promise.all([
+        getResults(),
+        getSavedReportCards(),
+      ]);
+      setResults(refreshedResults);
+      setSavedReports(refreshedSavedReports);
+      if (report?.student.id === period.studentId
+        && report.classId === period.classId
+        && report.academicYear === period.academicYear
+        && report.term === period.term
+        && report.reportType === period.reportType) setReport(null);
+
+      if (outcome.failures.length > 0) {
+        const failureDetails = outcome.failures
+          .map((failure) => failure.message)
+          .join(" ");
+        setError(
+          `Deleted ${outcome.deletedResultIds.length} of ${currentPeriod.results.length} subject-result record(s). Saved report-card details ${outcome.deletedSavedReport ? "were deleted" : "were retained because one or more deletions failed"}. ${failureDetails}`,
+        );
+      } else {
+        setSuccess(
+          `Deleted the ${period.reportType} report card for ${pupilName}, including ${outcome.deletedResultIds.length} subject-result record(s)${outcome.deletedSavedReport ? " and saved report-card details" : ""}.`,
+        );
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to delete the saved report card.");
+      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+      if (deletionOutcome) {
+        const deletionFailures = deletionOutcome.failures.map((failure) => failure.message).join(" ");
+        setError(
+          `Deletion requests completed (${deletionOutcome.deletedResultIds.length} of ${affectedResultCount} subject-result records removed), but the affected report-card list could not be refreshed: ${message} ${deletionFailures}`,
+        );
+      } else {
+        setError(`Unable to delete this report card: ${message}`);
+      }
+    } finally {
+      setDeletingKey((current) => current === period.key ? "" : current);
+      releaseLock();
+    }
+  }
+
+  async function deleteSavedReportDetails(period: ReportCenterPeriod): Promise<void> {
+    if (!isAdministrator || period.results.length > 0 || !period.savedReport) return;
+    const releaseLock = acquireReportPublishLock(deleteInFlightPeriods.current, period.key);
+    if (!releaseLock) return;
+    const pupil = students.find((candidate) => candidate.id === period.studentId);
+    const pupilName = pupil ? `${pupil.first_name} ${pupil.last_name}`.trim() : "this pupil";
+    if (!window.confirm(`Delete the saved report-card details for ${pupilName}? There are no subject-result rows in this period.`)) {
+      releaseLock();
+      return;
+    }
+
+    setDeletingKey(period.key);
+    setError("");
+    setSuccess("");
+    try {
+      await deleteReportCard(period.savedReport.id);
+      const saved = await getSavedReportCards();
+      setSavedReports(saved);
+      if (report?.student.id === period.studentId
+        && report.classId === period.classId
+        && report.academicYear === period.academicYear
+        && report.term === period.term
+        && report.reportType === period.reportType) setReport(null);
+      setSuccess(`Deleted saved report-card details for ${pupilName}. No subject results were changed.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete saved report-card details.");
+    } finally {
+      setDeletingKey((current) => current === period.key ? "" : current);
+      releaseLock();
     }
   }
 
@@ -722,92 +1061,116 @@ export default function ReportCardsPage() {
                   ?? "Class unavailable";
                 const statusLabel = getReportCenterPeriodStatus(period);
                 const completeness = getReportCenterCompleteness(period, results);
-                const publishBlockReason = getReportCenterPublishBlockReason(period, results, isAdministrator);
-                const canPublish = canPublishReportCenterPeriod(period, results, isAdministrator);
+                const periodEvidenceError = getPublicationEvidenceErrorForPeriod(period);
+                const publishBlockReason = periodEvidenceError
+                  || getReportCenterPublishBlockReason(period, results, isAdministrator, publicationEvidence);
                 const isPublishing = publishingKey === period.key;
+                const publishAction = getReportCenterPublishActionState(
+                  period,
+                  results,
+                  isAdministrator,
+                  Boolean(publishingKey),
+                  publishVerificationErrors[period.key],
+                  publicationEvidence,
+                  periodEvidenceError,
+                );
+                const isUnpublishing = unpublishingKey === period.key;
+                const isDeleting = deletingKey === period.key;
+                const canUnpublish = isAdministrator && period.results.length > 0
+                  && period.results.every((result) => result.status === "Published");
+                const canDeleteDraft = canDeleteDraftReportPeriod(period, isAdministrator);
+                const canDeleteReport = canDeleteReportPeriod(period, isAdministrator);
                 return (
-                  <article key={period.key} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, display: "grid", gap: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 16, flexWrap: "wrap" }}>
+                  <article key={period.key} aria-labelledby={`report-period-${period.key}`} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, display: "grid", gap: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 16, alignItems: "start" }}>
                       <div>
-                        <strong style={{ fontSize: 16 }}>{pupilName}</strong>
-                        <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
-                          {pupil?.admission_number ? `${pupil.admission_number} · ` : ""}{className} · {period.academicYear} · {period.term} Term · {period.reportType === "Midterm" ? "Midterm" : "End-of-Term"}
-                        </div>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                          <span style={statusBadgeStyle(statusLabel)}>{statusLabel}</span>
-                          {period.savedReport ? <span style={savedBadgeStyle}>Report details saved</span> : null}
-                          {period.results.length > 0 ? <span style={{ color: "#64748b", fontSize: 12 }}>{period.results.length} subject result(s)</span> : null}
-                        </div>
-                        {period.results.length > 0 ? (
-                          <p style={{ color: completeness.complete ? "#166534" : "#92400e", fontSize: 13, margin: "8px 0 0" }}>
-                            {completeness.reason}
-                          </p>
-                        ) : (
-                          <p style={{ color: "#92400e", fontSize: 13, margin: "8px 0 0" }}>
-                            Saved report details have no matching subject results to render.
-                          </p>
-                        )}
+                        <h2 id={`report-period-${period.key}`} style={{ margin: 0, fontSize: 20 }}>{pupilName}</h2>
+                        <p style={{ color: "#64748b", fontSize: 13, margin: "4px 0 0" }}>
+                          Admission number: {pupil?.admission_number || "Unavailable"} · Class: {className}
+                        </p>
+                        <p style={{ color: "#334155", fontSize: 13, margin: "3px 0 0" }}>
+                          {period.academicYear} · {period.term} Term · {period.reportType === "Midterm" ? "Midterm" : "End-of-Term"}
+                        </p>
                       </div>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => void openReportPeriod(period)}
-                          disabled={period.results.length === 0}
-                        >
-                          Preview
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => void openReportPeriod(period, true)}
-                          disabled={period.results.length === 0 || !isAdministrator}
-                        >
-                          Edit
-                        </Button>
-                        <Button type="button" variant="secondary" onClick={() => navigateToResults(period)}>
-                          Edit results
-                        </Button>
-                        {isAdministrator ? (
-                          <Button
-                            type="button"
-                            onClick={() => void publishReportPeriod(period)}
-                            disabled={!canPublish || Boolean(publishingKey) || Boolean(publishVerificationErrors[period.key])}
-                            title={publishVerificationErrors[period.key] || publishBlockReason || "Publish each eligible subject result through the existing review workflow."}
-                          >
-                            {isPublishing ? "Publishing…" : "Publish Report Card"}
-                          </Button>
-                        ) : null}
-                        {isAdministrator && publishVerificationErrors[period.key] ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() => void verifyPublishStatus(period)}
-                            disabled={Boolean(publishingKey)}
-                          >
-                            Verify saved status
-                          </Button>
-                        ) : null}
-                        {isAdministrator && period.savedReport ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() => void removeSavedReportCard(period.savedReport!)}
-                            style={{ color: "#b91c1c", borderColor: "#fecaca" }}
-                          >
-                            Delete saved details
-                          </Button>
-                        ) : null}
+                      {period.savedReport ? <span style={savedBadgeStyle}>Report details saved</span> : null}
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 12 }}>
+                      <div>
+                        <div style={{ color: "#64748b", fontSize: 12, marginBottom: 5 }}>Publication status</div>
+                        <span style={statusBadgeStyle(statusLabel)}>{statusLabel}</span>
+                      </div>
+                      <div>
+                        <div style={{ color: "#64748b", fontSize: 12, marginBottom: 5 }}>Subject-result completeness</div>
+                        <strong style={{ color: completeness.complete ? "#166534" : "#92400e" }}>
+                          {completeness.complete ? "Complete" : "Incomplete"} · {period.results.length} subject result(s)
+                        </strong>
+                        <p style={{ color: completeness.complete ? "#166534" : "#92400e", fontSize: 13, margin: "4px 0 0" }}>
+                          {completeness.reason}
+                        </p>
                       </div>
                     </div>
-                    {isAdministrator && publishBlockReason ? (
+
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Button type="button" variant="secondary" onClick={() => void openReportPeriod(period)} disabled={period.results.length === 0} title={period.results.length === 0 ? "Subject results are required to preview a report card." : undefined}>
+                        Preview Report Card
+                      </Button>
+                      <Button type="button" variant="secondary" onClick={() => void openReportPeriod(period, true)} disabled={period.results.length === 0 || !isAdministrator} title={!isAdministrator ? "Only an administrator can edit report-card details." : period.results.length === 0 ? "Subject results are required to open report-card details." : undefined}>
+                        Edit Report Card Comments
+                      </Button>
+                      <Button type="button" variant="secondary" onClick={() => navigateToResults(period)} disabled={period.results.length === 0} title={period.results.length === 0 ? "No subject results are available to edit." : undefined}>
+                        Edit Subject Results
+                      </Button>
+                      {publishAction.visible ? (
+                        <Button type="button" onClick={() => void publishReportPeriod(period)} disabled={publishAction.disabled} title={publishAction.reason || "Publish each eligible subject result through the authorized review workflow."}>
+                          {isPublishing ? "Publishing…" : "Publish Report Card"}
+                        </Button>
+                      ) : null}
+                      {canUnpublish ? (
+                        <Button type="button" variant="secondary" onClick={() => void unpublishReportPeriod(period)} disabled={Boolean(unpublishingKey) || Boolean(publishingKey) || Boolean(unpublishVerificationErrors[period.key])} title={unpublishVerificationErrors[period.key] || "Move each published subject result to Returned through the existing review workflow."}>
+                          {isUnpublishing ? "Unpublishing…" : "Unpublish Report Card"}
+                        </Button>
+                      ) : null}
+                      {canDeleteReport ? (
+                        <Button type="button" variant="secondary" onClick={() => void deleteReportPeriod(period)} disabled={Boolean(deletingKey) || Boolean(publishingKey) || Boolean(unpublishingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
+                          {isDeleting ? "Deleting report card…" : "Delete Report Card"}
+                        </Button>
+                      ) : null}
+                      {canDeleteDraft ? (
+                        <Button type="button" variant="secondary" onClick={() => void deleteDraftPeriod(period)} disabled={Boolean(deletingKey) || Boolean(publishingKey) || Boolean(unpublishingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
+                          {isDeleting ? "Deleting draft…" : "Delete Draft"}
+                        </Button>
+                      ) : null}
+                      {isAdministrator && period.results.length === 0 && period.savedReport ? (
+                        <Button type="button" variant="secondary" onClick={() => void deleteSavedReportDetails(period)} disabled={Boolean(deletingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
+                          {isDeleting ? "Deleting details…" : "Delete Saved Details"}
+                        </Button>
+                      ) : null}
+                      {isAdministrator && (publishVerificationErrors[period.key] || unpublishVerificationErrors[period.key]) ? (
+                        <Button type="button" variant="secondary" onClick={() => void verifyPublishStatus(period)} disabled={Boolean(publishingKey)}>
+                          Verify saved status
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    {isAdministrator && publishAction.disabled && publishBlockReason ? (
                       <p role="status" style={{ color: "#92400e", fontSize: 13, margin: 0 }}>
                         Publishing unavailable: {publishBlockReason}
+                      </p>
+                    ) : null}
+                    {statusLabel === "Published" ? (
+                      <p role="status" style={{ color: "#475569", fontSize: 13, margin: 0 }}>
+                        To correct subject results, unpublish this report first. Corrections remain Returned until explicitly published again.
                       </p>
                     ) : null}
                     {isAdministrator && publishVerificationErrors[period.key] ? (
                       <p role="alert" style={{ color: "#991b1b", fontSize: 13, margin: 0 }}>
                         {publishVerificationErrors[period.key]} Publication retry is blocked until status is verified.
+                      </p>
+                    ) : null}
+                    {isAdministrator && unpublishVerificationErrors[period.key] ? (
+                      <p role="alert" style={{ color: "#991b1b", fontSize: 13, margin: 0 }}>
+                        {unpublishVerificationErrors[period.key]} Unpublish retry is blocked until status is refreshed.
                       </p>
                     ) : null}
                   </article>
@@ -1043,11 +1406,6 @@ export default function ReportCardsPage() {
               </p>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              {isAdministrator ? (
-                <Button type="button" variant="secondary" onClick={() => setEditingReportDetails((editing) => !editing)}>
-                  {editingReportDetails ? "Close edit details" : "Edit report details"}
-                </Button>
-              ) : null}
               <ReportCardToolbar
                 previewId="report-card-preview"
                 fileName={`Report-${report.student.id}-${report.academicYear}-${report.term}-${report.reportType}.pdf`}
@@ -1059,8 +1417,37 @@ export default function ReportCardsPage() {
               This preview includes unpublished subject results. It is not available to parents until the existing results review workflow publishes them.
             </div>
           ) : null}
-          {editingReportDetails && isAdministrator ? <SectionCard>
-            <h3 style={{ marginTop: 0 }}>Report details</h3>
+          {editingReportDetails && isAdministrator ? <AppModal
+            open={editingReportDetails && isAdministrator}
+            title={`Edit Report Card Comments · ${report.student.first_name} ${report.student.last_name}`}
+            size="lg"
+            dialogStyle={{
+              height: "calc(100dvh - 32px)",
+              maxHeight: "calc(100dvh - 32px)",
+              minHeight: 0,
+              display: "flex",
+              flexDirection: "column",
+              boxSizing: "border-box",
+            }}
+            bodyStyle={{ flex: "1 1 auto", minHeight: 0, overflow: "hidden" }}
+            footerStyle={{ flexWrap: "wrap", gap: 8 }}
+            footer={
+              <>
+                <Button type="button" variant="secondary" onClick={cancelReportDetails} disabled={savingComments}>Cancel</Button>
+                <Button type="button" onClick={() => void saveReportDetails()} disabled={savingComments}>
+                  {savingComments ? "Saving Changes…" : "Save Changes"}
+                </Button>
+              </>
+            }
+            onClose={cancelReportDetails}
+          >
+            {error ? <div role="alert" style={{ marginBottom: 12, padding: 10, background: "#fef2f2", color: "#991b1b", borderRadius: 8 }}>{error}</div> : null}
+            <div
+              role="region"
+              aria-label="Report-card details form; scroll vertically to view all fields"
+              tabIndex={0}
+              style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable", paddingRight: 4 }}
+            >
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
               <FormField label="Calculation mode">
                 <select
@@ -1137,35 +1524,13 @@ export default function ReportCardsPage() {
                 <FormField label="Head Teacher's Comment">
                   <textarea style={{ ...inputStyle, height: 80 }} value={editedHeadTeacherComment} onChange={(e) => setEditedHeadTeacherComment(e.target.value)} />
                 </FormField>
-                <Button type="button" onClick={() => void saveReportDetails()} disabled={savingComments}>
-                  {savingComments ? "Saving report details..." : "Save Report Details"}
-                </Button>
               </div>
             </div>
-          </SectionCard>
+            </div>
+          </AppModal>
           : null}
 
-          <ReportCardDocument
-            report={{
-              ...report,
-              attendance: {
-                ...report.attendance,
-                maximumAttendance: editedMaximumAttendance === "" ? null : Number(editedMaximumAttendance),
-                timesPresent: editedTimesPresent === "" ? null : Number(editedTimesPresent),
-                timesAbsent: editedTimesAbsent === "" ? null : Number(editedTimesAbsent),
-              },
-              calculationMode: reportCalculationMode,
-              classTeacherName: editedClassTeacherName,
-              termEnding: editedTermEnding,
-              nextTermBegins: editedNextTermBegins,
-              classTeacherComment: editedClassTeacherComment,
-              headTeacherComment: editedHeadTeacherComment,
-              classAverage: editedClassAverage === "" ? null : Number(editedClassAverage),
-              reportTotalMarksObtained: editedTotalMarksObtained === "" ? null : Number(editedTotalMarksObtained),
-              reportTotalMarksObtainable: editedTotalMarksObtainable === "" ? null : Number(editedTotalMarksObtainable),
-              reportStudentPercentage: editedStudentPercentage === "" ? null : Number(editedStudentPercentage),
-            }}
-          />
+          <ReportCardDocument report={report} />
         </div>
       ) : (
         <EmptyState title="Choose a report period" description="Search for a pupil above, then preview an available period from their existing results." />

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as XLSX from "xlsx";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -43,7 +43,22 @@ import { calculateResult, transitionAssessmentType, validateAssessmentMarks } fr
 import { calculateEndOfTermMetrics, calculateMidtermMetrics } from "../utils/reportCalculations";
 import { calculateAgeFromDateOfBirth, getReportSummaryValues, isMatchingPublishedReportResult } from "../utils/reportCardPresentation";
 import { getResultBatchDraftResume, getSavedResultDrafts, groupSavedResultDrafts } from "../utils/resultDraftRecovery";
-import { acquireReportPublishLock, canDeleteDraftReportPeriod, canPublishReportCenterPeriod, discoverReportCenterPeriods, getReportCenterCompleteness, getReportCenterPeriodStatus, getReportCenterPublishActionState, getReportCenterPublishBlockReason, publishReportResultsAndVerify, unpublishReportResultsAndVerify, type ReportCenterPeriod } from "../utils/reportCenter";
+import {
+  acquireReportPublishLock,
+  canDeleteDraftReportPeriod,
+  canDeleteReportPeriod,
+  canPublishReportCenterPeriod,
+  deleteReportPeriodRecords,
+  discoverReportCenterPeriods,
+  getReportCenterCompleteness,
+  getReportCenterPeriodStatus,
+  getReportCenterPublishActionState,
+  getReportCenterPublishBlockReason,
+  getReportPeriodResults,
+  publishReportResultsAndVerify,
+  unpublishReportResultsAndVerify,
+  type ReportCenterPeriod,
+} from "../utils/reportCenter";
 import { resolveReportTermId, toStoredTermName, type AcademicTermMatch } from "../utils/reportTermResolution";
 import { validateAcademicSessionSetup } from "../utils/academicSessionValidation";
 import type { AcademicSessionSetup } from "../types/academicSession";
@@ -677,6 +692,174 @@ describe("Report Center period discovery and readiness", () => {
     expect(getReportCenterPeriodStatus(period)).toBe("Saved details only");
     expect(period.savedReport).toEqual(savedReport);
     expect(getReportCenterCompleteness(period).complete).toBe(false);
+  });
+
+  it("offers report-period deletion to administrators across all supported statuses only", () => {
+    const statuses = ["Draft", "Submitted", "Returned", "Published", "Approved"] as const;
+    for (const status of statuses) {
+      const [period] = discoverReportCenterPeriods([result({ status })], []);
+      expect(canDeleteReportPeriod(period, true), `${status} period`).toBe(true);
+      expect(canDeleteReportPeriod(period, false), `${status} non-admin`).toBe(false);
+    }
+    const [savedDetailsOnly] = discoverReportCenterPeriods([], [{
+      id: "saved-details",
+      student_id: "student-1",
+      class_id: "class-1",
+      academic_year: "2025/2026",
+      term: "Third",
+      report_type: "End-of-Term",
+    }]);
+    expect(canDeleteReportPeriod(savedDetailsOnly, true)).toBe(true);
+    expect(canDeleteReportPeriod({ ...savedDetailsOnly, savedReport: undefined }, true)).toBe(false);
+  });
+
+  it("does nothing when report-period deletion is cancelled", async () => {
+    const [period] = discoverReportCenterPeriods([
+      result({ id: "published-result", status: "Published" }),
+    ], [{
+      id: "saved-report",
+      student_id: "student-1",
+      class_id: "class-1",
+      academic_year: "2025/2026",
+      term: "First",
+      report_type: "End-of-Term",
+    }]);
+    const deleteResultMock = vi.fn(async (id: string) => { void id; });
+    const deleteReportMock = vi.fn(async (id: string) => { void id; });
+
+    await expect(deleteReportPeriodRecords(
+      period,
+      true,
+      () => false,
+      deleteResultMock,
+      deleteReportMock,
+    )).resolves.toMatchObject({ cancelled: true, deletedResultIds: [], deletedSavedReport: false });
+    expect(deleteResultMock).not.toHaveBeenCalled();
+    expect(deleteReportMock).not.toHaveBeenCalled();
+  });
+
+  it("deletes only the selected pupil's exact report period and its saved details", async () => {
+    const selected = result({
+      id: "selected-end-of-term",
+      student_id: "student-1",
+      class_id: "class-1",
+      academic_year: "2025/2026",
+      term: "Third",
+      assessment_type: "Combined",
+      status: "Published",
+    });
+    const selectedExamination = {
+      ...selected,
+      id: "selected-examination",
+      assessment_type: "Examination" as const,
+    };
+    const otherPupil = { ...selected, id: "other-pupil", student_id: "student-2" };
+    const otherClass = { ...selected, id: "other-class", class_id: "class-2" };
+    const otherSession = { ...selected, id: "other-session", academic_year: "2024/2025" };
+    const otherTerm = { ...selected, id: "other-term", term: "Second" as const };
+    const midterm = { ...selected, id: "midterm", assessment_type: "CA" as const };
+    const period = discoverReportCenterPeriods([selected], [{
+      id: "selected-report-card",
+      student_id: "student-1",
+      class_id: "class-1",
+      academic_year: "2025/2026",
+      term: "Third",
+      report_type: "End-of-Term",
+    }])[0];
+    const exactResults = getReportPeriodResults(period, [
+      selected,
+      selectedExamination,
+      otherPupil,
+      otherClass,
+      otherSession,
+      otherTerm,
+      midterm,
+    ]);
+    const deletedResultIds: string[] = [];
+    const deletedReportIds: string[] = [];
+    const deleteResultMock = vi.fn(async (id: string) => { deletedResultIds.push(id); });
+    const deleteReportMock = vi.fn(async (id: string) => { deletedReportIds.push(id); });
+
+    const outcome = await deleteReportPeriodRecords(
+      { ...period, results: exactResults },
+      true,
+      () => true,
+      deleteResultMock,
+      deleteReportMock,
+    );
+
+    expect(exactResults.map(({ id }) => id)).toEqual(["selected-end-of-term", "selected-examination"]);
+    expect(deletedResultIds).toEqual(["selected-end-of-term", "selected-examination"]);
+    expect(deletedReportIds).toEqual(["selected-report-card"]);
+    expect(outcome).toMatchObject({
+      cancelled: false,
+      deletedResultIds: ["selected-end-of-term", "selected-examination"],
+      failures: [],
+      deletedSavedReport: true,
+    });
+  });
+
+  it("retains saved report details when any subject-result deletion fails", async () => {
+    const [period] = discoverReportCenterPeriods([
+      result({ id: "delete-ok" }),
+      result({ id: "delete-fails", subject_id: "subject-2" }),
+    ], [{
+      id: "saved-report",
+      student_id: "student-1",
+      class_id: "class-1",
+      academic_year: "2025/2026",
+      term: "First",
+      report_type: "End-of-Term",
+    }]);
+    const deleteReportMock = vi.fn(async (id: string) => { void id; });
+
+    const outcome = await deleteReportPeriodRecords(
+      period,
+      true,
+      () => true,
+      async (resultId) => {
+        if (resultId === "delete-fails") throw new Error("Delete denied.");
+      },
+      deleteReportMock,
+    );
+
+    expect(outcome.deletedResultIds).toEqual(["delete-ok"]);
+    expect(outcome.failures).toEqual([{ resultId: "delete-fails", message: "Delete denied." }]);
+    expect(outcome.deletedSavedReport).toBe(false);
+    expect(deleteReportMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks unauthorized report-period deletion before confirmation or database calls", async () => {
+    const [period] = discoverReportCenterPeriods([result()], []);
+    const confirmMock = vi.fn(() => true);
+    const deleteResultMock = vi.fn(async (id: string) => { void id; });
+
+    await expect(deleteReportPeriodRecords(
+      period,
+      false,
+      confirmMock,
+      deleteResultMock,
+      vi.fn(async (id: string) => { void id; }),
+    )).rejects.toThrow("Only an administrator can delete report periods.");
+    expect(confirmMock).not.toHaveBeenCalled();
+    expect(deleteResultMock).not.toHaveBeenCalled();
+  });
+
+  it("confirms the selected report identity, status, and affected count while retaining older delete actions", () => {
+    expect(reportCardsPage).toContain("{canDeleteReport ? (");
+    expect(reportCardsPage).toContain("Delete Report Card");
+    expect(reportCardsPage).toContain("Admission number: ${admissionNumber}");
+    expect(reportCardsPage).toContain("Class: ${className}");
+    expect(reportCardsPage).toContain("Academic session: ${period.academicYear}");
+    expect(reportCardsPage).toContain("Term: ${period.term} Term");
+    expect(reportCardsPage).toContain("Report type: ${period.reportType}");
+    expect(reportCardsPage).toContain("Current publication status: ${currentStatus}");
+    expect(reportCardsPage).toContain("Subject-result records affected: ${currentPeriod.results.length}");
+    expect(reportCardsPage).toContain("This permanently deletes the listed subject-result records");
+    expect(reportCardsPage).toContain("Existing subject-result audit history is retained.");
+    expect(reportCardsPage).toContain("if (outcome.cancelled) return;");
+    expect(reportCardsPage).toContain("Delete Draft");
+    expect(groupedResults).toContain("<Trash2 size={16} /> Delete");
   });
 
   it("allows all 12 complete eligible Omolekan-style result rows and blocks a one-subject Midterm against observed class subjects", () => {
