@@ -278,7 +278,6 @@ export default function ResultsPage() {
         loadWithDiagnostics("getClasses", () => getClasses()),
         loadWithDiagnostics("getSubjects", () => getSubjects()),
       ]);
-
       const classesData = isTeacher && !isAdmin
         ? allClasses.filter((item) => permittedClassIds.includes(item.id))
         : allClasses;
@@ -528,6 +527,9 @@ export default function ResultsPage() {
 
   const handleEdit = (row: ResultRow): void => {
     const target = results.find((result) => result.id === row.id) ?? null;
+    if (!target || (isAdmin
+      ? !canAdministratorEditResult(target)
+      : !isTeacher || !user || !canTeacherEditResult(target, user.id, teacherAssignments))) return;
     setFormMode("edit");
     setEditingResult(target);
     setIsFormOpen(true);
@@ -548,6 +550,8 @@ export default function ResultsPage() {
       setError("The selected result is no longer available.");
       return;
     }
+    if (decision === "unpublish"
+      && !window.confirm(`Unpublish the result for ${row.studentName} — ${row.subjectName}? It will remain unpublished until explicitly published again.`)) return;
     const requestsMessage = decision === "return" || decision === "unpublish";
     const reason = requestsMessage
       ? window.prompt(decision === "return"
@@ -573,6 +577,11 @@ export default function ResultsPage() {
     if (decision === "return" && !window.confirm(`Return result for ${row.studentName} — ${row.subjectName} to the teacher?`)) return;
     try {
       await reviewResult(row.id, decision, trimmedReason);
+      if (decision === "unpublish") {
+        setSelectedRow((current) => current?.id === row.id
+          ? { ...current, status: "Returned", reviewReason: trimmedReason || null }
+          : current);
+      }
       await loadData();
     } catch (err) {
       const message = err instanceof Error ? err.message : `Unable to ${decision} result.`;
@@ -599,9 +608,9 @@ export default function ResultsPage() {
       return;
     }
 
-    const reportLabel = result.assessment_type === "CA" ? "Midterm Report" : "End-of-Term Report";
+    const admissionNumber = studentsMap.get(result.student_id)?.admission_number || "Unavailable";
     const confirmed = window.confirm(
-      `Permanently delete this result?\n\nPupil: ${row.studentName}\nClass: ${row.className}\nSubject: ${row.subjectName}\nReport: ${reportLabel}\nSession: ${row.academicYear}\nTerm: ${row.term}\nStatus: ${row.status}\n\nOnly this subject result will be deleted. This cannot be undone.`,
+      `Permanently delete this subject result?\n\nPupil: ${row.studentName}\nAdmission number: ${admissionNumber}\nSubject: ${row.subjectName}\nAcademic year: ${row.academicYear}\nTerm: ${row.term}\nCurrent status: ${result.status}\n\nOnly this subject-result record will be deleted. This deletion is permanent and cannot be undone.`,
     );
 
     if (!confirmed) {
@@ -1323,6 +1332,9 @@ export default function ResultsPage() {
             return;
           }
           const updateTarget = decision.action === "update" ? decision.result : undefined;
+          if (updateTarget?.status === "Published") {
+            throw new Error(`Unpublish ${student.first_name} ${student.last_name}'s ${subject.subject_name} result before updating it.`);
+          }
           if (updateTarget && !isAdmin
             && (!user || !canTeacherEditResult(updateTarget, user.id, teacherAssignments))) {
             throw new Error(`You no longer have permission to update ${student.first_name} ${student.last_name}'s ${subject.subject_name} result.`);
@@ -1672,7 +1684,7 @@ export default function ResultsPage() {
             canEdit={(row) => {
               const result = results.find((candidate) => candidate.id === row.id);
               return Boolean(result && (isAdmin
-                ? canAdministratorEditResult()
+                ? canAdministratorEditResult(result)
                 : isTeacher && user && canTeacherEditResult(result, user.id, teacherAssignments)));
             }}
             canDelete={(row) => {
@@ -1702,26 +1714,46 @@ export default function ResultsPage() {
         open={isFormOpen}
         title={formMode === "edit" ? "Edit Result" : "Add Result"}
         size="xl"
+        dialogStyle={{
+          height: "calc(100dvh - 32px)",
+          maxHeight: "calc(100dvh - 32px)",
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          boxSizing: "border-box",
+        }}
+        bodyStyle={{
+          flex: "1 1 auto",
+          minHeight: 0,
+          overflow: "hidden",
+        }}
         onClose={() => {
           setIsFormOpen(false);
           setEditingResult(null);
         }}
       >
-        <ResultForm
-          key={`${formMode}-${editingResult?.id ?? "new"}`}
-          mode={formMode}
-          result={editingResult}
-          students={students}
-          classes={classes}
-          subjects={subjects}
-          allowedAssignments={isTeacher && !isAdmin ? teacherAssignments : undefined}
-          academicYears={academicYears}
-          onClose={() => {
-            setIsFormOpen(false);
-            setEditingResult(null);
-          }}
-          onSaved={loadData}
-        />
+        <div
+          role="region"
+          aria-label="Result form; scroll vertically to view all fields"
+          tabIndex={0}
+          style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable" }}
+        >
+          <ResultForm
+            key={`${formMode}-${editingResult?.id ?? "new"}`}
+            mode={formMode}
+            result={editingResult}
+            students={students}
+            classes={classes}
+            subjects={subjects}
+            allowedAssignments={isTeacher && !isAdmin ? teacherAssignments : undefined}
+            academicYears={academicYears}
+            onClose={() => {
+              setIsFormOpen(false);
+              setEditingResult(null);
+            }}
+            onSaved={loadData}
+          />
+        </div>
       </AppModal>
 
       <AppModal
@@ -1739,29 +1771,35 @@ export default function ResultsPage() {
         bodyStyle={{
           flex: "1 1 auto",
           minHeight: 0,
-          overflowY: "auto",
-          scrollbarGutter: "stable",
+          overflow: "hidden",
           paddingBottom: 8,
         }}
         onClose={() => setIsBatchOpen(false)}
       >
-        <ResultBatchEntry
-          key={resumeBatchResult?.id ?? "new-batch-entry"}
-          students={students}
-          classes={classes.filter((schoolClass) => isAdmin || !isTeacher || teacherAssignments.some((assignment) => assignment.class_id === schoolClass.id))}
-          subjects={subjects}
-          results={results}
-          academicYears={academicYears}
-          userId={user?.id}
-          resumeResult={resumeBatchResult}
-          onSaved={loadData}
-          onEditExisting={(result) => {
-            setIsBatchOpen(false);
-            setFormMode("edit");
-            setEditingResult(result);
-            setIsFormOpen(true);
-          }}
-        />
+        <div
+          role="region"
+          aria-label="Batch result entry; scroll vertically to view all fields"
+          tabIndex={0}
+          style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable" }}
+        >
+          <ResultBatchEntry
+            key={resumeBatchResult?.id ?? "new-batch-entry"}
+            students={students}
+            classes={classes.filter((schoolClass) => isAdmin || !isTeacher || teacherAssignments.some((assignment) => assignment.class_id === schoolClass.id))}
+            subjects={subjects}
+            results={results}
+            academicYears={academicYears}
+            userId={user?.id}
+            resumeResult={resumeBatchResult}
+            onSaved={loadData}
+            onEditExisting={(result) => {
+              setIsBatchOpen(false);
+              setFormMode("edit");
+              setEditingResult(result);
+              setIsFormOpen(true);
+            }}
+          />
+        </div>
       </AppModal>
 
       <AppModal
@@ -1915,7 +1953,7 @@ export default function ResultsPage() {
         <div
           id="import-review-pupils"
           role="region"
-          aria-label="Import review pupils; scroll vertically and horizontally as needed"
+          aria-label="Import review pupils; scroll vertically to review pupils"
           tabIndex={0}
           style={{
             display: "grid",
@@ -1924,7 +1962,7 @@ export default function ResultsPage() {
             minWidth: 0,
             minHeight: 0,
             overflowY: "auto",
-            overflowX: "auto",
+            overflowX: "hidden",
             paddingRight: 4,
           }}
         >
@@ -2326,7 +2364,12 @@ export default function ResultsPage() {
                     Search subject choices
                     <input value={subjectSearch} onChange={(event) => setSubjectSearch(event.target.value)} placeholder="Search subjects" />
                   </label>
-                  <div style={{ minWidth: 0, maxWidth: "100%", overflowX: "auto" }}>
+                  <div
+                    role="region"
+                    aria-label={`Subject mappings for ${entry.studentName}; scroll horizontally to see all columns`}
+                    tabIndex={0}
+                    style={{ minWidth: 0, maxWidth: "100%", overflowX: "auto" }}
+                  >
                     <table style={{ width: "100%", minWidth: 1050, borderCollapse: "collapse" }}>
                       <thead>
                         <tr>
@@ -2343,7 +2386,8 @@ export default function ResultsPage() {
                           const key = importItemKey(entry, itemIndex);
                           const selectedExisting = matches.find((candidate) => candidate.id === importExistingChoices[key]);
                           const updateableMatches = matches.filter((candidate) =>
-                            isAdmin || Boolean(user && isTeacher && canTeacherEditResult(candidate, user.id, teacherAssignments)),
+                            (isAdmin && canAdministratorEditResult(candidate))
+                              || Boolean(user && isTeacher && canTeacherEditResult(candidate, user.id, teacherAssignments)),
                           );
                           const invalid = new Set(item.invalidMarks ?? []);
                           const markErrors = validateAssessmentMarks({
@@ -2460,23 +2504,50 @@ export default function ResultsPage() {
         open={isDetailOpen}
         title="Result Details"
         size="lg"
+        dialogStyle={{
+          height: "calc(100dvh - 32px)",
+          maxHeight: "calc(100dvh - 32px)",
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          boxSizing: "border-box",
+        }}
+        bodyStyle={{
+          flex: "1 1 auto",
+          minHeight: 0,
+          overflow: "hidden",
+        }}
         onClose={() => {
           setIsDetailOpen(false);
           setSelectedRow(null);
         }}
         footer={
-          <Button
-            type="button"
-            onClick={() => {
-              setIsDetailOpen(false);
-              setSelectedRow(null);
-            }}
-          >
-            Close
-          </Button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end", width: "100%" }}>
+            {isAdmin && selectedRow?.status === "Published" ? (
+              <Button type="button" variant="secondary" onClick={() => void handleReview(selectedRow, "unpublish")}>
+                Unpublish
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              onClick={() => {
+                setIsDetailOpen(false);
+                setSelectedRow(null);
+              }}
+            >
+              Close
+            </Button>
+          </div>
         }
       >
-        <ResultDetails row={selectedRow} />
+        <div
+          role="region"
+          aria-label="Result details; scroll vertically to view all fields"
+          tabIndex={0}
+          style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable" }}
+        >
+          <ResultDetails row={selectedRow} />
+        </div>
       </AppModal>
     </>
   );

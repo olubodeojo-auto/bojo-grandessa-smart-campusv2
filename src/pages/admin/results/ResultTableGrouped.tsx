@@ -102,7 +102,13 @@ export default function ResultTableGrouped({
   }
 
   return (
-    <div className="card" style={{ overflowX: "auto" }}>
+    <div
+      className="card"
+      role="region"
+      aria-label="Pupil results; scroll horizontally to view all subject columns"
+      tabIndex={0}
+      style={{ minWidth: 0, overflowX: "auto" }}
+    >
       <div style={{ display: "grid", gap: 0 }}>
         {groups.map((group) => {
           const groupKey = group.studentId;
@@ -111,7 +117,11 @@ export default function ResultTableGrouped({
           return (
             <div key={groupKey} style={{ borderBottom: "1px solid #e5e7eb" }}>
               {/* Group Header */}
-              <div
+              <button
+                type="button"
+                aria-expanded={isExpanded}
+                aria-controls={isExpanded ? `result-subjects-${groupKey}` : undefined}
+                aria-label={`${isExpanded ? "Collapse" : "Expand"} results for ${group.studentName}`}
                 style={{
                   display: "grid",
                   gridTemplateColumns: "40px minmax(180px,1fr) minmax(140px,1fr) 100px 120px 40px",
@@ -121,42 +131,47 @@ export default function ResultTableGrouped({
                   background: isExpanded ? "#f9fafb" : "transparent",
                   cursor: "pointer",
                   userSelect: "none",
+                  width: "100%",
+                  border: 0,
+                  color: "inherit",
+                  font: "inherit",
+                  textAlign: "left",
                 }}
                 onClick={() => toggleGroup(groupKey)}
               >
                 {/* Expand Toggle */}
-                <div style={{ display: "flex", justifyContent: "center" }}>
+                <span style={{ display: "flex", justifyContent: "center" }}>
                   {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                </div>
+                </span>
 
                 {/* Student & Class */}
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: "#1f2937" }}>{group.studentName}</div>
-                  <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{group.className}</div>
-                </div>
+                <span style={{ display: "block" }}>
+                  <span style={{ display: "block", fontWeight: 600, fontSize: 14, color: "#1f2937" }}>{group.studentName}</span>
+                  <span style={{ display: "block", fontSize: 12, color: "#6b7280", marginTop: 2 }}>{group.className}</span>
+                </span>
 
-                <div>
-                  <div style={{ fontSize: 12, color: "#6b7280" }}>Reports</div>
-                  <div style={{ fontWeight: 500, fontSize: 14, color: "#374151" }}>{group.rows.length} subject entries</div>
-                </div>
+                <span style={{ display: "block" }}>
+                  <span style={{ display: "block", fontSize: 12, color: "#6b7280" }}>Reports</span>
+                  <span style={{ display: "block", fontWeight: 500, fontSize: 14, color: "#374151" }}>{group.rows.length} subject entries</span>
+                </span>
 
-                <div>
-                  <div style={{ fontSize: 12, color: "#6b7280" }}>Subjects</div>
-                  <div style={{ fontWeight: 500, fontSize: 14, color: "#374151" }}>{group.subjectCount}</div>
-                </div>
+                <span style={{ display: "block" }}>
+                  <span style={{ display: "block", fontSize: 12, color: "#6b7280" }}>Subjects</span>
+                  <span style={{ display: "block", fontWeight: 500, fontSize: 14, color: "#374151" }}>{group.subjectCount}</span>
+                </span>
 
-                <div>
-                  <div style={{ fontSize: 12, color: "#6b7280" }}>Workflow</div>
-                  <div style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>{group.statuses.join(" · ")}</div>
-                </div>
+                <span style={{ display: "block" }}>
+                  <span style={{ display: "block", fontSize: 12, color: "#6b7280" }}>Workflow</span>
+                  <span style={{ display: "block", fontWeight: 500, fontSize: 13, color: "#374151" }}>{group.statuses.join(" · ")}</span>
+                </span>
 
-                <div />
-              </div>
+                <span />
+              </button>
 
               {/* Expanded Subject Results */}
               {isExpanded && (
-                <div style={{ background: "#fafafa", borderTop: "1px solid #e5e7eb" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <div id={`result-subjects-${groupKey}`} style={{ background: "#fafafa", borderTop: "1px solid #e5e7eb" }}>
+                  <table style={{ width: "100%", minWidth: 1050, borderCollapse: "collapse" }}>
                     <thead>
                       <tr>
                         <th style={thStyle}>Class</th>
@@ -189,56 +204,60 @@ export default function ResultTableGrouped({
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                               <button
                                 type="button"
-                                aria-label={`View result for ${row.studentName} - ${row.subjectName}`}
+                                aria-label={`View Details for ${row.studentName} - ${row.subjectName}`}
                                 onClick={() => onView(row)}
                                 style={actionButtonStyle}
                               >
-                                <Eye size={16} />
+                                <Eye size={16} /> View Details
                               </button>
 
                               <button
                                 type="button"
-                                aria-label={`Edit result for ${row.studentName} - ${row.subjectName}`}
+                                aria-label={`Edit Result for ${row.studentName} - ${row.subjectName}`}
                                 onClick={() => onEdit(row)}
-                                style={actionButtonStyle}
+                                style={{ ...actionButtonStyle, opacity: canEdit(row) ? 1 : 0.55 }}
                                 disabled={!canEdit(row)}
+                                title={!canEdit(row)
+                                  ? row.status === "Published"
+                                    ? "Unpublish this result before editing it."
+                                    : "You do not have permission to edit this result."
+                                  : undefined}
                               >
-                                <Pencil size={16} />
+                                <Pencil size={16} /> Edit Result
                               </button>
 
-                              <button
-                                type="button"
-                                aria-label={`Delete result for ${row.studentName} - ${row.subjectName}`}
-                                onClick={() => {
-                                  void onDelete(row);
-                                }}
-                                style={{ ...actionButtonStyle, color: "#dc2626" }}
-                                disabled={!canDelete(row)}
-                              >
-                                <Trash2 size={16} />
-                              </button>
+                              {canDelete(row) ? (
+                                <button
+                                  type="button"
+                                  aria-label={`Delete result for ${row.studentName} - ${row.subjectName}`}
+                                  onClick={() => void onDelete(row)}
+                                  style={{ ...actionButtonStyle, color: "#dc2626" }}
+                                >
+                                  <Trash2 size={16} /> Delete
+                                </button>
+                              ) : null}
 
                               {canPublish(row) ? (
-                                <button type="button" aria-label={`Publish result for ${row.studentName} - ${row.subjectName}`} onClick={() => void onReview(row, "publish")} style={{ ...actionButtonStyle, color: "#1d4ed8" }}>
-                                  <Upload size={16} />
+                                <button type="button" aria-label={`Publish Result for ${row.studentName} - ${row.subjectName}`} onClick={() => void onReview(row, "publish")} style={{ ...actionButtonStyle, color: "#1d4ed8" }}>
+                                  <Upload size={16} /> Publish Result
                                 </button>
                               ) : null}
 
                               {canSubmit(row) ? (
-                                <button type="button" aria-label={`Submit result for review for ${row.studentName} - ${row.subjectName}`} onClick={() => void onSubmit(row)} style={{ ...actionButtonStyle, color: "#1d4ed8" }}>
-                                  <Send size={16} />
+                                <button type="button" aria-label={`Submit for Review for ${row.studentName} - ${row.subjectName}`} onClick={() => void onSubmit(row)} style={{ ...actionButtonStyle, color: "#1d4ed8" }}>
+                                  <Send size={16} /> Submit for Review
                                 </button>
                               ) : null}
 
                               {canReturn(row) ? (
-                                <button type="button" aria-label={`Return result for correction for ${row.studentName} - ${row.subjectName}`} onClick={() => void onReview(row, "return")} style={{ ...actionButtonStyle, color: "#b45309" }}>
-                                  <CornerUpLeft size={16} />
+                                <button type="button" aria-label={`Return for Correction for ${row.studentName} - ${row.subjectName}`} onClick={() => void onReview(row, "return")} style={{ ...actionButtonStyle, color: "#b45309" }}>
+                                  <CornerUpLeft size={16} /> Return for Correction
                                 </button>
                               ) : null}
 
                               {canUnpublish(row) ? (
-                                <button type="button" aria-label={`Unpublish result for ${row.studentName} - ${row.subjectName}`} onClick={() => void onReview(row, "unpublish")} style={{ ...actionButtonStyle, color: "#b45309" }}>
-                                  <CornerUpLeft size={16} />
+                                <button type="button" aria-label={`Unpublish for ${row.studentName} - ${row.subjectName}`} onClick={() => void onReview(row, "unpublish")} style={{ ...actionButtonStyle, color: "#b45309" }}>
+                                  <CornerUpLeft size={16} /> Unpublish
                                 </button>
                               ) : null}
                             </div>
@@ -273,9 +292,15 @@ const tdStyle: CSSProperties = {
 };
 
 const actionButtonStyle: CSSProperties = {
-  border: "none",
-  background: "transparent",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 5,
+  border: "1px solid #d1d5db",
+  borderRadius: 6,
+  background: "#fff",
   cursor: "pointer",
-  padding: 0,
+  padding: "5px 7px",
   color: "#2E7D32",
+  fontSize: 12,
+  whiteSpace: "nowrap",
 };

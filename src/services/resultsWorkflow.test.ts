@@ -43,7 +43,7 @@ import { calculateResult, transitionAssessmentType, validateAssessmentMarks } fr
 import { calculateEndOfTermMetrics, calculateMidtermMetrics } from "../utils/reportCalculations";
 import { calculateAgeFromDateOfBirth, getReportSummaryValues, isMatchingPublishedReportResult } from "../utils/reportCardPresentation";
 import { getResultBatchDraftResume, getSavedResultDrafts, groupSavedResultDrafts } from "../utils/resultDraftRecovery";
-import { acquireReportPublishLock, canPublishReportCenterPeriod, discoverReportCenterPeriods, getReportCenterCompleteness, getReportCenterPeriodStatus, getReportCenterPublishBlockReason, publishReportResultsAndVerify } from "../utils/reportCenter";
+import { acquireReportPublishLock, canDeleteDraftReportPeriod, canPublishReportCenterPeriod, discoverReportCenterPeriods, getReportCenterCompleteness, getReportCenterPeriodStatus, getReportCenterPublishActionState, getReportCenterPublishBlockReason, publishReportResultsAndVerify, unpublishReportResultsAndVerify, type ReportCenterPeriod } from "../utils/reportCenter";
 import { resolveReportTermId, toStoredTermName, type AcademicTermMatch } from "../utils/reportTermResolution";
 import { validateAcademicSessionSetup } from "../utils/academicSessionValidation";
 import type { AcademicSessionSetup } from "../types/academicSession";
@@ -57,6 +57,8 @@ import {
   canAdministratorDeleteResult,
   canAdministratorEditResult,
   canPublishResult,
+  getResultPublishBlockReason,
+  getResultUnpublishAuditEvidence,
   canTeacherEditResult,
   canTeacherSubmitResult,
   canTransitionResult,
@@ -96,11 +98,26 @@ const publishResultMigrationFiles = import.meta.glob<string>(
   { eager: true, query: "?raw", import: "default" },
 );
 const publishResultMigration = Object.values(publishResultMigrationFiles)[0] ?? "";
+const legacyRepublishMigrationFiles = import.meta.glob<string>(
+  "../../supabase/migrations/20261018120000_results_audit_backed_legacy_republish.sql",
+  { eager: true, query: "?raw", import: "default" },
+);
+const legacyRepublishMigration = Object.values(legacyRepublishMigrationFiles)[0] ?? "";
+const adminRepublishMigrationFiles = import.meta.glob<string>(
+  "../../supabase/migrations/20261018160000_allow_admin_republish_without_marks_change.sql",
+  { eager: true, query: "?raw", import: "default" },
+);
+const adminRepublishMigration = Object.values(adminRepublishMigrationFiles)[0] ?? "";
 const reportCardServiceFiles = import.meta.glob<string>(
   "./reportCardService.ts",
   { eager: true, query: "?raw", import: "default" },
 );
 const reportCardService = Object.values(reportCardServiceFiles)[0] ?? "";
+const resultServiceFiles = import.meta.glob<string>(
+  "./resultService.ts",
+  { eager: true, query: "?raw", import: "default" },
+);
+const resultService = Object.values(resultServiceFiles)[0] ?? "";
 const reportCardsPageFiles = import.meta.glob<string>(
   "../pages/admin/results/ReportCardsPage.tsx",
   { eager: true, query: "?raw", import: "default" },
@@ -116,6 +133,22 @@ const resultFormFiles = import.meta.glob<string>(
   { eager: true, query: "?raw", import: "default" },
 );
 const resultForm = Object.values(resultFormFiles)[0] ?? "";
+const batchEntryFiles = import.meta.glob<string>(
+  "../pages/admin/results/ResultBatchEntry.tsx",
+  { eager: true, query: "?raw", import: "default" },
+);
+const batchEntry = Object.values(batchEntryFiles)[0] ?? "";
+const groupedResultsFiles = import.meta.glob<string>(
+  "../pages/admin/results/ResultTableGrouped.tsx",
+  { eager: true, query: "?raw", import: "default" },
+);
+const groupedResults = Object.values(groupedResultsFiles)[0] ?? "";
+const reportCardDocumentFiles = import.meta.glob<string>(
+  "../components/reports/ReportCardDocument.tsx",
+  { eager: true, query: "?raw", import: "default" },
+);
+const reportCardDocument = Object.values(reportCardDocumentFiles)[0] ?? "";
+const reportCardStyles = readFileSync(resolve("src/styles/report-card.css"), "utf8");
 const appModalFiles = import.meta.glob<string>(
   "../components/modals/AppModal.tsx",
   { eager: true, query: "?raw", import: "default" },
@@ -693,6 +726,131 @@ describe("Report Center period discovery and readiness", () => {
     expect(canPublishReportCenterPeriod(trixiePeriod!, allResults, true)).toBe(false);
   });
 
+  it("allows a complete 12-subject Returned period after every subject has an assessment correction", () => {
+    const snapshot = ["Combined", 30, 50, 80, null];
+    const returnedRows = Array.from({ length: 12 }, (_, index) => result({
+      id: `returned-${index}`,
+      student_id: "synthetic-pupil",
+      class_id: "basic-1",
+      class_name: "Basic 1",
+      subject_id: `subject-${index}`,
+      subject_name: `Subject ${index + 1}`,
+      academic_year: "2025/2026",
+      term: "Third",
+      assessment_type: "Combined",
+      continuous_assessment: 31,
+      examination: 50,
+      total_score: 81,
+      status: "Returned",
+      published_at: "2026-10-01T00:00:00Z",
+      returned_assessment_snapshot: snapshot,
+    }));
+    const [period] = discoverReportCenterPeriods(returnedRows, []);
+
+    expect(getReportCenterCompleteness(period).complete).toBe(true);
+    expect(getResultPublishBlockReason(returnedRows[0], true)).toBe("");
+    expect(canPublishReportCenterPeriod(period, returnedRows, true)).toBe(true);
+    expect(getReportCenterPublishBlockReason(period, returnedRows, true)).toBe("");
+    expect(getReportCenterPublishActionState(period, returnedRows, true)).toEqual({
+      visible: true,
+      disabled: false,
+      reason: "",
+    });
+    expect(getReportCenterPublishActionState(period, returnedRows, true, true).disabled).toBe(true);
+    expect(getReportCenterPublishActionState(period, returnedRows, false).visible).toBe(false);
+  });
+
+  it("allows a previously published Returned subject with an unchanged assessment in a complete period", () => {
+    const snapshot = ["Combined", 30, 50, 80, null];
+    const returnedRows = Array.from({ length: 12 }, (_, index) => result({
+      id: `returned-${index}`,
+      student_id: "synthetic-pupil",
+      class_id: "basic-1",
+      class_name: "Basic 1",
+      subject_id: `subject-${index}`,
+      subject_name: index === 4 ? "Mathematics" : `Subject ${index + 1}`,
+      academic_year: "2025/2026",
+      term: "Third",
+      assessment_type: "Combined",
+      continuous_assessment: index === 4 ? 30 : 31,
+      examination: 50,
+      total_score: index === 4 ? 80 : 81,
+      status: "Returned",
+      published_at: "2026-10-01T00:00:00Z",
+      returned_assessment_snapshot: snapshot,
+    }));
+    const [period] = discoverReportCenterPeriods(returnedRows, []);
+    expect(getReportCenterCompleteness(period).complete).toBe(true);
+    expect(canPublishReportCenterPeriod(period, returnedRows, true)).toBe(true);
+    expect(getReportCenterPublishBlockReason(period, returnedRows, true)).toBe("");
+    expect(getReportCenterPublishActionState(period, returnedRows, true)).toEqual({
+      visible: true,
+      disabled: false,
+      reason: "",
+    });
+  });
+
+  it("allows audit-verified legacy unpublishes with null timestamps at report-period level", () => {
+    const snapshot = ["Combined", 30, 50, 80, null];
+    const rows = Array.from({ length: 12 }, (_, index) => result({
+      id: `legacy-returned-${index}`,
+      student_id: "synthetic-pupil",
+      class_id: "basic-1",
+      class_name: "Basic 1",
+      subject_id: `subject-${index}`,
+      subject_name: `Subject ${index + 1}`,
+      academic_year: "2025/2026",
+      term: "Third",
+      status: "Returned",
+      published_at: null,
+      continuous_assessment: 31,
+      total_score: 81,
+      returned_assessment_snapshot: snapshot,
+    }));
+    const evidence = new Map(rows.map((row) => [row.id, "verified" as const]));
+    const [period] = discoverReportCenterPeriods(rows, []);
+
+    expect(getReportCenterCompleteness(period).complete).toBe(true);
+    expect(getReportCenterPublishBlockReason(period, rows, true, evidence)).toBe("");
+    expect(getReportCenterPublishActionState(period, rows, true, false, "", evidence)).toMatchObject({
+      visible: true,
+      disabled: false,
+      reason: "",
+    });
+  });
+
+  it("keeps the administrator Publish action visible and disabled with its blocker reason", () => {
+    expect(reportCardsPage).toContain("{publishAction.visible ? (");
+    expect(reportCardsPage).toContain("disabled={publishAction.disabled}");
+    expect(reportCardsPage).toContain("getReportCenterPublishActionState(");
+    expect(reportCardsPage).toContain("Publishing unavailable: {publishBlockReason}");
+  });
+
+  it("uses audit-verified unpublish evidence in both the lifecycle trigger and review RPC", () => {
+    expect(legacyRepublishMigration).toContain("public.has_verified_result_unpublish_history");
+    expect(legacyRepublishMigration).toContain("audit.old_record ->> 'status' = 'Published'");
+    expect(legacyRepublishMigration).toContain("audit.new_record ->> 'status' = 'Returned'");
+    expect(legacyRepublishMigration).toContain("public.has_verified_result_unpublish_history(old.id, old.returned_assessment_snapshot)");
+    expect(legacyRepublishMigration).toContain("public.has_verified_result_unpublish_history(target.id, target.returned_assessment_snapshot)");
+    expect(legacyRepublishMigration).toContain("old.published_at is not null");
+    expect(legacyRepublishMigration).toContain("target.published_at is not null");
+    expect(legacyRepublishMigration).toContain(
+      "A returned result must have verified publication history and a valid snapshot; assessment values must be corrected unless verified legacy history confirms a missing publication timestamp.",
+    );
+  });
+
+  it("loads scoped Returned audit evidence and fails closed when the lookup fails", () => {
+    expect(resultService).toContain('.from("result_change_log")');
+    expect(resultService).toContain('.select("result_id, action, old_record, new_record")');
+    expect(resultService).not.toContain('.eq("action", "UPDATE")');
+    expect(resultService).toContain('.in("result_id", candidates.map((result) => result.id))');
+    expect(reportCardsPage).toContain("getResultPublicationEvidence(candidates)");
+    expect(reportCardsPage).toContain("setPublicationEvidenceError");
+    expect(reportCardsPage).toContain("function getPublicationEvidenceErrorForPeriod(period: ReportCenterPeriod): string");
+    expect(reportCardsPage).toContain("const publishBlockReason = getPublicationEvidenceErrorForPeriod(period)");
+    expect(reportCardsPage).toContain("|| getReportCenterPublishBlockReason");
+  });
+
   it("reports successful publication only after the refreshed saved statuses are Published", async () => {
     const pending = [result({ id: "publish-1" }), result({ id: "publish-2", subject_id: "subject-2" })];
     const calls: string[] = [];
@@ -755,6 +913,60 @@ describe("Report Center period discovery and readiness", () => {
     expect(outcome.publishedResultIds).toEqual([]);
     expect(outcome.verificationError).toBe("Network unavailable");
     expect(outcome.failures).toEqual([{ resultId: "uncertain", message: "The saved status could not be verified." }]);
+  });
+
+  it("unpublishes report subjects through the authorized callback and verifies Returned statuses", async () => {
+    const published = [result({ id: "published-1", status: "Published" }), result({ id: "published-2", status: "Published", subject_id: "subject-2" })];
+    const calls: Array<[string, string | undefined]> = [];
+    const outcome = await unpublishReportResultsAndVerify(
+      published,
+      async (resultId, reason) => { calls.push([resultId, reason]); },
+      async () => published.map((row) => ({ ...row, status: "Returned" })),
+      "Correction required",
+    );
+
+    expect(calls).toEqual([
+      ["published-1", "Correction required"],
+      ["published-2", "Correction required"],
+    ]);
+    expect(outcome.returnedResultIds).toEqual(["published-1", "published-2"]);
+    expect(outcome.failures).toEqual([]);
+    expect(outcome.verificationError).toBeNull();
+  });
+
+  it("reports unpublish RPC failures and refuses to claim success when refresh fails", async () => {
+    const published = [result({ id: "rpc-error", status: "Published" })];
+    const failedRpc = await unpublishReportResultsAndVerify(
+      published,
+      async () => { throw new Error("Not authorized"); },
+      async () => published,
+    );
+    expect(failedRpc.returnedResultIds).toEqual([]);
+    expect(failedRpc.failures).toEqual([{ resultId: "rpc-error", message: "Not authorized" }]);
+
+    const failedRefresh = await unpublishReportResultsAndVerify(
+      published,
+      async () => {},
+      async () => { throw new Error("Network unavailable"); },
+    );
+    expect(failedRefresh.refreshedResults).toBeNull();
+    expect(failedRefresh.verificationError).toBe("Network unavailable");
+  });
+
+  it("allows period deletion only for administrator-owned all-Draft results", () => {
+    const draftPeriod: ReportCenterPeriod = {
+      key: "pupil|class|2025/2026|First|End-of-Term",
+      studentId: "pupil",
+      classId: "class",
+      academicYear: "2025/2026",
+      term: "First",
+      reportType: "End-of-Term",
+      results: [result({ status: "Draft" }), result({ id: "draft-2", status: "Draft", subject_id: "subject-2" })],
+    };
+    expect(canDeleteDraftReportPeriod(draftPeriod, true)).toBe(true);
+    expect(canDeleteDraftReportPeriod(draftPeriod, false)).toBe(false);
+    expect(canDeleteDraftReportPeriod({ ...draftPeriod, results: [{ ...draftPeriod.results[0], status: "Published" }] }, true)).toBe(false);
+    expect(canDeleteDraftReportPeriod({ ...draftPeriod, results: [] }, true)).toBe(false);
   });
 
   it("prevents duplicate publish submissions while a period is in flight", () => {
@@ -1719,7 +1931,7 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain('position: "sticky"');
     expect(resultsPage).toContain('overflowY: "auto"');
     expect(resultsPage).toContain('id="import-review-pupils"');
-    expect(resultsPage).toContain('aria-label="Import review pupils; scroll vertically and horizontally as needed"');
+    expect(resultsPage).toContain('aria-label="Import review pupils; scroll vertically to review pupils"');
     expect(resultsPage).toContain('tabIndex={0}');
     expect(resultsPage).toContain('overflowY: "auto"');
     expect(resultsPage).toContain('overflowX: "auto"');
@@ -1840,8 +2052,10 @@ describe("result lifecycle permissions", () => {
     expect(canTeacherSubmitResult(result({ status: "Submitted" }), "teacher-1", [assignedPair])).toBe(false);
   });
 
-  it("retains administrator management access to published records", () => {
-    expect(canAdministratorEditResult()).toBe(true);
+  it("blocks administrator editing of published results until they are unpublished", () => {
+    expect(canAdministratorEditResult(result({ status: "Draft" }))).toBe(true);
+    expect(canAdministratorEditResult(result({ status: "Returned" }))).toBe(true);
+    expect(canAdministratorEditResult(result({ status: "Published" }))).toBe(false);
     expect(canAdministratorDeleteResult(true)).toBe(true);
     expect(canAdministratorDeleteResult(false)).toBe(false);
     expect(resultsMigration).toContain("Only an administrator can permanently delete results.");
@@ -1849,8 +2063,69 @@ describe("result lifecycle permissions", () => {
     expect(resultsMigration).not.toMatch(/create policy "Results teachers delete own drafts"/);
   });
 
-  it("allows admins to publish drafts directly and blocks teachers and unchanged unpublished results", () => {
-    expect(canAdministratorEditResult()).toBe(true);
+  it("blocks Published edits in single, batch, and workbook entry paths", () => {
+    expect(resultForm).toContain('if (mode === "edit" && result?.status === "Published")');
+    expect(batchEntry).toContain('row.matches.some((match) => match.status === "Published")');
+    expect(batchEntry).toContain('disabled={existing.status === "Published"}');
+    expect(resultsPage).toContain('if (updateTarget?.status === "Published")');
+    expect(resultsPage).toContain('(isAdmin && canAdministratorEditResult(candidate))');
+  });
+
+  it("keeps explicit unpublish and republish as separate lifecycle actions", () => {
+    expect(resultsPage).toContain('window.confirm(`Unpublish the result for');
+    expect(resultsPage).toContain('reviewResult(row.id, decision, trimmedReason)');
+    expect(resultsPage).toMatch(/>\s*Unpublish\s*<\/Button>/);
+    expect(resultForm).toContain('status: mode === "edit" ? result?.status ?? "Draft" : "Draft"');
+    expect(resultsPage).toContain('aria-label="Result details; scroll vertically to view all fields"');
+    expect(resultsPage).toContain('style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable" }}');
+    expect(canAdministratorEditResult(result({ status: "Returned" }))).toBe(true);
+    expect(canAdministratorEditResult(result({ status: "Published" }))).toBe(false);
+  });
+
+  it("keeps result grids and report-card tables keyboard-scrollable", () => {
+    expect(groupedResults).toContain('aria-expanded={isExpanded}');
+    expect(groupedResults).toContain('aria-label="Pupil results; scroll horizontally to view all subject columns"');
+    expect(groupedResults).toContain('minWidth: 1050');
+    expect(batchEntry).toContain('aria-label="Batch subject results; scroll horizontally to see all columns"');
+    expect(batchEntry).toContain('minWidth: 900');
+    expect(resultsPage).toContain('aria-label={`Subject mappings for ${entry.studentName}; scroll horizontally to see all columns`}');
+    expect(resultsPage).toContain('overflowX: "hidden"');
+    expect(reportCardDocument).toContain('role="region"');
+    expect(reportCardStyles).toContain('min-width: 620px');
+    expect(reportCardStyles).toContain('min-width: 0;');
+  });
+
+  it("shows individual-result Delete only when the administrator permission allows it", () => {
+    expect(groupedResults).toContain("View Details");
+    expect(groupedResults).toContain("Edit Result");
+    expect(groupedResults).toContain("{canDelete(row) ? (");
+    expect(groupedResults).toContain("<Trash2 size={16} /> Delete");
+    expect(groupedResults).toContain("Unpublish");
+    expect(groupedResults).toContain("Unpublish this result before editing it.");
+    expect(resultsPage).toContain("return Boolean(result && canAdministratorDeleteResult(isAdmin));");
+    expect(resultsPage).toContain("if (!result || !canAdministratorDeleteResult(isAdmin))");
+
+    const statuses = ["Draft", "Submitted", "Returned", "Published"] as const;
+    for (const status of statuses) {
+      expect(canAdministratorDeleteResult(true), `${status} administrator delete permission`).toBe(true);
+      expect(canAdministratorDeleteResult(false), `${status} non-administrator delete permission`).toBe(false);
+    }
+  });
+
+  it("confirms permanent deletion details and targets only the selected subject-result row", () => {
+    expect(resultsPage).toContain("Admission number: ${admissionNumber}");
+    expect(resultsPage).toContain('studentsMap.get(result.student_id)?.admission_number || "Unavailable"');
+    expect(resultsPage).toContain("Pupil: ${row.studentName}");
+    expect(resultsPage).toContain("Subject: ${row.subjectName}");
+    expect(resultsPage).toContain("Academic year: ${row.academicYear}");
+    expect(resultsPage).toContain("Term: ${row.term}");
+    expect(resultsPage).toContain("Current status: ${result.status}");
+    expect(resultsPage).toContain("Only this subject-result record will be deleted. This deletion is permanent");
+    expect(resultsPage).toContain("await deleteResult(row.id);");
+  });
+
+  it("allows admins to publish drafts and previously published Returned results without changing marks", () => {
+    expect(canAdministratorEditResult(result({ status: "Draft" }))).toBe(true);
     expect(canPublishResult(result({ status: "Draft" }), true)).toBe(true);
     expect(canPublishResult(result({ status: "Draft", created_by: "admin-1" }), true)).toBe(true);
     expect(canPublishResult(result({ status: "Draft" }), false)).toBe(false);
@@ -1865,8 +2140,110 @@ describe("result lifecycle permissions", () => {
       { returned_assessment_snapshot: returnedSnapshot },
     );
     expect(canPublishResult(result({ status: "Returned" }), true)).toBe(false);
-    expect(canPublishResult(unchangedUnpublished, true)).toBe(false);
+    expect(canPublishResult(unchangedUnpublished, true)).toBe(true);
     expect(canPublishResult(correctedUnpublished, true)).toBe(true);
+
+    const unchangedAuditVerified = result({
+      status: "Returned",
+      published_at: null,
+      returned_assessment_snapshot: returnedSnapshot,
+    });
+    expect(getResultPublishBlockReason(unchangedAuditVerified, true, "verified")).toBe("");
+    expect(canPublishResult(unchangedAuditVerified, true, "verified")).toBe(true);
+    expect(getResultPublishBlockReason(
+      { ...unchangedAuditVerified, returned_assessment_snapshot: null },
+      true,
+      "verified",
+    )).toContain("saved pre-unpublish assessment snapshot is unavailable");
+  });
+
+  it("allows a previously published legacy row after audited unpublish and a real assessment correction", () => {
+    const snapshot = ["Combined", 30, 50, 80, null];
+    const returned = result({
+      id: "legacy-unpublished",
+      status: "Returned",
+      published_at: null,
+      continuous_assessment: 31,
+      examination: 50,
+      total_score: 81,
+      returned_assessment_snapshot: snapshot,
+    });
+    const audit = [{
+      result_id: returned.id,
+      action: "UPDATE",
+      old_record: {
+        id: returned.id,
+        status: "Published",
+        assessment_type: "Combined",
+        continuous_assessment: 30,
+        examination: 50,
+        total_score: 80,
+        maximum_score: null,
+      },
+      new_record: {
+        id: returned.id,
+        status: "Returned",
+        returned_assessment_snapshot: snapshot,
+      },
+    }];
+    const evidence = getResultUnpublishAuditEvidence(returned.id, snapshot, audit);
+
+    expect(evidence).toBe("verified");
+    expect(getResultPublishBlockReason(returned, true, evidence)).toBe("");
+    expect(canPublishResult(returned, true, evidence)).toBe(true);
+    expect(canTransitionResult(returned, "publish", true, undefined, evidence)).toBe(true);
+    expect(canTransitionResult(returned, "publish", true)).toBe(false);
+  });
+
+  it("keeps never-published Returned results on teacher submission and administrator review", () => {
+    const neverPublished = result({ status: "Returned", published_at: null });
+    const neverPublishedAudit = [{
+      result_id: neverPublished.id,
+      action: "INSERT",
+      old_record: null,
+      new_record: { id: neverPublished.id, status: "Draft" },
+    }];
+    const evidence = getResultUnpublishAuditEvidence(neverPublished.id, null, neverPublishedAudit);
+    const snapshotOnly = result({
+      id: "snapshot-is-not-history",
+      status: "Returned",
+      published_at: null,
+      returned_assessment_snapshot: ["Combined", 30, 50, 80, null],
+    });
+    const neverPublishedWithSnapshot = result({
+      id: "never-published-with-snapshot",
+      status: "Returned",
+      published_at: null,
+      returned_assessment_snapshot: ["Combined", 30, 50, 80, null],
+    });
+
+    expect(evidence).toBe("never-published");
+    expect(getResultPublishBlockReason(neverPublished, true, evidence))
+      .toContain("assigned teacher must submit it for administrator review");
+    expect(canPublishResult(neverPublished, true, evidence)).toBe(false);
+    expect(getResultPublishBlockReason(neverPublishedWithSnapshot, true, "never-published"))
+      .toContain("assigned teacher must submit it for administrator review");
+    expect(canPublishResult(neverPublishedWithSnapshot, true, "never-published")).toBe(false);
+    expect(canTeacherSubmitResult(neverPublished, "teacher-1", [assignedPair])).toBe(true);
+    expect(canPublishResult({ ...neverPublishedWithSnapshot, status: "Submitted" }, true)).toBe(true);
+    expect(getResultUnpublishAuditEvidence(snapshotOnly.id, snapshotOnly.returned_assessment_snapshot, [])).toBe("unverified");
+    expect(getResultPublishBlockReason(snapshotOnly, true, "unverified")).toContain("complete audit trail is unavailable");
+    expect(canPublishResult(snapshotOnly, true, "unverified")).toBe(false);
+  });
+
+  it("blocks audit transitions whose prior assessment does not match the saved snapshot", () => {
+    const snapshot = ["Combined", 30, 50, 80, null];
+    const returned = result({ id: "contradictory", status: "Returned", published_at: null, returned_assessment_snapshot: snapshot });
+    const evidence = getResultUnpublishAuditEvidence(returned.id, snapshot, [{
+      result_id: returned.id,
+      action: "UPDATE",
+      old_record: { id: returned.id, status: "Published", assessment_type: "Combined", continuous_assessment: 29, examination: 50, total_score: 79, maximum_score: null },
+      new_record: { id: returned.id, status: "Returned", returned_assessment_snapshot: snapshot },
+    }]);
+
+    expect(evidence).toBe("contradictory");
+    expect(getResultPublishBlockReason(returned, true, evidence))
+      .toContain("does not substantiate this Returned result's current assessment snapshot");
   });
 
   it("keeps partial CA and incomplete final calculations free of final fields", () => {
@@ -1905,13 +2282,13 @@ describe("result lifecycle permissions", () => {
     expect(canTransitionResult(published, "unpublish", true, " ")).toBe(true);
     expect(canTransitionResult(published, "unpublish", true, "x".repeat(251))).toBe(false);
     expect(canTransitionResult(published, "unpublish", false, "Correction")).toBe(false);
-    expect(canTransitionResult(returned, "publish", true)).toBe(false);
+    expect(canTransitionResult(returned, "publish", true)).toBe(true);
     expect(canTransitionResult(returned, "publish", false)).toBe(false);
     expect(canTransitionResult(correctedReturned, "publish", true)).toBe(true);
     expect(canTransitionResult(correctedReturned, "publish", false)).toBe(false);
   });
 
-  it("requires an assessment-value correction before republishing an unpublished result", () => {
+  it("allows unchanged republishing with saved prior-publication evidence", () => {
     const snapshot = ["Combined", 30, 50, 80];
     const unchanged = Object.assign(
       result({ status: "Returned", published_at: "2026-10-15T10:00:00Z" }),
@@ -1929,7 +2306,7 @@ describe("result lifecycle permissions", () => {
     expect(hasAssessmentCorrectionSinceReturn(unchanged)).toBe(false);
     expect(hasAssessmentCorrectionSinceReturn(remarkOnly)).toBe(false);
     expect(hasAssessmentCorrectionSinceReturn(changedAssessment)).toBe(true);
-    expect(canPublishResult(unchanged, true)).toBe(false);
+    expect(canPublishResult(unchanged, true)).toBe(true);
     expect(canPublishResult(changedAssessment, true)).toBe(true);
     expect(hasAssessmentCorrectionSinceReturn(result({ status: "Returned" }))).toBe(false);
   });
@@ -2007,7 +2384,7 @@ describe("results workflow migration contract", () => {
     expect(resultsMigration).toMatch(/new\.student_id, new\.class_id, new\.subject_id, new\.teacher_id[\s\S]*?old\.student_id, old\.class_id, old\.subject_id, old\.teacher_id/);
   });
 
-  it("adds result columns before indexes and leaves the assignment schema untouched", () => {
+  it("adds result columns after checking the live schema and preserves existing result rows", () => {
     expect(resultsMigration.indexOf("add column if not exists class_id uuid"))
       .toBeLessThan(resultsMigration.indexOf("create index if not exists idx_results_class_id"));
     expect(resultsMigration).toContain("add column if not exists assessment_type text,");
@@ -2015,7 +2392,8 @@ describe("results workflow migration contract", () => {
     expect(resultsMigration).toContain("add column if not exists class_name text");
     expect(resultsMigration).toContain("add column if not exists subject_name text");
     expect(resultsMigration).toContain("add column if not exists teacher_name text");
-    expect(resultsMigration).toMatch(/if exists \(select 1 from public\.results\)[\s\S]*?raise exception 'Results already exist/);
+    expect(resultsMigration).toContain("-- Preserve existing rows; never infer assessment type, class, or subject.");
+    expect(resultsMigration).toContain("The live results schema differs from the required results contract; review columns before applying this migration.");
     expect(resultsMigration).not.toContain("default 'Combined'");
     expect(resultsMigration).not.toContain("with unique_class_names as");
     expect(resultsMigration).not.toContain("with unique_subject_names as");
@@ -2146,25 +2524,42 @@ describe("results workflow migration contract", () => {
 
   it("wires discovered report periods to preview, edit, result review, and eligible publication", () => {
     const reviewFunction = resultsMigration.match(/create or replace function public\.review_result[\s\S]*?\$\$;/)?.[0] ?? "";
+    const adminReviewFunction = adminRepublishMigration.match(/create or replace function public\.review_result[\s\S]*?\$\$;/)?.[0] ?? "";
     expect(reportCardsPage).toContain("discoverReportCenterPeriods(results, savedReports)");
     expect(reportCardsPage).toContain('aria-label="Search pupil by name or admission number"');
-    expect(reportCardsPage).toContain("async function removeSavedReportCard(record: SavedReportCard)");
-    expect(reportCardsPage).toContain("await deleteReportCard(record.id)");
-    expect(reportCardsPage).toContain("Delete 1 saved report-card presentation record?");
-    expect(reportCardsPage).toContain("Subject marks will not be deleted.");
-    expect(reportCardsPage).toContain("Preview");
-    expect(reportCardsPage).toContain("Edit results");
-    expect(reportCardsPage).toContain("canPublishReportCenterPeriod(period, results, isAdministrator)");
+    expect(reportCardsPage).toContain("async function deleteDraftPeriod(period: ReportCenterPeriod)");
+    expect(reportCardsPage).toContain("await deleteResult(result.id)");
+    expect(reportCardsPage).toContain("await deleteReportCard(period.savedReport.id)");
+    expect(reportCardsPage).toContain("Delete all ${period.results.length} draft subject result(s)");
+    expect(reportCardsPage).toContain("Preview Report Card");
+    expect(reportCardsPage).toContain("Edit Report Card Comments");
+    expect(reportCardsPage).toContain("Edit Subject Results");
+    expect(reportCardsPage).toContain('onClick={() => void openReportPeriod(period)}');
+    expect(reportCardsPage).toContain('onClick={() => void openReportPeriod(period, true)}');
+    expect(reportCardsPage).toContain('onClick={() => navigateToResults(period)}');
+    expect(reportCardsPage).toContain("getReportCenterPublishBlockReason(period, results, isAdministrator, publicationEvidence)");
+    expect(reportCardsPage).toContain("getReportCenterPublishActionState(");
     expect(reportCardsPage).toContain("Publish Report Card");
+    expect(reportCardsPage).toContain("Unpublish Report Card");
+    expect(reportCardsPage).toContain('period.results.every((result) => result.status === "Published")');
+    expect(reportCardsPage).toContain("canDeleteDraftReportPeriod(period, isAdministrator)");
+    expect(reportCardsPage).toContain('reviewResult(resultId, "unpublish", note)');
     expect(reportCardsPage).toContain("publishReportResultsAndVerify");
     expect(reportCardsPage).toContain("publishResult,");
     expect(reportCardsPage).not.toContain('reviewResult(resultId, "publish")');
     expect(reportCardsPage).toContain("Verify saved status");
     expect(reportCardsPage).toContain("Verified: published");
     expect(reportCardsPage).toContain("publishVerificationErrors[period.key]");
-    expect(publishResultMigration).toMatch(/create or replace function public\.publish_result\(target_result_id uuid\)[\s\S]*?security definer[\s\S]*?public\.is_assignment_admin\(\)[\s\S]*?target\.status = 'Published'[\s\S]*?target\.status is distinct from 'Draft'[\s\S]*?set status = 'Published'[\s\S]*?published_by = auth\.uid\(\)[\s\S]*?published_at = now\(\)/);
-    expect(publishResultMigration).toContain("set_config('app.result_action', 'publish', true)");
-    expect(publishResultMigration).toContain("revoke all on function public.publish_result(uuid) from public, anon");
+    expect(adminReviewFunction).toMatch(/security definer[\s\S]*?public\.is_assignment_admin\(\)/);
+    expect(adminReviewFunction).toContain("target.published_at is not null");
+    expect(adminReviewFunction).toContain("public.has_verified_result_unpublish_history(target.id, target.returned_assessment_snapshot)");
+    expect(adminReviewFunction).toContain("jsonb_array_length(target.returned_assessment_snapshot) not in (4, 5)");
+    expect(adminReviewFunction).toContain("perform set_config('app.result_action', 'publish', true)");
+    expect(adminReviewFunction).toContain("set status = 'Published'");
+    expect(adminReviewFunction).toContain("published_by = auth.uid()");
+    expect(adminReviewFunction).toContain("published_at = now()");
+    expect(publishResultMigration).toContain("revoke all on function public.publish_result(uuid) from public;");
+    expect(publishResultMigration).toContain("revoke all on function public.publish_result(uuid) from anon;");
     expect(publishResultMigration).toContain("grant execute on function public.publish_result(uuid) to authenticated");
     expect(reviewFunction).toMatch(/returns void[\s\S]*?if not public\.is_assignment_admin\(\) then[\s\S]*?raise exception 'Only an authorised administrator/);
     expect(reviewFunction).toContain("raise exception 'Result not found.'");
@@ -2173,10 +2568,24 @@ describe("results workflow migration contract", () => {
     expect(reportCardsPage).toContain("Report-card presentation details have no separate publication status.");
     expect(reportCardsPage).toContain("includeUnpublished: isAdministrator");
     expect(reportCardsPage).toContain("This preview includes unpublished subject results.");
+    expect(reportCardsPage).toContain("unpublishVerificationErrors[period.key]");
+    expect(reportCardsPage).toContain("Unpublish retry is blocked until status is refreshed.");
     expect(reportCardsPage).toContain("search: student ? `${student.first_name} ${student.last_name}`.trim() : \"\"");
     expect(resultsPage).toContain("searchParams.get(\"session\")");
     expect(resultsPage).toContain("searchParams.get(\"classId\")");
     expect(resultsPage).toContain("searchParams.get(\"reportType\")");
+  });
+
+  it("keeps report comments editing separate from the read-only preview", () => {
+    expect(reportCardsPage).toContain('title={`Edit Report Card Comments · ${report.student.first_name} ${report.student.last_name}`}');
+    expect(reportCardsPage).toContain("Save Changes");
+    expect(reportCardsPage).toContain(">Cancel</Button>");
+    expect(reportCardsPage).toContain('window.confirm("Discard unsaved report-card detail changes?")');
+    expect(reportCardsPage).toContain("if (!report || savingCommentsInFlight.current) return;");
+    expect(reportCardsPage).toContain('if (reason === null)');
+    expect(reportCardsPage).toContain("setSuccess(`${report.reportType === \"Midterm\" ? \"Midterm\" : \"End-of-Term\"} report details saved");
+    expect(reportCardsPage).toContain("setError(err instanceof Error ? err.message : \"Unable to save report comments.\")");
+    expect(reportCardsPage).toContain("<ReportCardDocument report={report} />");
   });
 
   it("saves each imported pupil's results and report details in one database transaction", () => {
