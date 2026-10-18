@@ -165,12 +165,6 @@ export function getResultPublishBlockReason(
   if (!Array.isArray(snapshot) || (snapshot.length !== 4 && snapshot.length !== 5)) {
     return "The saved pre-unpublish assessment snapshot is unavailable, so the required correction cannot be verified. Administrator review is required.";
   }
-  if (result.published_at || publicationEvidence === "verified") {
-    return "";
-  }
-  if (!hasAssessmentCorrectionSinceReturn(result, publicationEvidence === "verified")) {
-    return "No assessment-value correction has been saved since unpublishing. Edit this subject result's assessment type or marks before republishing; comments alone do not qualify.";
-  }
   return "";
 }
 
