@@ -12,8 +12,6 @@ export type Gender =
 export interface Student {
   id: string;
 
-  school_id?: string;
-
   admission_number: string;
 
   result_access_code?: string;

@@ -7,10 +7,14 @@ import { getResults } from "./resultService";
 import { getAcademicCalendarByYear, getSchoolSettings } from "./schoolSettingsService";
 import { getParentStudents, getStudents } from "./studentService";
 import { getSubjects } from "./subjectService";
-import { computeTotal, gradeFromTotal, remarkFromGrade } from "../utils/resultCalculations";
+import { calculateResult, computeTotal, gradeFromTotal, remarkFromGrade } from "../utils/resultCalculations";
+import { calculateEndOfTermMetrics, calculateMidtermMetrics } from "../utils/reportCalculations";
+import { isMatchingPublishedReportResult } from "../utils/reportCardPresentation";
+import { resolveReportTermId, toStoredTermName, type AcademicTermMatch } from "../utils/reportTermResolution";
 import { resolveTemplateForClass } from "./reportTemplateEngine";
-import type { ReportCardData, ReportHistoryBySession, ReportHistoryItem, ReportTerm, SubjectReportLine } from "../types/reportCard";
+import type { ReportCardData, ReportHistoryBySession, ReportHistoryItem, ReportTerm, ReportType, SubjectReportLine } from "../types/reportCard";
 import type { Result } from "../types/result";
+import type { ResultImportPreviewEntry } from "./resultImportService";
 
 type ReportCardRecord = {
   class_teacher_comment?: string | null;
@@ -20,7 +24,34 @@ type ReportCardRecord = {
   academic_year?: string | null;
   term?: string | null;
   class_id?: string | null;
+  report_type?: ReportType | null;
+  class_average?: number | null;
+  maximum_attendance?: number | null;
+  times_present?: number | null;
+  times_absent?: number | null;
+  term_ending?: string | null;
+  next_term_begins?: string | null;
+  class_teacher_name?: string | null;
+  calculation_mode?: "Manual" | "Automatic" | null;
+  total_marks_obtained?: number | null;
+  total_marks_obtainable?: number | null;
+  student_percentage?: number | null;
 };
+
+export interface SavedReportCard {
+  id: string;
+  student_id: string;
+  class_id: string;
+  academic_year: string;
+  term: ReportTerm;
+  report_type: ReportType;
+}
+
+export function flattenImportedResultUpdates(
+  updates: Array<{ id: string; values: Partial<Result> }>,
+): Array<Partial<Result> & { id: string }> {
+  return updates.map(({ id, values }) => ({ ...values, id }));
+}
 
 type ReportDependencies = {
   students: Awaited<ReturnType<typeof getStudents>>;
@@ -29,36 +60,171 @@ type ReportDependencies = {
   results: Awaited<ReturnType<typeof getResults>>;
 };
 
-let dependenciesCache: Promise<ReportDependencies> | null = null;
-let parentDependenciesCache: Promise<ReportDependencies> | null = null;
-
-function loadReportDependencies(parentScoped = false): Promise<ReportDependencies> {
-  const cache = parentScoped ? parentDependenciesCache : dependenciesCache;
-  if (!cache) {
-    const request = Promise.all([
-      parentScoped ? getParentStudents() : getStudents(),
-      getClasses(),
-      getSubjects(),
-      getResults(),
-    ]).then(([students, classes, subjects, results]) => ({
-      students,
-      classes,
-      subjects,
-      results,
-    }));
-    if (parentScoped) parentDependenciesCache = request;
-    else dependenciesCache = request;
-    return request;
+export async function getSavedReportCards(filters?: {
+  academicYear: string;
+  term: ReportTerm;
+  reportType: ReportType;
+  classId?: string;
+}): Promise<SavedReportCard[]> {
+  const schoolSettings = await getSchoolSettings();
+  let query = supabase
+    .from("report_cards")
+    .select("id, student_id, class_id, academic_year, term, report_type")
+    .eq("school_id", schoolSettings.school_id);
+  if (filters) {
+    query = query
+      .eq("academic_year", filters.academicYear)
+      .eq("term", filters.term)
+      .eq("report_type", filters.reportType);
+    if (filters.classId) query = query.eq("class_id", filters.classId);
   }
 
-  return cache;
+  const { data, error } = await query;
+  if (error) throw new Error(`Unable to load saved report cards: ${error.message}`);
+  return ((data ?? []) as SavedReportCard[])
+    .sort((left, right) => left.academic_year.localeCompare(right.academic_year)
+      || left.term.localeCompare(right.term));
+}
+
+export async function saveImportedReportCard(params: {
+  updates: Array<{ id: string; values: Partial<Result> }>;
+  inserts: Array<Omit<Result, "id" | "created_at" | "updated_at">>;
+  reportDetails: Parameters<typeof saveReportCardDetails>[0];
+}): Promise<void> {
+  const schoolSettings = await getSchoolSettings();
+  const { error } = await supabase.rpc("save_imported_report_card", {
+    target_school_id: schoolSettings.school_id,
+    result_updates: flattenImportedResultUpdates(params.updates),
+    result_inserts: params.inserts,
+    report_details: {
+      student_id: params.reportDetails.studentId,
+      class_id: params.reportDetails.classId,
+      academic_year: params.reportDetails.academicYear,
+      term: params.reportDetails.term,
+      report_type: params.reportDetails.reportType,
+      calculation_mode: params.reportDetails.calculationMode,
+      class_teacher_name: params.reportDetails.classTeacherName,
+      class_teacher_comment: params.reportDetails.classTeacherComment,
+      head_teacher_comment: params.reportDetails.headTeacherComment,
+      class_average: params.reportDetails.classAverage,
+      total_marks_obtained: params.reportDetails.totalMarksObtained,
+      total_marks_obtainable: params.reportDetails.totalMarksObtainable,
+      student_percentage: params.reportDetails.studentPercentage,
+      maximum_attendance: params.reportDetails.maximumAttendance,
+      times_present: params.reportDetails.timesPresent,
+      times_absent: params.reportDetails.timesAbsent,
+      term_ending: params.reportDetails.termEnding,
+      next_term_begins: params.reportDetails.nextTermBegins,
+    },
+  });
+  if (error) throw new Error(`Unable to atomically save this pupil's imported results and report card: ${error.message}`);
+}
+
+export async function saveImportReviewDraft(params: {
+  workbookKey: string;
+  entry: ResultImportPreviewEntry;
+}): Promise<void> {
+  const schoolSettings = await getSchoolSettings();
+  const { error } = await supabase.rpc("save_result_import_review_draft", {
+    target_school_id: schoolSettings.school_id,
+    target_workbook_key: params.workbookKey,
+    target_entry_key: params.entry.studentKey,
+    target_student_id: params.entry.selectedStudentId ?? null,
+    target_class_id: params.entry.items[0]?.classId ?? null,
+    draft_payload: params.entry,
+  });
+  if (error) throw new Error(`Unable to save ${params.entry.studentName}'s import review progress: ${error.message}`);
+}
+
+export async function getImportReviewDrafts(workbookKey: string): Promise<ResultImportPreviewEntry[]> {
+  const schoolSettings = await getSchoolSettings();
+  const { data, error } = await supabase.rpc("get_result_import_review_drafts", {
+    target_school_id: schoolSettings.school_id,
+    target_workbook_key: workbookKey,
+  });
+  if (error) throw new Error(`Unable to restore import review progress: ${error.message}`);
+  if (!Array.isArray(data)) throw new Error("The saved import review response has an invalid shape.");
+
+  return data.map((row) => {
+    if (!row || typeof row !== "object" || !("draft_payload" in row)) {
+      throw new Error("A saved import review entry is malformed.");
+    }
+    const entry = row.draft_payload as ResultImportPreviewEntry;
+    if (!entry || typeof entry !== "object" || typeof entry.studentKey !== "string" || !Array.isArray(entry.items)) {
+      throw new Error("A saved import review entry is malformed.");
+    }
+    return entry;
+  });
+}
+
+export type ImportReviewWorkbook = {
+  workbookKey: string;
+  entryCount: number;
+  updatedAt: string;
+};
+
+export async function getImportReviewSchoolId(): Promise<string> {
+  const schoolSettings = await getSchoolSettings();
+  return schoolSettings.school_id;
+}
+
+export async function getImportReviewWorkbooks(): Promise<ImportReviewWorkbook[]> {
+  const schoolSettings = await getSchoolSettings();
+  const { data, error } = await supabase.rpc("get_result_import_review_workbooks", {
+    target_school_id: schoolSettings.school_id,
+  });
+  if (error) throw new Error(`Unable to list saved import review workbooks: ${error.message}`);
+  if (!Array.isArray(data)) throw new Error("The saved import workbook response has an invalid shape.");
+
+  return data.map((row) => {
+    if (!row || typeof row !== "object"
+      || typeof row.workbook_key !== "string"
+      || typeof row.entry_count !== "number"
+      || typeof row.updated_at !== "string") {
+      throw new Error("A saved import workbook entry is malformed.");
+    }
+    return {
+      workbookKey: row.workbook_key,
+      entryCount: row.entry_count,
+      updatedAt: row.updated_at,
+    };
+  });
+}
+
+export async function deleteImportReviewDraft(workbookKey: string, entryKey: string): Promise<void> {
+  const schoolSettings = await getSchoolSettings();
+  const { error } = await supabase.rpc("delete_result_import_review_draft", {
+    target_school_id: schoolSettings.school_id,
+    target_workbook_key: workbookKey,
+    target_entry_key: entryKey,
+  });
+  if (error) throw new Error(`Unable to remove saved import review progress: ${error.message}`);
+}
+
+export async function deleteReportCard(id: string): Promise<void> {
+  const { data, error } = await supabase
+    .from("report_cards")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(`Unable to delete report card: ${error.message}`);
+  if (!data) throw new Error("The report card does not exist or deletion was blocked by a database policy.");
+}
+
+function loadReportDependencies(parentScoped = false): Promise<ReportDependencies> {
+  return Promise.all([
+    parentScoped ? getParentStudents() : getStudents(),
+    getClasses(),
+    getSubjects(),
+    getResults(),
+  ]).then(([students, classes, subjects, results]) => ({ students, classes, subjects, results }));
 }
 
 function normalizeTerm(term: string): ReportTerm {
   if (term === "First" || term === "Second" || term === "Third") {
     return term;
   }
-
   return "First";
 }
 
@@ -85,72 +251,30 @@ function inTermWindow(dateText: string, termConfig: { startDate: string; endDate
   return date >= start && date <= end;
 }
 
-function countWeekdays(startDate: string, endDate: string): number {
-  const start = new Date(`${startDate}T00:00:00`);
-  const end = new Date(`${endDate}T00:00:00`);
-
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
-    return 0;
-  }
-
-  let total = 0;
-  const cursor = new Date(start);
-
-  while (cursor <= end) {
-    const day = cursor.getDay();
-
-    if (day !== 0 && day !== 6) {
-      total += 1;
-    }
-
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return total;
-}
-
 async function getReportCardRecord(
   studentId: string,
   academicYear: string,
   term: ReportTerm,
-  classId: string
+  classId: string,
+  reportType: ReportType,
 ): Promise<ReportCardRecord | null> {
-  try {
-    const { data, error } = await supabase
-      .from("report_cards")
-      .select("*")
-      .eq("student_id", studentId)
-      .order("created_at", { ascending: false })
-      .limit(20);
-
-    if (error || !data || data.length === 0) {
-      const legacy = await supabase
-        .from("report_cards")
-        .select("*, terms(name, academic_year)")
-        .eq("student_id", studentId)
-        .eq("class_id", classId)
-        .limit(20);
-
-      if (legacy.error || !legacy.data) return null;
-
-      const match = (legacy.data as Array<ReportCardRecord & { terms?: { name?: string; academic_year?: string } | null }>).find((record) =>
-        record.terms?.academic_year === academicYear && record.terms.name?.toLowerCase().startsWith(term.toLowerCase())
-      );
-      return match ?? null;
-    }
-
-    const exactMatch = (data as ReportCardRecord[]).find((record) => {
-      const sessionMatches = !record.academic_year || record.academic_year === academicYear;
-      const termMatches = !record.term || record.term === term;
-      const classMatches = !record.class_id || record.class_id === classId;
-
-      return sessionMatches && termMatches && classMatches;
-    });
-
-    return exactMatch ?? ((data[0] ?? null) as ReportCardRecord | null);
-  } catch {
-    return null;
+  if (!classId) return null;
+  const schoolSettings = await getSchoolSettings();
+  const { data, error } = await supabase
+    .from("report_cards")
+    .select("*")
+    .eq("school_id", schoolSettings.school_id)
+    .eq("student_id", studentId)
+    .eq("class_id", classId)
+    .eq("academic_year", academicYear)
+    .eq("term", term)
+    .eq("report_type", reportType)
+    .limit(2);
+  if (error) throw new Error(`Unable to load saved report details: ${error.message}`);
+  if ((data?.length ?? 0) > 1) {
+    throw new Error("More than one saved report detail record exists for this pupil, class, period and report type.");
   }
+  return (data?.[0] as ReportCardRecord | undefined) ?? null;
 }
 
 export async function getReportHistoryByStudent(studentId: string, options: { parentScoped?: boolean } = {}): Promise<ReportHistoryBySession[]> {
@@ -158,9 +282,14 @@ export async function getReportHistoryByStudent(studentId: string, options: { pa
   const classMap = new Map(classes.map((item) => [item.id, { class_name: item.class_name }]));
 
   const rows = allResults
-    .filter((result) => result.student_id === studentId)
+    .filter((result) => result.student_id === studentId && result.status === "Published")
+    .filter((result) => result.assessment_type === "CA"
+      || result.assessment_type === "Combined"
+      || result.assessment_type === "Examination")
     .reduce<Map<string, ReportHistoryItem>>((acc, row) => {
-      const key = `${row.academic_year}|${row.term}|${row.class_id}`;
+      const reportType: ReportType = row.assessment_type === "CA" ? "Midterm" : "End-of-Term";
+      const classId = row.class_id ?? row.class_name ?? "";
+      const key = `${row.academic_year}|${row.term}|${classId}|${reportType}`;
       const existing = acc.get(key);
 
       if (existing) {
@@ -173,8 +302,9 @@ export async function getReportHistoryByStudent(studentId: string, options: { pa
         acc.set(key, {
           academicYear: row.academic_year,
           term: normalizeTerm(row.term),
-          classId: row.class_id ?? row.class_name ?? "",
+          classId,
           className: classLabel(row, classMap),
+          reportType,
           resultCount: 1,
           publishedCount: row.status === "Published" ? 1 : 0,
           latestUpdatedAt: row.updated_at,
@@ -198,9 +328,10 @@ export async function getReportHistoryByStudent(studentId: string, options: { pa
   return Array.from(sessionsMap.entries())
     .map(([academicYear, entries]) => ({
       academicYear,
-      entries: [...entries].sort(
-        (a, b) => orderedTerms.indexOf(a.term) - orderedTerms.indexOf(b.term)
-      ),
+      entries: [...entries].sort((a, b) =>
+        orderedTerms.indexOf(a.term) - orderedTerms.indexOf(b.term)
+        || a.className.localeCompare(b.className)
+        || a.reportType.localeCompare(b.reportType)),
     }))
     .sort((a, b) => b.academicYear.localeCompare(a.academicYear));
 }
@@ -209,8 +340,10 @@ export async function buildStudentReportCard(
   studentId: string,
   academicYear: string,
   term: ReportTerm,
-  options: { parentScoped?: boolean } = {}
+  options: { parentScoped?: boolean; reportType?: ReportType; classId?: string; includeUnpublished?: boolean } = {}
 ): Promise<ReportCardData | null> {
+  const reportType = options.reportType ?? "End-of-Term";
+  const isMidterm = reportType === "Midterm";
   const [{ students, classes, subjects, results: allResults }, attendanceRows] = await Promise.all([
     loadReportDependencies(options.parentScoped),
     getAttendanceByStudent(studentId),
@@ -222,34 +355,49 @@ export async function buildStudentReportCard(
     return null;
   }
 
-  const scopedResults = allResults.filter(
-    (result) => result.student_id === studentId && result.academic_year === academicYear && result.term === term
+  const reportCandidates = allResults.filter(
+    (result) => result.student_id === studentId
+      && result.academic_year === academicYear
+      && result.term === term
+      && (options.includeUnpublished || result.status === "Published")
+      && (isMidterm
+        ? result.assessment_type === "CA"
+        : result.assessment_type === "Combined" || result.assessment_type === "Examination")
+      && (!options.classId || result.class_id === options.classId)
   );
+  const classId = options.classId ?? reportCandidates[0]?.class_id ?? "";
+  const scopedResults = reportCandidates.filter((result) => isMatchingPublishedReportResult(result, {
+    studentId,
+    classId,
+    academicYear,
+    term,
+    reportType,
+  }, options.includeUnpublished));
 
-  if (scopedResults.length === 0) {
-    return null;
-  }
+  if (!classId) return null;
+  const reportCardRecord = await getReportCardRecord(studentId, academicYear, term, classId, reportType);
+  if (scopedResults.length === 0 && !reportCardRecord) return null;
 
   const classById = new Map(classes.map((item) => [item.id, item]));
   const subjectById = new Map(subjects.map((item) => [item.id, item]));
 
-  const classId = scopedResults[0]?.class_id ?? "";
   const classEntity = classId ? classById.get(classId) : undefined;
   const resultClassName = scopedResults.find((result) => {
     const value = result.class_name?.trim();
     return value && value.toLowerCase() !== "unknown" && value.toLowerCase() !== "unknown class";
   })?.class_name?.trim();
   const className = classEntity?.class_name?.trim() || student.class_name?.trim() || resultClassName || "";
-  const classTeacherName = [classEntity?.class_teacher?.first_name, classEntity?.class_teacher?.last_name].filter(Boolean).join(" ") || "Not Assigned";
-  const reportCardRecord = await getReportCardRecord(studentId, academicYear, term, classId);
-
-  const cohortRows = allResults.filter(
-    (row) => row.class_id === classId && row.academic_year === academicYear && row.term === term
-  );
+  const classTeacherName = reportCardRecord?.class_teacher_name
+    || [classEntity?.class_teacher?.first_name, classEntity?.class_teacher?.last_name].filter(Boolean).join(" ");
 
   const lines: SubjectReportLine[] = scopedResults
     .map((result) => {
       const subject = result.subject_id ? subjectById.get(result.subject_id) : undefined;
+      const automatic = result.calculation_mode === "Automatic"
+        && result.assessment_type === "Combined"
+        && !isMidterm
+        ? calculateResult(result.assessment_type, result.continuous_assessment, result.examination)
+        : null;
 
       return {
         resultId: result.id,
@@ -257,71 +405,58 @@ export async function buildStudentReportCard(
         subjectName: subject?.subject_name ?? result.subject_name ?? "Unknown Subject",
         subjectCode: subject?.subject_code ?? "",
         continuousAssessment: result.continuous_assessment,
-        examination: result.examination,
-        totalScore: result.total_score,
-        grade: result.grade,
-        teacherRemark: result.remark,
+        maximumScore: result.maximum_score ?? null,
+        examination: isMidterm ? null : result.examination,
+        totalScore: automatic ? automatic.total : result.total_score,
+        grade: automatic ? automatic.grade : result.grade,
+        teacherRemark: automatic ? automatic.remark ?? "" : result.remark ?? "",
         teacherName: result.teacher_name,
       };
     })
     .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
 
-  const totalMarksObtained = Number(lines.reduce((sum, line) => sum + line.totalScore, 0).toFixed(2));
-  const totalMarksObtainable = lines.length * 100;
-  const studentPercentage = totalMarksObtainable > 0
-    ? Number(((totalMarksObtained / totalMarksObtainable) * 100).toFixed(2))
-    : 0;
-
-  const uniqueStudents = new Map<string, Result[]>();
-
-  cohortRows.forEach((row) => {
-    const list = uniqueStudents.get(row.student_id) ?? [];
-    list.push(row);
-    uniqueStudents.set(row.student_id, list);
-  });
-
-  const classPercentages = Array.from(uniqueStudents.values()).map((rows) => {
-    const obtained = rows.reduce((sum, row) => sum + row.total_score, 0);
-    const obtainable = rows.length * 100;
-
-    return obtainable > 0 ? (obtained / obtainable) * 100 : 0;
-  });
-
-  const classAverage = classPercentages.length > 0
-    ? Number((classPercentages.reduce((sum, value) => sum + value, 0) / classPercentages.length).toFixed(2))
-    : 0;
+  if (lines.length === 0 && !reportCardRecord) return null;
+  const metrics = isMidterm
+    ? calculateMidtermMetrics(allResults, studentId, classId, academicYear, term, options.includeUnpublished)
+    : calculateEndOfTermMetrics(allResults, studentId, classId, academicYear, term, options.includeUnpublished);
 
   const [calendar, schoolSettings] = await Promise.all([
     getAcademicCalendarByYear(academicYear),
     getSchoolSettings(),
   ]);
   const termConfig = getCalendarTermConfig(calendar, term as CalendarTerm);
-  const attendanceScoped = attendanceRows.filter((row) => inTermWindow(row.attendance_date, termConfig));
+  const attendanceScoped = isMidterm ? [] : attendanceRows.filter((row) => inTermWindow(row.attendance_date, termConfig));
   const present = attendanceScoped.filter((row) => row.status === "Present").length;
   const absent = attendanceScoped.filter((row) => row.status === "Absent").length;
 
   const attendance = {
-    maximumAttendance: countWeekdays(termConfig.startDate, termConfig.endDate),
-    timesPresent: present,
-    timesAbsent: absent,
+    maximumAttendance: reportCardRecord?.maximum_attendance ?? (attendanceScoped.length > 0 ? attendanceScoped.length : null),
+    timesPresent: reportCardRecord?.times_present ?? (attendanceScoped.length > 0 ? present : null),
+    timesAbsent: reportCardRecord?.times_absent ?? (attendanceScoped.length > 0 ? absent : null),
   };
 
   const template = resolveTemplateForClass(className, schoolSettings);
 
   return {
+    reportType,
+    classId,
+    calculationMode: reportCardRecord?.calculation_mode ?? "Manual",
     student,
     schoolSettings,
     className,
     classTeacherName,
     academicYear,
     term,
-    termEnding: termConfig.termEnding,
-    nextTermBegins: termConfig.nextTermBegins,
+    termEnding: reportCardRecord?.term_ending ?? (isMidterm ? "" : termConfig.termEnding),
+    nextTermBegins: reportCardRecord?.next_term_begins ?? (isMidterm ? "" : termConfig.nextTermBegins),
     lines,
-    totalMarksObtained,
-    totalMarksObtainable,
-    studentPercentage,
-    classAverage,
+    totalMarksObtained: metrics.totalMarksObtained,
+    totalMarksObtainable: metrics.totalMarksObtainable,
+    studentPercentage: metrics.studentPercentage,
+    classAverage: reportCardRecord?.class_average ?? null,
+    reportTotalMarksObtained: reportCardRecord?.total_marks_obtained ?? null,
+    reportTotalMarksObtainable: reportCardRecord?.total_marks_obtainable ?? null,
+    reportStudentPercentage: reportCardRecord?.student_percentage ?? null,
     classTeacherComment: reportCardRecord?.class_teacher_comment ?? reportCardRecord?.teacher_comment ?? "",
     headTeacherComment: reportCardRecord?.head_teacher_comment ?? reportCardRecord?.principal_comment ?? "",
     attendance,
@@ -330,72 +465,86 @@ export async function buildStudentReportCard(
   };
 }
 
-export async function saveReportCardComments(params: {
+export async function saveReportCardDetails(params: {
   studentId: string;
   academicYear: string;
   term: ReportTerm;
   classId: string;
+  reportType: ReportType;
+  calculationMode: "Manual" | "Automatic";
+  classTeacherName: string;
   classTeacherComment: string;
   headTeacherComment: string;
+  classAverage: number | null;
+  totalMarksObtained: number | null;
+  totalMarksObtainable: number | null;
+  studentPercentage: number | null;
+  maximumAttendance: number | null;
+  timesPresent: number | null;
+  timesAbsent: number | null;
+  termEnding: string | null;
+  nextTermBegins: string | null;
 }): Promise<void> {
-  const comments = {
-    class_teacher_comment: params.classTeacherComment.trim() || null,
-    head_teacher_comment: params.headTeacherComment.trim() || null,
-  };
+  const schoolSettings = await getSchoolSettings();
   const { data: existing, error: lookupError } = await supabase
     .from("report_cards")
     .select("id")
-    .eq("student_id", params.studentId)
-    .eq("academic_year", params.academicYear)
-    .eq("term", params.term)
-    .maybeSingle();
-
-  if (!lookupError && existing?.id) {
-    const { error } = await supabase.from("report_cards").update(comments).eq("id", existing.id);
-    if (!error) return;
-  }
-
-  const student = await supabase.from("students").select("school_id").eq("id", params.studentId).single();
-  const termRow = await supabase
-    .from("terms")
-    .select("id")
-    .eq("school_id", student.data?.school_id ?? "")
-    .eq("academic_year", params.academicYear)
-    .ilike("name", `${params.term}%`)
-    .maybeSingle();
-
-  if (student.error || termRow.error || !student.data?.school_id || !termRow.data?.id) {
-    throw lookupError ?? termRow.error ?? new Error("Unable to save report comments.");
-  }
-
-  const legacyExisting = await supabase
-    .from("report_cards")
-    .select("id")
+    .eq("school_id", schoolSettings.school_id)
     .eq("student_id", params.studentId)
     .eq("class_id", params.classId)
-    .eq("term_id", termRow.data.id)
-    .maybeSingle();
+    .eq("academic_year", params.academicYear)
+    .eq("term", params.term)
+    .eq("report_type", params.reportType)
+    .limit(2);
+  if (lookupError) throw new Error(`Unable to find the selected report details: ${lookupError.message}`);
+  if ((existing?.length ?? 0) > 1) {
+    throw new Error("More than one saved report detail record exists for this pupil, class, period and report type.");
+  }
 
-  if (legacyExisting.error) throw legacyExisting.error;
-
-  if (legacyExisting.data?.id) {
-    const { error } = await supabase.from("report_cards").update({
-      teacher_comment: comments.class_teacher_comment,
-      principal_comment: comments.head_teacher_comment,
-    }).eq("id", legacyExisting.data.id);
+  const payload = {
+    school_id: schoolSettings.school_id,
+    student_id: params.studentId,
+    class_id: params.classId,
+    academic_year: params.academicYear,
+    term: params.term,
+    report_type: params.reportType,
+    calculation_mode: params.calculationMode,
+    class_teacher_name: params.classTeacherName.trim() || null,
+    class_teacher_comment: params.classTeacherComment.trim() || null,
+    head_teacher_comment: params.headTeacherComment.trim() || null,
+    class_average: params.classAverage,
+    total_marks_obtained: params.totalMarksObtained,
+    total_marks_obtainable: params.totalMarksObtainable,
+    student_percentage: params.studentPercentage,
+    maximum_attendance: params.maximumAttendance,
+    times_present: params.timesPresent,
+    times_absent: params.timesAbsent,
+    term_ending: params.termEnding?.trim() || null,
+    next_term_begins: params.nextTermBegins?.trim() || null,
+  };
+  const existingId = existing?.[0]?.id as string | undefined;
+  if (existingId) {
+    const { error } = await supabase.from("report_cards").update(payload).eq("id", existingId);
     if (error) throw error;
     return;
   }
 
+  const { data: terms, error: termError } = await supabase
+    .from("terms")
+    .select("id, term_name, academic_sessions!inner(session_name)")
+    .eq("term_name", toStoredTermName(params.term))
+    .eq("academic_sessions.session_name", params.academicYear)
+    .limit(2);
+  if (termError) throw new Error(`Unable to find the selected report term: ${termError.message}`);
+  const termId = resolveReportTermId(
+    (terms ?? []) as AcademicTermMatch[],
+    params.academicYear,
+    params.term,
+  );
   const { error } = await supabase.from("report_cards").insert({
-    school_id: student.data.school_id,
-    student_id: params.studentId,
-    class_id: params.classId,
-    term_id: termRow.data.id,
-    teacher_comment: comments.class_teacher_comment,
-    principal_comment: comments.head_teacher_comment,
+    ...payload,
+    term_id: termId,
   });
-
   if (error) throw error;
 }
 
@@ -406,6 +555,9 @@ export function normalizeResultInput(
   const total = computeTotal(continuousAssessment, examination);
   const grade = gradeFromTotal(total);
   const remark = remarkFromGrade(grade);
+  if (total === null || grade === null || remark === null) {
+    throw new Error("Both CA and examination marks are required to calculate a final result.");
+  }
 
   return { total, grade, remark };
 }

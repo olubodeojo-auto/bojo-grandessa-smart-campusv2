@@ -5,23 +5,7 @@ import type {
   UpdateSubjectData,
 } from "../types/subject";
 
-const FALLBACK_SCHOOL_ID = "1829b784-8e94-4713-bbaf-2518b5e374be";
 const TABLE = "subjects";
-
-type SubjectQueryOptions = {
-  schoolId?: string | null;
-};
-
-function getActiveSchoolId(schoolId?: string | null): string {
-  const candidate =
-    schoolId?.trim() ||
-    (typeof window !== "undefined"
-      ? window.localStorage.getItem("activeSchoolId")?.trim()
-      : "") ||
-    import.meta.env.VITE_SCHOOL_ID?.toString().trim();
-
-  return candidate || FALLBACK_SCHOOL_ID;
-}
 
 function normalizeSubject(record: Subject): Subject {
   return {
@@ -32,10 +16,7 @@ function normalizeSubject(record: Subject): Subject {
   };
 }
 
-export async function getSubjects(
-  _options: SubjectQueryOptions = {}
-): Promise<Subject[]> {
-  // Load subjects without assuming a school_id column exists. Return only active subjects ordered by name.
+export async function getSubjects(): Promise<Subject[]> {
   const { data, error } = await supabase
     .from(TABLE)
     .select("*")
@@ -65,7 +46,6 @@ export async function createSubject(
   const { data, error } = await supabase
     .from(TABLE)
     .insert({
-      school_id: getActiveSchoolId(),
       subject_code: payload.subject_code.trim(),
       subject_name: payload.subject_name.trim(),
       department: payload.department,

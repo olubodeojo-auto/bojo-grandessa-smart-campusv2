@@ -1,52 +1,69 @@
-import { Eye, Pencil, Trash2, Upload } from "lucide-react";
+import { CornerUpLeft, Eye, Pencil, Trash2, Upload } from "lucide-react";
 import type { CSSProperties } from "react";
 import DataTable from "../../../components/tables/DataTable";
 import EmptyState from "../../../components/ui/EmptyState";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import type { ResultStatus } from "../../../types/result";
+import type { ResultAssessmentType } from "../../../types/result";
 
 export interface ResultRow {
   id: string;
+  studentId: string;
+  classId?: string;
   studentName: string;
   className: string;
   subjectName: string;
   teacherName: string;
   academicYear: string;
   term: "First" | "Second" | "Third";
-  continuousAssessment: number;
-  examination: number;
-  totalScore: number;
-  grade: string;
-  remark: string;
+  assessmentType: ResultAssessmentType;
+  continuousAssessment: number | null;
+  maximumScore: number | null;
+  examination: number | null;
+  totalScore: number | null;
+  grade: string | null;
+  remark: string | null;
   status: ResultStatus;
+  createdBy?: string | null;
+  submittedBy?: string | null;
+  submittedByName?: string | null;
+  submittedAt?: string | null;
+  reviewReason?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  publishedBy?: string | null;
+  publishedAt?: string | null;
 }
 
 type ResultTableProps = {
   rows: ResultRow[];
   loading: boolean;
-  canManage: boolean;
-  canPublish: boolean;
+  canEdit: (row: ResultRow) => boolean;
+  canDelete: (row: ResultRow) => boolean;
+  canPublish: (row: ResultRow) => boolean;
+  canUnpublish: (row: ResultRow) => boolean;
   onView: (row: ResultRow) => void;
   onEdit: (row: ResultRow) => void;
   onDelete: (row: ResultRow) => void | Promise<void>;
-  onPublish: (row: ResultRow) => void | Promise<void>;
+  onReview: (row: ResultRow, decision: "publish" | "unpublish") => void | Promise<void>;
 };
 
 function getStatusTone(status: ResultStatus): "success" | "warning" | "neutral" {
   if (status === "Published") return "success";
-  if (status === "Approved") return "neutral";
   return "warning";
 }
 
 export default function ResultTable({
   rows,
   loading,
-  canManage,
+  canEdit,
+  canDelete,
   canPublish,
+  canUnpublish,
   onView,
   onEdit,
   onDelete,
-  onPublish,
+  onReview,
 }: ResultTableProps) {
   if (loading) {
     return <EmptyState title="Loading results" description="Please wait while results are loaded." />;
@@ -67,8 +84,16 @@ export default function ResultTable({
         { key: "term", header: "Term" },
         { key: "continuousAssessment", header: "CA" },
         { key: "examination", header: "Exam" },
-        { key: "totalScore", header: "Total" },
-        { key: "grade", header: "Grade" },
+        {
+          key: "totalScore",
+          header: "Total",
+          render: (row: ResultRow) => row.assessmentType === "CA" ? "—" : row.totalScore ?? "—",
+        },
+        {
+          key: "grade",
+          header: "Grade",
+          render: (row: ResultRow) => row.assessmentType === "CA" ? "—" : row.grade ?? "—",
+        },
         {
           key: "status",
           header: "Status",
@@ -88,7 +113,7 @@ export default function ResultTable({
                 aria-label={`Edit result for ${row.studentName}`}
                 onClick={() => onEdit(row)}
                 style={actionButtonStyle}
-                disabled={!canManage}
+                disabled={!canEdit(row)}
               >
                 <Pencil size={18} />
               </button>
@@ -100,21 +125,19 @@ export default function ResultTable({
                   void onDelete(row);
                 }}
                 style={{ ...actionButtonStyle, color: "#dc2626" }}
-                disabled={!canManage}
+                disabled={!canDelete(row)}
               >
                 <Trash2 size={18} />
               </button>
 
-              {row.status !== "Published" && canPublish ? (
-                <button
-                  type="button"
-                  aria-label={`Publish result for ${row.studentName}`}
-                  onClick={() => {
-                    void onPublish(row);
-                  }}
-                  style={{ ...actionButtonStyle, color: "#1d4ed8" }}
-                >
+              {canPublish(row) ? (
+                <button type="button" aria-label={`Publish result for ${row.studentName}`} onClick={() => void onReview(row, "publish")} style={{ ...actionButtonStyle, color: "#1d4ed8" }}>
                   <Upload size={18} />
+                </button>
+              ) : null}
+              {canUnpublish(row) ? (
+                <button type="button" aria-label={`Unpublish result for ${row.studentName}`} onClick={() => void onReview(row, "unpublish")} style={{ ...actionButtonStyle, color: "#b45309" }}>
+                  <CornerUpLeft size={18} />
                 </button>
               ) : null}
             </div>

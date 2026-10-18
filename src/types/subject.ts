@@ -19,7 +19,6 @@ export type SubjectAcademicLevel =
 
 export interface Subject {
   id: string;
-  school_id: string;
   subject_code: string;
   subject_name: string;
   department: SubjectDepartment | null;

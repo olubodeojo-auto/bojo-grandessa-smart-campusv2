@@ -13,7 +13,7 @@ type Props = {
   mode: "add" | "edit";
   student?: Student | null;
   onClose: () => void;
-  onSaved?: () => void;
+  onSaved?: (student: Student) => void | Promise<void>;
 };
 
 type StudentFormState = {
@@ -459,19 +459,17 @@ export default function StudentForm({ mode, student, onClose, onSaved }: Props) 
         status: form.status,
       };
 
-      if (mode === "edit" && student?.id) {
-        await updateStudent(student.id, {
+      const savedStudent = mode === "edit" && student?.id
+        ? await updateStudent(student.id, {
+          ...payload,
+          ...(nextResultAccessCode ? { result_access_code: nextResultAccessCode } : {}),
+        })
+        : await createStudent({
           ...payload,
           ...(nextResultAccessCode ? { result_access_code: nextResultAccessCode } : {}),
         });
-      } else {
-        await createStudent({
-          ...payload,
-          ...(nextResultAccessCode ? { result_access_code: nextResultAccessCode } : {}),
-        });
-      }
 
-      onSaved?.();
+      await onSaved?.(savedStudent);
       onClose();
     } catch (error) {
       const message =

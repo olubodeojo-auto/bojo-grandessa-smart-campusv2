@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import Button from "../../components/ui/Button";
 import ReportCardDocument from "../../components/reports/ReportCardDocument";
@@ -11,7 +11,8 @@ import FormField, { inputStyle } from "../../components/forms/FormField";
 import { buildStudentReportCard, getReportHistoryByStudent } from "../../services/reportCardService";
 import { getStudentByAccessCode, getParentStudents } from "../../services/studentService";
 import { useAuth } from "../../hooks/useAuth";
-import type { ReportCardData, ReportHistoryBySession, ReportTerm } from "../../types/reportCard";
+import { findLatestReportPeriod } from "../../utils/resultPresentation";
+import type { ReportCardData, ReportHistoryBySession, ReportTerm, ReportType } from "../../types/reportCard";
 import type { Student } from "../../types/student";
 
 export default function ParentReportsPage() {
@@ -23,6 +24,9 @@ export default function ParentReportsPage() {
   const [history, setHistory] = useState<ReportHistoryBySession[]>([]);
   const [academicYear, setAcademicYear] = useState("");
   const [term, setTerm] = useState<ReportTerm>("First");
+  const [classId, setClassId] = useState("");
+  const [reportType, setReportType] = useState<ReportType>("End-of-Term");
+  const reportTypeRef = useRef(reportType);
   const [report, setReport] = useState<ReportCardData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -64,19 +68,26 @@ export default function ParentReportsPage() {
       .then(async (rows) => {
         if (!active) return;
         setHistory(rows);
-        const nextYear = rows[0]?.academicYear ?? "";
-        const nextTerm = rows[0]?.entries[0]?.term ?? "First";
+        const selectedPeriod = findLatestReportPeriod(rows, reportTypeRef.current);
+        const firstPeriod = selectedPeriod?.period;
+        const nextYear = selectedPeriod?.academicYear ?? rows[0]?.academicYear ?? "";
+        const nextTerm = firstPeriod?.term ?? "First";
         setAcademicYear(nextYear);
         setTerm(nextTerm);
+        setClassId(firstPeriod?.classId ?? "");
         if (!nextYear) {
           setReport(null);
-          setError("No report is available for this student yet.");
+          setError("This report has not been published yet. Please check back later or contact the school.");
           return;
         }
-        const data = await buildStudentReportCard(selectedStudentId, nextYear, nextTerm, { parentScoped: true });
+        const data = firstPeriod ? await buildStudentReportCard(selectedStudentId, nextYear, nextTerm, {
+          parentScoped: true,
+          reportType: reportTypeRef.current,
+          classId: firstPeriod.classId,
+        }) : null;
         if (!active) return;
         setReport(data);
-        if (!data) setError("No report is available for this student yet.");
+        if (!data) setError("This report has not been published yet. Please check back later or contact the school.");
       })
       .catch((loadError) => {
         if (active) {
@@ -99,6 +110,7 @@ export default function ParentReportsPage() {
     setSelectedStudentId(nextStudentId);
     setHistory([]);
     setAcademicYear("");
+    setClassId("");
     setReport(null);
   }
 
@@ -126,7 +138,7 @@ export default function ParentReportsPage() {
         setHistory([]);
         setAcademicYear("");
         setReport(null);
-        setError("No student found for this Result Access Code. Please check the code and try again.");
+        setError("This report has not been published yet. Please check back later or contact the school.");
         return;
       }
 
@@ -135,24 +147,28 @@ export default function ParentReportsPage() {
       setSelectedStudentId(matchedStudent.id);
       setHistory(rows);
 
-      const nextYear = rows[0]?.academicYear ?? "";
+      const selectedPeriod = findLatestReportPeriod(rows, reportTypeRef.current);
+      const firstPeriod = selectedPeriod?.period;
+      const nextYear = selectedPeriod?.academicYear ?? rows[0]?.academicYear ?? "";
       setAcademicYear(nextYear);
-      const nextTerm = rows[0]?.entries[0]?.term ?? "First";
+      const nextTerm = firstPeriod?.term ?? "First";
       setTerm(nextTerm);
-
+      setClassId(firstPeriod?.classId ?? "");
       if (!nextYear) {
         setReport(null);
-        setError("No report is available for this student yet.");
+        setError("This report has not been published yet. Please check back later or contact the school.");
         return;
       }
 
-      const data = await buildStudentReportCard(matchedStudent.id, nextYear, nextTerm, { parentScoped: true });
+      const data = firstPeriod ? await buildStudentReportCard(matchedStudent.id, nextYear, nextTerm, {
+        parentScoped: true,
+        reportType: reportTypeRef.current,
+        classId: firstPeriod.classId,
+      }) : null;
       setReport(data);
-      if (!data) {
-        setError("No report is available for this student yet.");
-      }
-    } catch {
-      setError("No student found for this Result Access Code. Please check the code and try again.");
+      if (!data) setError("This report has not been published yet. Please check back later or contact the school.");
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Unable to load the selected report.");
       setReport(null);
     } finally {
       setLoading(false);
@@ -170,14 +186,47 @@ export default function ParentReportsPage() {
     setError("");
 
     try {
-      const data = await buildStudentReportCard(selectedStudentId, academicYear, nextTerm, { parentScoped: true });
+      const period = history.find((item) => item.academicYear === academicYear)?.entries
+        .find((entry) => entry.term === nextTerm && entry.reportType === reportType);
+      const data = period ? await buildStudentReportCard(selectedStudentId, academicYear, nextTerm, {
+        parentScoped: true,
+        reportType,
+        classId: period.classId,
+      }) : null;
       setReport(data);
-      if (!data) {
-        setError("No report is available for this session and term.");
-      }
-    } catch {
-      setError("No report is available for this session and term.");
+      setClassId(period?.classId ?? "");
+      if (!data) setError("This report has not been published yet. Please check back later or contact the school.");
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Unable to load the selected report.");
       setReport(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleReportTypeChange(nextReportType: ReportType): Promise<void> {
+    reportTypeRef.current = nextReportType;
+    setReportType(nextReportType);
+    if (!selectedStudentId || !academicYear) return;
+    setLoading(true);
+    setError("");
+
+    try {
+      const yearPeriods = history.find((item) => item.academicYear === academicYear)?.entries ?? [];
+      const period = yearPeriods.find((entry) => entry.term === term && entry.reportType === nextReportType)
+        ?? yearPeriods.find((entry) => entry.reportType === nextReportType);
+      if (period) setTerm(period.term);
+      const data = period ? await buildStudentReportCard(selectedStudentId, academicYear, period.term, {
+        parentScoped: true,
+        reportType: nextReportType,
+        classId: period.classId,
+      }) : null;
+      setReport(data);
+      setClassId(period?.classId ?? "");
+      if (!data) setError("This report has not been published yet. Please check back later or contact the school.");
+    } catch (loadError) {
+      setReport(null);
+      setError(loadError instanceof Error ? loadError.message : "Unable to load published results.");
     } finally {
       setLoading(false);
     }
@@ -186,10 +235,13 @@ export default function ParentReportsPage() {
   async function handleSessionChange(nextYear: string): Promise<void> {
     setAcademicYear(nextYear);
 
-    const nextTerm = history.find((item) => item.academicYear === nextYear)?.entries[0]?.term;
+    const nextPeriod = history.find((item) => item.academicYear === nextYear)?.entries
+      .find((entry) => entry.reportType === reportType);
+    const nextTerm = nextPeriod?.term;
 
     if (!selectedStudentId || !nextYear || !nextTerm) {
       setTerm("First");
+      setClassId("");
       setReport(null);
       return;
     }
@@ -199,23 +251,92 @@ export default function ParentReportsPage() {
     setError("");
 
     try {
-      const data = await buildStudentReportCard(selectedStudentId, nextYear, nextTerm, { parentScoped: true });
+      const data = nextPeriod ? await buildStudentReportCard(selectedStudentId, nextYear, nextTerm, {
+        parentScoped: true,
+        reportType,
+        classId: nextPeriod.classId,
+      }) : null;
       setReport(data);
-      if (!data) {
-        setError("No report is available for this session and term.");
-      }
-    } catch {
-      setError("No report is available for this session and term.");
+      setClassId(nextPeriod?.classId ?? "");
+      if (!data) setError("This report has not been published yet. Please check back later or contact the school.");
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Unable to load the selected report.");
       setReport(null);
     } finally {
       setLoading(false);
     }
   }
 
+  async function handleClassChange(nextClassId: string): Promise<void> {
+    setClassId(nextClassId);
+    if (!selectedStudentId || !academicYear) return;
+    setLoading(true);
+    setError("");
+    try {
+      const data = await buildStudentReportCard(selectedStudentId, academicYear, term, {
+        parentScoped: true,
+        reportType,
+        classId: nextClassId,
+      });
+      setReport(data);
+      if (!data) setError("This report has not been published yet. Please check back later or contact the school.");
+    } catch (loadError) {
+      setReport(null);
+      setError(loadError instanceof Error ? loadError.message : "Unable to load the selected report.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRefreshReport(): Promise<void> {
+    if (!selectedStudentId) return;
+    setLoading(true);
+    setError("");
+
+    try {
+      const rows = await getReportHistoryByStudent(selectedStudentId, { parentScoped: true });
+      setHistory(rows);
+      const year = rows.find((item) => item.academicYear === academicYear);
+      const period = year?.entries.find((entry) =>
+        entry.term === term
+        && entry.reportType === reportType
+        && (!classId || entry.classId === classId)
+      ) ?? year?.entries.find((entry) => entry.reportType === reportType);
+      if (!period) {
+        setReport(null);
+        setClassId("");
+        setError("This report has not been published yet. Please check back later or contact the school.");
+        return;
+      }
+      const data = await buildStudentReportCard(selectedStudentId, academicYear, period.term, {
+        parentScoped: true,
+        reportType,
+        classId: period.classId,
+      });
+      setReport(data);
+      setTerm(period.term);
+      setClassId(period.classId);
+      if (!data) setError("This report has not been published yet. Please check back later or contact the school.");
+    } catch (loadError) {
+      setReport(null);
+      setError(loadError instanceof Error ? loadError.message : "Unable to refresh the selected report.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const availableYears = useMemo(() => history.map((item) => item.academicYear), [history]);
+  const selectedYearEntries = useMemo(
+    () => history.find((item) => item.academicYear === academicYear)?.entries.filter((entry) => entry.reportType === reportType) ?? [],
+    [academicYear, history, reportType],
+  );
   const availableTerms = useMemo(
-    () => history.find((item) => item.academicYear === academicYear)?.entries.map((entry) => entry.term) ?? [],
-    [academicYear, history]
+    () => [...new Set(selectedYearEntries.map((entry) => entry.term))],
+    [selectedYearEntries],
+  );
+  const availableClasses = useMemo(
+    () => selectedYearEntries.filter((entry) => entry.term === term),
+    [selectedYearEntries, term],
   );
   const studentName = student ? [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ") : "";
   const fileStudentName = studentName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "Student";
@@ -286,15 +407,42 @@ export default function ParentReportsPage() {
               ))}
             </select>
           </FormField>
+
+          <FormField label="Report type">
+            <select
+              style={inputStyle}
+              value={reportType}
+              onChange={(event) => void handleReportTypeChange(event.target.value as ReportType)}
+              disabled={!selectedStudentId || loading}
+            >
+              <option value="Midterm">Midterm</option>
+              <option value="End-of-Term">End-of-Term</option>
+            </select>
+          </FormField>
+
+          {availableClasses.length > 1 ? (
+            <FormField label="Class">
+              <select style={inputStyle} value={classId} onChange={(event) => void handleClassChange(event.target.value)} disabled={loading}>
+                {availableClasses.map((entry) => (
+                  <option key={entry.classId} value={entry.classId}>{entry.className}</option>
+                ))}
+              </select>
+            </FormField>
+          ) : null}
         </div>
 
-        {!isAuthenticated ? (
-          <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end", gap: 12 }}>
+          {student ? (
+            <Button type="button" variant="secondary" onClick={() => void handleRefreshReport()} disabled={loading}>
+              {loading ? "Refreshing..." : "Refresh report"}
+            </Button>
+          ) : null}
+          {!isAuthenticated ? (
             <Button type="button" onClick={() => void handleLookup()} disabled={loading}>
               {loading ? "Loading..." : "View Result"}
             </Button>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </SectionCard>
 
       {student ? (
@@ -309,7 +457,7 @@ export default function ParentReportsPage() {
         <div className="card report-toolbar" style={{ marginTop: 16, marginBottom: 16 }}>
           <ReportCardToolbar
             previewId="report-card-preview"
-            fileName={`Grandessa-Report-${fileStudentName}-${academicYear || "session"}-${term}-Term.pdf`}
+            fileName={`Grandessa-Report-${fileStudentName}-${academicYear || "session"}-${term}-${reportType}.pdf`}
           />
         </div>
       ) : null}
@@ -325,7 +473,7 @@ export default function ParentReportsPage() {
       ) : report ? (
         <ReportCardDocument report={report} />
       ) : (
-        <EmptyState title="No report available" description="No report card found for the selected student." />
+        <EmptyState title="Report not published" description="This report has not been published yet. Please check back later or contact the school." />
       )}
     </div>
   );

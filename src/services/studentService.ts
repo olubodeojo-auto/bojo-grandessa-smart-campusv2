@@ -4,7 +4,6 @@ import type { Student } from "../types/student";
 
 export type StudentDatabaseWrite = {
   id?: string;
-  school_id?: string | null;
   admission_number?: string | null;
   class_id?: string | null;
   primary_contact_id?: string | null;
@@ -31,6 +30,7 @@ export type StudentWriteInput = StudentDatabaseWrite;
 interface StudentListFilters {
   search?: string;
   className?: string;
+  classIds?: string[];
 }
 
 function normalizeFilterValue(value?: string): string {
@@ -59,6 +59,7 @@ export async function getStudents(
 ): Promise<Student[]> {
   const search = normalizeFilterValue(filters.search);
   const className = normalizeFilterValue(filters.className);
+  const classIds = filters.classIds?.filter(Boolean) ?? [];
 
     let query = supabase.from("students").select("*").order("created_at", {
     ascending: false,
@@ -72,6 +73,10 @@ export async function getStudents(
 
   if (className && className.toLowerCase() !== "all classes") {
     query = query.ilike("class_name", `%${className}%`);
+  }
+  if (filters.classIds) {
+    if (classIds.length === 0) return [];
+    query = query.in("class_id", classIds);
   }
 
   const [{ data, error }, classes] = await Promise.all([query, getClasses()]);
@@ -228,7 +233,6 @@ export async function getStudentByAccessCode(code: string): Promise<Student | nu
 function mapStudentDatabaseWrite(input: StudentWriteInput): StudentDatabaseWrite {
   const payload: StudentDatabaseWrite = {};
 
-  if (input.school_id !== undefined) payload.school_id = input.school_id ?? null;
   if (input.admission_number !== undefined) payload.admission_number = input.admission_number?.trim() || null;
   if (input.class_id !== undefined) payload.class_id = input.class_id ?? null;
   if (input.primary_contact_id !== undefined) payload.primary_contact_id = input.primary_contact_id ?? null;

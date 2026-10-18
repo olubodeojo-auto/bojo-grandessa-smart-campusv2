@@ -12,6 +12,7 @@ export const administratorRoles = [
 export const teacherRoles = ["Teacher", "teacher"];
 export const adminShellRoles = [...administratorRoles, ...teacherRoles];
 export const resultsRoles = [
+  "Proprietress",
   "Super Admin",
   "School Admin",
   "Teacher",

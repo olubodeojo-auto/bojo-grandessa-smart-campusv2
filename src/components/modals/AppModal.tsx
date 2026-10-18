@@ -8,6 +8,9 @@ interface AppModalProps {
   title?: string;
   size?: ModalSize;
   footer?: ReactNode;
+  dialogStyle?: CSSProperties;
+  bodyStyle?: CSSProperties;
+  footerStyle?: CSSProperties;
   children: ReactNode;
   onClose: () => void;
 }
@@ -19,9 +22,24 @@ const sizeStyles: Record<ModalSize, CSSProperties> = {
   xl: { maxWidth: 1100 },
 };
 
-export default function AppModal({ open, title, size = "md", footer, children, onClose }: AppModalProps) {
+export default function AppModal({
+  open,
+  title,
+  size = "md",
+  footer,
+  dialogStyle,
+  bodyStyle,
+  footerStyle,
+  children,
+  onClose,
+}: AppModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const titleId = useId();
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) {
@@ -38,7 +56,7 @@ export default function AppModal({ open, title, size = "md", footer, children, o
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
       }
     };
 
@@ -50,7 +68,7 @@ export default function AppModal({ open, title, size = "md", footer, children, o
       document.body.style.overflow = "";
       previousActiveElement?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) {
     return null;
@@ -82,6 +100,7 @@ export default function AppModal({ open, title, size = "md", footer, children, o
           padding: 24,
           boxShadow: "0 24px 60px rgba(0,0,0,0.18)",
           ...sizeStyles[size],
+          ...dialogStyle,
         }}
         onClick={(event) => event.stopPropagation()}
         tabIndex={-1}
@@ -94,9 +113,13 @@ export default function AppModal({ open, title, size = "md", footer, children, o
           </div>
         ) : null}
 
-        <div>{children}</div>
+        <div style={bodyStyle}>{children}</div>
 
-        {footer ? <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>{footer}</div> : null}
+        {footer ? (
+          <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", ...footerStyle }}>
+            {footer}
+          </div>
+        ) : null}
       </div>
     </div>
   );

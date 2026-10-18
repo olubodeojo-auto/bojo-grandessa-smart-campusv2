@@ -1,7 +1,6 @@
-export type ResultStatus =
-  | "Draft"
-  | "Published"
-  | "Approved";
+export type ResultStatus = "Draft" | "Submitted" | "Returned" | "Published" | "Approved";
+export type ResultAssessmentType = "CA" | "Examination" | "Combined";
+export type ResultCalculationMode = "Manual" | "Automatic";
 
 export interface Result {
   id: string;
@@ -17,24 +16,39 @@ export interface Result {
   subject_name?: string;
 
   teacher_name?: string;
+  assessment_type: ResultAssessmentType;
+  calculation_mode?: ResultCalculationMode;
 
   academic_year: string;
 
   term: "First" | "Second" | "Third";
 
-  continuous_assessment: number;
+  continuous_assessment: number | null;
 
-  examination: number;
+  maximum_score?: number | null;
 
-  total_score: number;
+  examination: number | null;
 
-  grade: string;
+  total_score: number | null;
 
-  remark: string;
+  grade: string | null;
+
+  remark: string | null;
 
   teacher_id?: string;
 
   status: ResultStatus;
+
+  created_by?: string | null;
+  submitted_by?: string | null;
+  submitted_by_name?: string | null;
+  submitted_at?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  published_by?: string | null;
+  published_at?: string | null;
+  review_reason?: string | null;
+  returned_assessment_snapshot?: Array<string | number | null> | null;
 
   created_at: string;
 
