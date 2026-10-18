@@ -94,6 +94,7 @@
 
 .report-card-results table {
   width: 100%;
+  min-width: 620px;
   max-width: 170mm;
   margin-left: auto;
   margin-right: auto;
@@ -257,6 +258,12 @@
 
   .report-card-results {
     overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .report-card-results:focus-visible {
+    outline: 2px solid #2e7d32;
+    outline-offset: 2px;
   }
 }
 
@@ -287,5 +294,13 @@
     margin: 0;
     page-break-inside: avoid;
     page-break-after: avoid;
+  }
+
+  .report-card-results {
+    overflow: visible;
+  }
+
+  .report-card-results table {
+    min-width: 0;
   }
 }

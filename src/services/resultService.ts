@@ -2,6 +2,7 @@
 
 import supabase from "../lib/supabase";
 import type { Result } from "../types/result";
+import { getResultUnpublishAuditEvidence, type ResultChangeAuditRecord, type ResultPublicationEvidence } from "../utils/resultPermissions";
 
 const TABLE = "results";
 
@@ -172,4 +173,24 @@ export async function deleteResult(
     console.error(error);
     throw describeResultError(error, "Unable to delete result");
   }
+}
+
+
+export async function getResultPublicationEvidence(
+  results: Result[],
+): Promise<Map<string, ResultPublicationEvidence>> {
+  const candidates = results.filter((result) => result.status === "Returned" && !result.published_at);
+  if (candidates.length === 0) return new Map();
+
+  const { data, error } = await supabase
+    .from("result_change_log")
+    .select("result_id, action, old_record, new_record")
+    .in("result_id", candidates.map((result) => result.id));
+  if (error) throw new Error(`Unable to verify previous publication history: ${error.message}`);
+
+  const auditRecords = (data ?? []) as ResultChangeAuditRecord[];
+  return new Map(candidates.map((result) => [
+    result.id,
+    getResultUnpublishAuditEvidence(result.id, result.returned_assessment_snapshot, auditRecords),
+  ]));
 }

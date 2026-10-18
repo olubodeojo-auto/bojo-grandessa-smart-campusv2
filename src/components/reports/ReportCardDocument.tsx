@@ -44,7 +44,12 @@ export default function ReportCardDocument({ report }: { report: ReportCardData 
         </div>
       </section>
 
-      <section className="report-card-results official-results">
+      <section
+        className="report-card-results official-results"
+        role="region"
+        aria-label="Report card subject results; scroll horizontally to view all columns"
+        tabIndex={0}
+      >
         <table>
           <thead>
             {report.reportType === "Midterm" ? (

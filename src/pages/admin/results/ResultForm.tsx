@@ -259,6 +259,10 @@ export default function ResultForm({
   const canSubmit = students.length > 0 && Boolean(classes?.length) && Boolean(subjects?.length);
   const teacherEditingExisting = mode === "edit" && Boolean(allowedAssignments);
 
+  if (mode === "edit" && result?.status === "Published") {
+    return <div role="alert">Unpublish this result before editing it.</div>;
+  }
+
   return (
     <form onSubmit={handleSubmit}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 }}>

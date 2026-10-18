@@ -318,6 +318,12 @@ export default function ResultBatchEntry({
       const entry = entryFor(subject.id);
       return { subject, entry, ...rowValues(subject.id, entry) };
     });
+    const publishedEdit = rows.find((row) => row.entry.dirty
+      && row.matches.some((match) => match.status === "Published"));
+    if (publishedEdit) {
+      setError(`${publishedEdit.subject.subject_name}: unpublish the existing result before editing it.`);
+      return;
+    }
     const invalid = rows.find((row) => row.errors.length > 0 && (row.hasValue || row.entry.dirty));
     if (invalid) {
       setError(`${invalid.subject.subject_name}: ${invalid.errors.join(" ")}`);
@@ -474,8 +480,13 @@ export default function ResultBatchEntry({
       {error ? <div role="alert" style={{ color: "#991b1b" }}>{error}</div> : null}
 
       {selectedStudent && subjects.length > 0 ? (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <div
+          role="region"
+          aria-label="Batch subject results; scroll horizontally to see all columns"
+          tabIndex={0}
+          style={{ minWidth: 0, overflowX: "auto" }}
+        >
+          <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
             <thead>
               <tr>
                 <th style={cellStyle}>Subject</th>
@@ -490,7 +501,8 @@ export default function ResultBatchEntry({
                 const entry = entryFor(subject.id);
                 const values = rowValues(subject.id, entry);
                 const existing = values.matches[0];
-                const disabled = saving || !draftLoaded;
+                const publishedExisting = values.matches.some((match) => match.status === "Published");
+                const disabled = saving || !draftLoaded || publishedExisting;
                 return (
                   <tr key={subject.id}>
                     <td style={cellStyle}>{subject.subject_name}</td>
@@ -588,7 +600,9 @@ export default function ResultBatchEntry({
                       {values.matches.length > 1
                         ? <span role="alert" style={errorStyle}>Multiple matching records</span>
                         : existing
-                          ? <button type="button" onClick={() => onEditExisting(existing)}>Existing {existing.status}</button>
+                          ? <button type="button" onClick={() => onEditExisting(existing)} disabled={existing.status === "Published"}>
+                            {existing.status === "Published" ? "Existing Published · unpublish before editing" : `Existing ${existing.status}`}
+                          </button>
                           : values.hasValue ? "New draft" : "Not entered"}
                     </td>
                   </tr>
