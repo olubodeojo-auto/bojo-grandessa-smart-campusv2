@@ -12,7 +12,8 @@ const SENDER = "Grandessa Smart Campus <no-reply@grandessaschool.com.ng>";
 const staffRoles = new Set(["Administrator", "Proprietress", "Super Admin", "Accountant", "Teacher"]);
 const managerRoles = new Set(["Administrator", "Proprietress", "Super Admin"]);
 
-type Audience = "parents" | "staff" | "students" | "community" | "class" | "people" | "custom";
+type Audience = "parents" | "parents_published_results" | "staff" | "students" | "community" | "class" | "people" | "custom";
+type PublishedReportType = "Midterm" | "End-of-Term";
 type PersonSource = "contact" | "staff" | "student";
 
 type PersonRef = { source: PersonSource; id: string };
@@ -24,6 +25,9 @@ type RequestPayload = {
   assignment_ids?: string[];
   people?: PersonRef[];
   custom_emails?: string[];
+  academic_year?: string;
+  term?: string;
+  report_type?: PublishedReportType;
   subject?: string;
   body?: string;
   body_html?: string;
@@ -40,7 +44,7 @@ type CommunicationAttachment = {
   content_id?: string;
 };
 
-type ContactRow = { id: string; first_name: string | null; last_name: string | null; email: string | null };
+type ContactRow = { id: string; first_name: string | null; last_name: string | null; email: string | null; auth_user_id: string | null };
 type StudentRow = {
   id: string;
   first_name: string | null;
@@ -54,6 +58,23 @@ type UserRow = { id: string; first_name: string | null; last_name: string | null
 type AssignmentRow = { user_id: string; role_id: string; is_active: boolean | null };
 type RoleRow = { id: string; name: string };
 type ClassRow = { id: string; class_name: string; class_teacher_id: string | null; status: string | null };
+type PublishedResultRow = {
+  id: string;
+  student_id: string;
+  class_id: string | null;
+  academic_year: string | null;
+  term: string | null;
+  assessment_type: string | null;
+  status: string | null;
+};
+type ParentStudentLinkRow = { student_id: string; auth_user_id: string };
+type PublishedResultsPeriod = {
+  academic_year: string;
+  term: string;
+  report_type: PublishedReportType;
+  student_count: number;
+  result_count: number;
+};
 type Directory = {
   contacts: ContactRow[];
   students: StudentRow[];
@@ -61,6 +82,8 @@ type Directory = {
   assignments: AssignmentRow[];
   roles: RoleRow[];
   classes: ClassRow[];
+  parentLinks: ParentStudentLinkRow[];
+  results: PublishedResultRow[];
   authEmails: Map<string, string>;
 };
 
