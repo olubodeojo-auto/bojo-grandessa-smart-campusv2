@@ -69,6 +69,13 @@ export type ResultImportPreviewEntry = {
   matchedStudentId?: string;
   selectedStudentId?: string;
   included?: boolean;
+  workflowStatus?: "published" | "imported_draft";
+  resultImportStudentId?: string;
+  resultImportClassId?: string;
+  importedResultCount?: number;
+  publishedResultCount?: number;
+  importedAt?: string;
+  importedResultIds?: string[];
   reportDetails?: {
     age: string;
     classAverage: number | null;
@@ -319,6 +326,7 @@ export function selectCreatedImportStudent(
 }
 
 export function isImportEntryReady(entry: ResultImportPreviewEntry): boolean {
+  if (entry.workflowStatus) return false;
   return Boolean(entry.included !== false && entry.selectedStudentId && entry.warnings.length === 0
     && entry.items.every((item) => Boolean(item.classId && item.subjectId))
     && getImportScoreWarnings(entry).length === 0);
@@ -333,7 +341,7 @@ export function getImportableResultEntries(
 export function getUnresolvedIncludedResultEntries(
   entries: ResultImportPreviewEntry[],
 ): ResultImportPreviewEntry[] {
-  return entries.filter((entry) => entry.included !== false && !isImportEntryReady(entry));
+  return entries.filter((entry) => !entry.workflowStatus && entry.included !== false && !isImportEntryReady(entry));
 }
 
 export function buildReviewedImportResultValues(params: {
@@ -1537,6 +1545,7 @@ export function summarizeImportPreview(entries: ResultImportPreviewEntry[]): {
 } {
   return entries.reduce(
     (summary, entry) => {
+      if (entry.workflowStatus) return summary;
       summary.totalStudents += 1;
 
       if (entry.included === false) {
