@@ -145,11 +145,31 @@ async function handleCreate(adminClient: ReturnType<typeof createClient>, reques
   if (contact.auth_user_id) {
     const { data: authUserResult, error: authError } = await adminClient.auth.admin.getUserById(contact.auth_user_id);
     if (authError) throw authError;
+    const existingUser = authUserResult.user;
+    if (!existingUser) return errorResponse("The contact points to a missing login account. Review this contact before changing it.", 409);
+    if (existingUser.email?.trim().toLowerCase() !== email) {
+      return errorResponse("The contact email does not match its linked login account. Review the contact before restoring access; no account was changed.", 409);
+    }
+
+    // Restore the disabled profile as well as the Parent role.
+    const { error: userError } = await adminClient.from("users").upsert({
+      id: contact.auth_user_id,
+      first_name: contact.first_name,
+      last_name: contact.last_name,
+      status: "Active",
+    }, { onConflict: "id" });
+    if (userError) throw userError;
+
     const parentRole = await getParentRole(adminClient);
     await ensureParentRole(adminClient, contact.auth_user_id, parentRole.id);
     await ensureContactStudentLinks(adminClient, contact, contact.auth_user_id);
-    const completed = Boolean(authUserResult.user?.email_confirmed_at || authUserResult.user?.last_sign_in_at);
-    return response({ contact: { id: contact.id, auth_user_id: contact.auth_user_id }, invited: false, status: completed ? "active" : "invited" });
+    const completed = Boolean(existingUser.email_confirmed_at || existingUser.last_sign_in_at);
+    return response({
+      contact: { id: contact.id, auth_user_id: contact.auth_user_id },
+      invited: false,
+      status: completed ? "active" : "invited",
+      restored: true,
+    });
   }
 
   const { data: authUsers, error: authListError } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -376,9 +396,28 @@ async function handleLinkExisting(
   if (contactError) throw contactError;
   if (!contact) return errorResponse("Contact not found.", 404);
   if (contact.auth_user_id) {
+    const { data: existingAuthResult, error: existingAuthError } = await adminClient.auth.admin.getUserById(contact.auth_user_id);
+    if (existingAuthError) throw existingAuthError;
+    const existingUser = existingAuthResult.user;
+    if (!existingUser || existingUser.email?.trim().toLowerCase() !== contact.email?.trim().toLowerCase()) {
+      return errorResponse("The existing contact-to-login link does not match the contact email. Review it before linking; no change was made.", 409);
+    }
+    const { error: userError } = await adminClient.from("users").upsert({
+      id: contact.auth_user_id,
+      first_name: contact.first_name,
+      last_name: contact.last_name,
+      status: "Active",
+    }, { onConflict: "id" });
+    if (userError) throw userError;
     await ensureParentRole(adminClient, contact.auth_user_id, (await getParentRole(adminClient)).id);
     await ensureContactStudentLinks(adminClient, contact, contact.auth_user_id);
-    return response({ contact: { id: contact.id, auth_user_id: contact.auth_user_id }, invited: false, status: "active", linked_existing: true });
+    const completed = Boolean(existingUser.email_confirmed_at || existingUser.last_sign_in_at);
+    return response({
+      contact: { id: contact.id, auth_user_id: contact.auth_user_id },
+      invited: false,
+      status: completed ? "active" : "invited",
+      linked_existing: true,
+    });
   }
 
   const email = contact.email?.trim().toLowerCase();
@@ -474,6 +513,17 @@ async function handleDirectory(adminClient: ReturnType<typeof createClient>): Pr
   if (activeParentAssignmentsError) throw activeParentAssignmentsError;
   const activeParentUserIds = new Set((activeParentAssignments ?? []).map((assignment) => assignment.user_id));
 
+  const linkedAuthUserIds = [...new Set((contacts ?? [])
+    .map((contact) => contact.auth_user_id)
+    .filter((value): value is string => Boolean(value)))];
+  const { data: userProfiles, error: userProfilesError } = linkedAuthUserIds.length > 0
+    ? await adminClient.from("users").select("id, status").in("id", linkedAuthUserIds)
+    : { data: [], error: null };
+  if (userProfilesError) throw userProfilesError;
+  const activeProfileUserIds = new Set((userProfiles ?? [])
+    .filter((user) => user.status === "Active")
+    .map((user) => user.id));
+
   const authUsers = new Map<string, { email: string | null; emailConfirmed: boolean; signedIn: boolean }>();
   const authUsersByEmail = new Map<string, { id: string; emailConfirmed: boolean; signedIn: boolean }>();
   let page = 1;
@@ -537,7 +587,9 @@ async function handleDirectory(adminClient: ReturnType<typeof createClient>): Pr
     let status: "not_created" | "inactive" | "invited" | "active" | "account_exists_unlinked" | "account_conflict";
     if (contact.auth_user_id) {
       const authUser = authUsers.get(contact.auth_user_id);
-      if (!activeParentUserIds.has(contact.auth_user_id)) {
+      if (!activeParentUserIds.has(contact.auth_user_id)
+        || !activeProfileUserIds.has(contact.auth_user_id)
+        || !authUsers.has(contact.auth_user_id)) {
         status = "inactive";
       } else if (authUser?.emailConfirmed || authUser?.signedIn) {
         status = "active";
