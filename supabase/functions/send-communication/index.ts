@@ -224,7 +224,6 @@ type StudentResultGroup = {
   term: string;
   report_type: PublishedReportType;
   student_id: string;
-  class_id: string | null;
   rows: PublishedResultRow[];
 };
 
@@ -237,7 +236,6 @@ function getFullyPublishedStudentResultGroups(directory: Directory): StudentResu
       result.academic_year,
       result.term,
       reportType,
-      result.class_id ?? "",
       result.student_id,
     ].join("::");
     const current = groups.get(key) ?? {
@@ -245,7 +243,6 @@ function getFullyPublishedStudentResultGroups(directory: Directory): StudentResu
       term: result.term,
       report_type: reportType,
       student_id: result.student_id,
-      class_id: result.class_id,
       rows: [],
     };
     current.rows.push(result);
