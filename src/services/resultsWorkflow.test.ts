@@ -2946,8 +2946,8 @@ describe("results workflow migration contract", () => {
     expect(importDraftMigration).toContain("d.created_by = actor_id");
     expect(importDraftMigration).toContain("grant execute on function public.get_result_import_review_drafts(uuid, text) to authenticated");
     expect(importDraftMigration).not.toMatch(/alter\s+table\s+public\.result_import_review_drafts\s+enable\s+row\s+level\s+security/i);
-    expect(reportCardService).toContain('rpc("save_result_import_review_draft"');
-    expect(reportCardService).toContain('rpc("get_result_import_review_drafts"');
+    expect(reportCardService).not.toContain('rpc("save_result_import_review_draft"');
+    expect(reportCardService).not.toContain('rpc("get_result_import_review_drafts"');
     expect(reportCardService).toContain('rpc("get_result_import_review_workbooks_v2"');
     expect(reportCardService).toContain('rpc("get_result_import_review_drafts_v2"');
     expect(reportCardService).toContain('rpc("save_result_import_review_draft_v2"');
