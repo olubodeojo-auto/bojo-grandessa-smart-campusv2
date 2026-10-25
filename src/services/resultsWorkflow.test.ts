@@ -106,17 +106,17 @@ const importDraftListingMigrationFiles = import.meta.glob<string>(
 );
 const importDraftListingMigration = Object.values(importDraftListingMigrationFiles)[0] ?? "";
 const workflowSecurityMigrationFiles = import.meta.glob<string>(
-  "../../supabase/migrations/20261025120000_restore_workbook_ownership_and_record_rls.sql",
+  "../../supabase/migrations/20261025123540_restore_workbook_ownership_and_record_rls_20261025.sql",
   { eager: true, query: "?raw", import: "default" },
 );
 const workflowSecurityMigration = Object.values(workflowSecurityMigrationFiles)[0] ?? "";
 const importWorkflowStatusMigrationFiles = import.meta.glob<string>(
-  "../../supabase/migrations/20261025140000_mark_imported_workbook_entries.sql",
+  "../../supabase/migrations/20261025125614_mark_imported_workbook_entries_20261025.sql",
   { eager: true, query: "?raw", import: "default" },
 );
 const importWorkflowStatusMigration = Object.values(importWorkflowStatusMigrationFiles)[0] ?? "";
 const reportCardDateFixMigrationFiles = import.meta.glob<string>(
-  "../../supabase/migrations/20261025131500_fix_report_card_import_rpc_date_types.sql",
+  "../../supabase/migrations/20261025125245_fix_report_card_import_rpc_date_types_20261025.sql",
   { eager: true, query: "?raw", import: "default" },
 );
 const reportCardDateFixMigration = Object.values(reportCardDateFixMigrationFiles)[0] ?? "";
