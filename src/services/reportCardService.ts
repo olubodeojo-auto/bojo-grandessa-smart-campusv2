@@ -178,6 +178,12 @@ export type ImportReviewWorkbookSummary = ImportReviewWorkbook & {
   excludedEntryCount: number;
   unresolvedEntryCount: number;
   subjectRowCount: number;
+  importedEntryCount: number;
+  publishedEntryCount: number;
+  draftImportedEntryCount: number;
+  importedSubjectRowCount: number;
+  publishedSubjectRowCount: number;
+  draftImportedSubjectRowCount: number;
   duplicatePupilCount: number;
   duplicatePupilNames: string[];
 };
@@ -234,7 +240,7 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
   const workbookKeysByPupilPeriod = new Map<string, Set<string>>();
   for (const { workbook, entries } of workbookEntries) {
     for (const entry of entries) {
-      if (entry.included === false) continue;
+      if (entry.workflowStatus || entry.included === false) continue;
       const studentId = entry.selectedStudentId ?? entry.matchedStudentId;
       if (!studentId) continue;
       const pupilPeriodKey = [
@@ -253,7 +259,7 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
   for (const { workbook, entries } of workbookEntries) {
     const duplicates = new Map<string, string>();
     for (const entry of entries) {
-      if (entry.included === false) continue;
+      if (entry.workflowStatus || entry.included === false) continue;
       const studentId = entry.selectedStudentId ?? entry.matchedStudentId;
       if (!studentId) continue;
       const pupilPeriodKey = [
@@ -270,8 +276,12 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
   }
 
   return workbookEntries.map(({ workbook, entries }) => {
-    const included = entries.filter((entry) => entry.included !== false);
-    const excluded = entries.filter((entry) => entry.included === false);
+    const pending = entries.filter((entry) => !entry.workflowStatus);
+    const included = pending.filter((entry) => entry.included !== false);
+    const excluded = pending.filter((entry) => entry.included === false);
+    const imported = entries.filter((entry) => entry.workflowStatus === "published" || entry.workflowStatus === "imported_draft");
+    const published = entries.filter((entry) => entry.workflowStatus === "published");
+    const importedDrafts = entries.filter((entry) => entry.workflowStatus === "imported_draft");
     const unresolved = included.filter((entry) =>
       entry.matchStatus !== "matched" || !entry.selectedStudentId
     );
@@ -279,9 +289,10 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
     const sheetName = separatorIndex >= 0
       ? workbook.workbookKey.slice(separatorIndex + 1)
       : "Saved spreadsheet";
-    const firstItemClasses = included.flatMap((entry) => entry.items.map((item) => item.className ?? ""));
-    const classes = uniqueSorted([...included.map((entry) => entry.className), ...firstItemClasses]);
+    const firstItemClasses = entries.flatMap((entry) => entry.items.map((item) => item.className ?? ""));
+    const classes = uniqueSorted([...entries.map((entry) => entry.className), ...firstItemClasses]);
     const duplicateNames = [...(duplicatePupilsByWorkbook.get(workbookSelectionKeyForSummary(workbook))?.values() ?? [])];
+    const subjectCount = (entry: ResultImportPreviewEntry): number => entry.importedResultCount ?? entry.items.length;
     return {
       ...workbook,
       entryCount: entries.length,
@@ -298,6 +309,12 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
       excludedEntryCount: excluded.length,
       unresolvedEntryCount: unresolved.length,
       subjectRowCount: included.reduce((total, entry) => total + entry.items.length, 0),
+      importedEntryCount: imported.length,
+      publishedEntryCount: published.length,
+      draftImportedEntryCount: importedDrafts.length,
+      importedSubjectRowCount: imported.reduce((total, entry) => total + subjectCount(entry), 0),
+      publishedSubjectRowCount: published.reduce((total, entry) => total + (entry.publishedResultCount ?? subjectCount(entry)), 0),
+      draftImportedSubjectRowCount: importedDrafts.reduce((total, entry) => total + subjectCount(entry), 0),
       duplicatePupilCount: duplicateNames.length,
       duplicatePupilNames: duplicateNames,
     };
