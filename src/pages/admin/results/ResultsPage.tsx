@@ -679,12 +679,17 @@ export default function ResultsPage() {
         });
       });
       const savedEntries = await getImportReviewDrafts(`${workbookKey}:${sheetName}`, user?.id);
-      const restoredEntries = reconcileSavedImportStudentMatches(
+      const mergedEntries = reconcileSavedImportStudentMatches(
         mergeSavedImportReviewDrafts(validatedEntries, savedEntries),
         students,
       );
+      const completedEntries = mergedEntries.filter((entry) => Boolean(entry.workflowStatus));
+      const restoredEntries = mergedEntries.filter((entry) => !entry.workflowStatus);
+      setImportSummary(completedEntries.length > 0
+        ? `${completedEntries.length} pupil review(s) were skipped because their results have already been imported. Check Report Card Publishing for their saved status.`
+        : "");
       setImportEntries(withSelectedDuplicateWarnings(restoredEntries));
-      setDraftSaveStates(Object.fromEntries(savedEntries.map((entry) => [entry.studentKey, { state: "saved" as const }])));
+      setDraftSaveStates(Object.fromEntries(savedEntries.filter((entry) => !entry.workflowStatus).map((entry) => [entry.studentKey, { state: "saved" as const }])));
       setImportResultStates({});
       const savedCursor = readReviewCursor(`${workbookKey}:${sheetName}`);
       const restoredActive = restoredEntries.find((entry) => entry.studentKey === savedCursor?.entryKey);
@@ -725,11 +730,20 @@ export default function ResultsPage() {
       const sheetName = selected.workbookKey.slice(separatorIndex + 1);
       const entries = await getImportReviewDrafts(selected.workbookKey, selected.ownerId);
       if (entries.length === 0) throw new Error("This saved workbook has no pupil reviews to restore.");
+      const completedEntries = entries.filter((entry) => Boolean(entry.workflowStatus));
+      const pendingEntries = entries.filter((entry) => !entry.workflowStatus);
+      if (pendingEntries.length === 0) {
+        setImportSummary("All pupil entries in this workbook have already been imported. Their publication status is shown in Report Card Publishing; no duplicate import was started.");
+        return;
+      }
       const reconciledEntries = reconcileSavedImportStudentMatches(
-        [...entries].sort((left, right) => left.index - right.index),
+        [...pendingEntries].sort((left, right) => left.index - right.index),
         students,
       );
       const restoredEntries = withSelectedDuplicateWarnings(reconciledEntries);
+      setImportSummary(completedEntries.length > 0
+        ? `${completedEntries.length} previously imported pupil review(s) were left out of this working view to prevent duplicate imports.`
+        : "");
       const savedCursor = readReviewCursor(selected.workbookKey);
       const activeEntry = restoredEntries.find((entry) => entry.studentKey === savedCursor?.entryKey);
       const unresolvedIndex = activeEntry?.items.findIndex((item) => !item.subjectId) ?? -1;
