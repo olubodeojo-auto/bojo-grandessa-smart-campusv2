@@ -301,7 +301,10 @@ export default function ResultsPage() {
   }, [loadData]);
 
   useEffect(() => {
-    if (!canManage || !user) return;
+    if (!canManage || !user) {
+      setLoadingSavedWorkbooks(false);
+      return;
+    }
     let cancelled = false;
     setLoadingSavedWorkbooks(true);
     setSavedWorkbookError("");
