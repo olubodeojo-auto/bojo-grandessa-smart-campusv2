@@ -35,6 +35,10 @@ export function createParentPortalAccount(contactId: string): Promise<ParentAcco
   return invokeParentAccount({ action: "create", contact_id: contactId, redirect_to: PARENT_ACCOUNT_REDIRECT_URL });
 }
 
+export function linkExistingParentPortalAccount(contactId: string): Promise<ParentAccountResponse> {
+  return invokeParentAccount({ action: "link_existing", contact_id: contactId });
+}
+
 export function resendParentPortalInvite(contactId: string): Promise<ParentAccountResponse> {
   return invokeParentAccount({ action: "resend_invitation", contact_id: contactId, redirect_to: PARENT_ACCOUNT_REDIRECT_URL });
 }
