@@ -15,6 +15,7 @@ import { useAuth } from "../../hooks/useAuth";
 
 const audienceOptions: Array<{ value: CommunicationAudience; label: string }> = [
   { value: "parents", label: "Parents / Guardians" },
+  { value: "parents_published_results", label: "Parents of Published Results" },
   { value: "staff", label: "Teachers & Staff" },
   { value: "students", label: "Students with email" },
   { value: "community", label: "Entire School Community" },
@@ -53,6 +54,10 @@ function fileToBase64(file: File): Promise<string> {
 
 const COMMUNICATION_DRAFT_KEY = "grandessa-communications-draft";
 
+function getPublishedPeriodKey(period: { academic_year: string; term: string; report_type: string }): string {
+  return [period.academic_year, period.term, period.report_type].map(encodeURIComponent).join("|");
+}
+
 type CommunicationDraft = {
   audience: CommunicationAudience;
   classId: string;
@@ -61,6 +66,7 @@ type CommunicationDraft = {
   subject: string;
   message: string;
   messageHtml?: string;
+  publishedResultsPeriodKey?: string;
 };
 
 function loadDraft(): CommunicationDraft | null {
@@ -79,6 +85,8 @@ function loadDraft(): CommunicationDraft | null {
       customEmails: typeof draft.customEmails === "string" ? draft.customEmails : "",
       subject: typeof draft.subject === "string" ? draft.subject : "",
       message: typeof draft.message === "string" ? draft.message : "",
+      messageHtml: typeof draft.messageHtml === "string" ? draft.messageHtml : undefined,
+      publishedResultsPeriodKey: typeof draft.publishedResultsPeriodKey === "string" ? draft.publishedResultsPeriodKey : "",
     };
   } catch {
     return null;
@@ -91,6 +99,7 @@ export default function CommunicationsPage() {
   const [directory, setDirectory] = useState<CommunicationDirectory | null>(null);
   const [audience, setAudience] = useState<CommunicationAudience>(() => draft?.audience ?? "parents");
   const [classId, setClassId] = useState(() => draft?.classId ?? "");
+  const [publishedResultsPeriodKey, setPublishedResultsPeriodKey] = useState(() => draft?.publishedResultsPeriodKey ?? "");
   const [selectedPeople, setSelectedPeople] = useState<Set<string>>(() => new Set(draft?.selectedPeople ?? []));
   const [customEmails, setCustomEmails] = useState(() => draft?.customEmails ?? "");
   const [customRecipients, setCustomRecipients] = useState<string[]>(() => parseCustomEmails(draft?.customEmails ?? ""));
@@ -124,12 +133,22 @@ export default function CommunicationsPage() {
     [selectedPeople],
   );
 
+  const selectedPublishedResultsPeriod = useMemo(() =>
+    directory?.published_results_periods.find((period) => getPublishedPeriodKey(period) === publishedResultsPeriodKey) ?? null,
+    [directory, publishedResultsPeriodKey],
+  );
+
   const target = useMemo(() => ({
     audience,
     ...(audience === "class" ? { class_id: classId } : {}),
     ...(audience === "people" ? { people } : {}),
     ...(audience === "custom" ? { custom_emails: customRecipients } : {}),
-  }), [audience, classId, customRecipients, people]);
+    ...(audience === "parents_published_results" && selectedPublishedResultsPeriod ? {
+      academic_year: selectedPublishedResultsPeriod.academic_year,
+      term: selectedPublishedResultsPeriod.term,
+      report_type: selectedPublishedResultsPeriod.report_type,
+    } : {}),
+  }), [audience, classId, customRecipients, people, selectedPublishedResultsPeriod]);
 
   const suggestions = useMemo(() => {
     const query = recipientInput.trim().toLowerCase();
