@@ -2,7 +2,7 @@ import { ExternalLink, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { createParentPortalAccount, resendParentPortalInvite } from "../../../services/parentAccountService";
+import { createParentPortalAccount, linkExistingParentPortalAccount, resendParentPortalInvite } from "../../../services/parentAccountService";
 import {
   getParentAccountDirectory,
   type ParentAccountDirectoryEntry,
@@ -15,6 +15,8 @@ const statusLabels: Record<ParentAccountStatus | "all", string> = {
   inactive: "No Active Parent Account",
   invited: "Invitation Pending",
   active: "Active",
+  account_exists_unlinked: "Existing Account — Link Required",
+  account_conflict: "Duplicate Contact Needs Review",
 };
 
 const statusColors: Record<ParentAccountStatus, { background: string; color: string }> = {
@@ -22,6 +24,8 @@ const statusColors: Record<ParentAccountStatus, { background: string; color: str
   inactive: { background: "#f1f5f9", color: "#475569" },
   invited: { background: "#fef3c7", color: "#92400e" },
   active: { background: "#dcfce7", color: "#166534" },
+  account_exists_unlinked: { background: "#dbeafe", color: "#1d4ed8" },
+  account_conflict: { background: "#fee2e2", color: "#991b1b" },
 };
 
 function displayName(entry: ParentAccountDirectoryEntry): string {
@@ -88,8 +92,12 @@ export default function ParentAccountsPage() {
     try {
       if (entry.account_status === "not_created") {
         await createParentPortalAccount(entry.contact.id);
+      } else if (entry.account_status === "account_exists_unlinked") {
+        await linkExistingParentPortalAccount(entry.contact.id);
       } else if (entry.account_status === "invited") {
         await resendParentPortalInvite(entry.contact.id);
+      } else if (entry.account_status === "inactive") {
+        await createParentPortalAccount(entry.contact.id);
       }
       await loadDirectory();
     } catch (actionError) {
@@ -115,6 +123,23 @@ export default function ParentAccountsPage() {
       </header>
 
       <section className="card" style={{ display: "grid", gap: 16 }}>
+        <div aria-label="Parent portal readiness" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+          {([
+            ["Linked & active", entries.filter((entry) => entry.account_status === "active").length, "#166534", "#f0fdf4"],
+            ["Invitations pending", entries.filter((entry) => entry.account_status === "invited").length, "#92400e", "#fffbeb"],
+            ["Needs an account", entries.filter((entry) => entry.account_status === "not_created").length, "#475569", "#f8fafc"],
+            ["Existing account to link", entries.filter((entry) => entry.account_status === "account_exists_unlinked").length, "#1d4ed8", "#eff6ff"],
+            ["Needs contact review", entries.filter((entry) => entry.account_status === "account_conflict" || entry.account_status === "inactive").length, "#991b1b", "#fef2f2"],
+          ] as const).map(([label, count, color, background]) => (
+            <div key={label} style={{ padding: 14, borderRadius: 10, background, border: "1px solid #e2e8f0" }}>
+              <p style={{ margin: 0, color, fontSize: 13, fontWeight: 700 }}>{label}</p>
+              <strong style={{ display: "block", marginTop: 6, fontSize: 24, color }}>{count}</strong>
+            </div>
+          ))}
+        </div>
+        <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>
+          Parent portal access follows the student’s current primary or secondary contact. Review a contact before linking accounts. Results publication never sends parent emails.
+        </p>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 280px" }}>
             <Search size={18} color="#64748b" />
@@ -188,15 +213,26 @@ export default function ParentAccountsPage() {
                       <td style={{ padding: "14px 8px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                           {entry.account_status === "active" ? (
-                            <span style={{ color: "#166534", fontSize: 13, fontWeight: 700 }}>Active</span>
-                          ) : entry.account_status === "inactive" ? (
-                            <span style={{ color: "#475569", fontSize: 13 }}>No active Parent role</span>
+                            <span style={{ color: "#166534", fontSize: 13, fontWeight: 700 }}>Portal linked</span>
+                          ) : entry.account_status === "account_conflict" ? (
+                            <span title="This email account is already associated with another contact. Review duplicate contact records before changing links." style={{ color: "#991b1b", fontSize: 13, maxWidth: 180 }}>
+                              Review duplicate contact
+                            </span>
                           ) : (
-                            <button type="button" onClick={() => void manageAccount(entry)} disabled={working}>
-                              {working ? "Working..." : entry.account_status === "invited" ? "Resend Invite" : "Create Account"}
+                            <button
+                              type="button"
+                              onClick={() => void manageAccount(entry)}
+                              disabled={working || !entry.contact.email?.trim()}
+                              title={!entry.contact.email?.trim() ? "Add an email address to this contact before creating or linking an account." : undefined}
+                            >
+                              {working ? "Working..." :
+                                entry.account_status === "invited" ? "Resend invitation" :
+                                  entry.account_status === "account_exists_unlinked" ? "Link existing account" :
+                                    entry.account_status === "inactive" ? "Restore portal access" :
+                                      "Create account & invite"}
                             </button>
                           )}
-                          <Link to="/admin/students">Edit</Link>
+                          <Link to="/admin/students">Edit contact</Link>
                         </div>
                       </td>
                     </tr>
