@@ -250,7 +250,7 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
         entry.reportKind,
       ].join("::");
       const matchingWorkbooks = workbookKeysByPupilPeriod.get(pupilPeriodKey) ?? new Set<string>();
-      matchingWorkbooks.add(workbook.workbookKey);
+      matchingWorkbooks.add(workbookSelectionKeyForSummary(workbook));
       workbookKeysByPupilPeriod.set(pupilPeriodKey, matchingWorkbooks);
     }
   }
