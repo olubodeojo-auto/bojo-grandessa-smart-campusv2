@@ -123,24 +123,27 @@ export async function saveImportedReportCard(params: {
 export async function saveImportReviewDraft(params: {
   workbookKey: string;
   entry: ResultImportPreviewEntry;
+  ownerId?: string;
 }): Promise<void> {
   const schoolSettings = await getSchoolSettings();
-  const { error } = await supabase.rpc("save_result_import_review_draft", {
+  const { error } = await supabase.rpc("save_result_import_review_draft_v2", {
     target_school_id: schoolSettings.school_id,
     target_workbook_key: params.workbookKey,
     target_entry_key: params.entry.studentKey,
     target_student_id: params.entry.selectedStudentId ?? null,
     target_class_id: params.entry.items[0]?.classId ?? null,
     draft_payload: params.entry,
+    target_owner_id: params.ownerId ?? null,
   });
   if (error) throw new Error(`Unable to save ${params.entry.studentName}'s import review progress: ${error.message}`);
 }
 
-export async function getImportReviewDrafts(workbookKey: string): Promise<ResultImportPreviewEntry[]> {
+export async function getImportReviewDrafts(workbookKey: string, ownerId?: string): Promise<ResultImportPreviewEntry[]> {
   const schoolSettings = await getSchoolSettings();
-  const { data, error } = await supabase.rpc("get_result_import_review_drafts", {
+  const { data, error } = await supabase.rpc("get_result_import_review_drafts_v2", {
     target_school_id: schoolSettings.school_id,
     target_workbook_key: workbookKey,
+    target_owner_id: ownerId ?? null,
   });
   if (error) throw new Error(`Unable to restore import review progress: ${error.message}`);
   if (!Array.isArray(data)) throw new Error("The saved import review response has an invalid shape.");
@@ -159,8 +162,22 @@ export async function getImportReviewDrafts(workbookKey: string): Promise<Result
 
 export type ImportReviewWorkbook = {
   workbookKey: string;
+  ownerId: string;
+  ownerName: string;
   entryCount: number;
   updatedAt: string;
+};
+
+export type ImportReviewWorkbookSummary = ImportReviewWorkbook & {
+  sheetName: string;
+  academicYears: string[];
+  terms: string[];
+  reportKinds: string[];
+  classes: string[];
+  includedEntryCount: number;
+  excludedEntryCount: number;
+  unresolvedEntryCount: number;
+  subjectRowCount: number;
 };
 
 export async function getImportReviewSchoolId(): Promise<string> {
@@ -170,7 +187,7 @@ export async function getImportReviewSchoolId(): Promise<string> {
 
 export async function getImportReviewWorkbooks(): Promise<ImportReviewWorkbook[]> {
   const schoolSettings = await getSchoolSettings();
-  const { data, error } = await supabase.rpc("get_result_import_review_workbooks", {
+  const { data, error } = await supabase.rpc("get_result_import_review_workbooks_v2", {
     target_school_id: schoolSettings.school_id,
   });
   if (error) throw new Error(`Unable to list saved import review workbooks: ${error.message}`);
@@ -179,24 +196,68 @@ export async function getImportReviewWorkbooks(): Promise<ImportReviewWorkbook[]
   return data.map((row) => {
     if (!row || typeof row !== "object"
       || typeof row.workbook_key !== "string"
+      || typeof row.owner_id !== "string"
+      || typeof row.owner_name !== "string"
       || typeof row.entry_count !== "number"
       || typeof row.updated_at !== "string") {
       throw new Error("A saved import workbook entry is malformed.");
     }
     return {
       workbookKey: row.workbook_key,
+      ownerId: row.owner_id,
+      ownerName: row.owner_name,
       entryCount: row.entry_count,
       updatedAt: row.updated_at,
     };
   });
 }
 
-export async function deleteImportReviewDraft(workbookKey: string, entryKey: string): Promise<void> {
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right));
+}
+
+export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWorkbookSummary[]> {
+  const workbooks = await getImportReviewWorkbooks();
+  return Promise.all(workbooks.map(async (workbook) => {
+    const entries = await getImportReviewDrafts(workbook.workbookKey, workbook.ownerId);
+    const included = entries.filter((entry) => entry.included !== false);
+    const excluded = entries.filter((entry) => entry.included === false);
+    const unresolved = included.filter((entry) =>
+      entry.matchStatus !== "matched" || !entry.selectedStudentId
+    );
+    const separatorIndex = workbook.workbookKey.indexOf(":");
+    const sheetName = separatorIndex >= 0
+      ? workbook.workbookKey.slice(separatorIndex + 1)
+      : "Saved spreadsheet";
+    const firstItemClasses = included.flatMap((entry) => entry.items.map((item) => item.className ?? ""));
+    const classes = uniqueSorted([...included.map((entry) => entry.className), ...firstItemClasses]);
+    return {
+      ...workbook,
+      entryCount: entries.length,
+      sheetName,
+      academicYears: uniqueSorted(entries.map((entry) => entry.academicYear)),
+      terms: uniqueSorted(entries.map((entry) => entry.term ? `${entry.term} Term` : "")),
+      reportKinds: uniqueSorted(entries.map((entry) => entry.reportKind === "Midterm / Continuous Assessment"
+        ? "Midterm (CA)"
+        : entry.reportKind === "End-of-Term"
+          ? "End-of-Term"
+          : entry.reportKind)),
+      classes,
+      includedEntryCount: included.length,
+      excludedEntryCount: excluded.length,
+      unresolvedEntryCount: unresolved.length,
+      subjectRowCount: included.reduce((total, entry) => total + entry.items.length, 0),
+    };
+  }));
+}
+
+export async function deleteImportReviewDraft(workbookKey: string, entryKey: string, ownerId?: string): Promise<void> {
   const schoolSettings = await getSchoolSettings();
-  const { error } = await supabase.rpc("delete_result_import_review_draft", {
+  const { error } = await supabase.rpc("delete_result_import_review_draft_v2", {
     target_school_id: schoolSettings.school_id,
     target_workbook_key: workbookKey,
     target_entry_key: entryKey,
+    target_owner_id: ownerId ?? null,
   });
   if (error) throw new Error(`Unable to remove saved import review progress: ${error.message}`);
 }
