@@ -219,8 +219,7 @@ begin
     next_term_begins = excluded.next_term_begins,
     updated_at = now();
 end;
-$function$
-
+$function$;
 
 revoke all on function public.save_imported_report_card(uuid,jsonb,jsonb,jsonb) from public, anon;
 grant execute on function public.save_imported_report_card(uuid,jsonb,jsonb,jsonb) to authenticated;
