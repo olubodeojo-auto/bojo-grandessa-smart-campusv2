@@ -187,7 +187,7 @@ function Detail({ label, value }: { label: string; value: string }) {
 
 export default function ResultsPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { roles, user } = useAuth();
 
   const roleFlags = getResultRoleFlags(roles.map((assignedRole) => assignedRole.name));
@@ -214,7 +214,7 @@ export default function ResultsPage() {
   const [selectedImportSheet, setSelectedImportSheet] = useState<string>("");
   const [savedImportWorkbooks, setSavedImportWorkbooks] = useState<Array<{ workbookKey: string; entryCount: number; updatedAt: string }>>([]);
   const [selectedSavedWorkbookKey, setSelectedSavedWorkbookKey] = useState<string>("");
-  const [loadingSavedWorkbooks, setLoadingSavedWorkbooks] = useState<boolean>(false);
+  const [loadingSavedWorkbooks, setLoadingSavedWorkbooks] = useState<boolean>(true);
   const [savedWorkbookError, setSavedWorkbookError] = useState<string>("");
   const [importDraftSchoolId, setImportDraftSchoolId] = useState<string>("");
   const [importSubmitting, setImportSubmitting] = useState<boolean>(false);
@@ -229,6 +229,7 @@ export default function ResultsPage() {
   const [draftSaveStates, setDraftSaveStates] = useState<Record<string, { state: "unsaved" | "saving" | "saved" | "failed"; error?: string }>>({});
   const [importResultStates, setImportResultStates] = useState<Record<string, { state: "saved" | "failed"; error?: string }>>({});
   const draftSaveQueue = useRef<Map<string, Promise<void>>>(new Map());
+  const autoResumeHandled = useRef<string | null>(null);
   const [importReportKind, setImportReportKind] = useState<ImportReportKindSelection>("Auto-detect");
   const [importExistingChoices, setImportExistingChoices] = useState<Record<string, string>>({});
 
@@ -692,8 +693,9 @@ export default function ResultsPage() {
     }
   };
 
-  const handleResumeSavedWorkbook = async (): Promise<void> => {
-    const selected = savedImportWorkbooks.find((workbook) => workbook.workbookKey === selectedSavedWorkbookKey);
+  const handleResumeSavedWorkbook = async (workbookKeyOverride?: string): Promise<void> => {
+    const requestedWorkbookKey = workbookKeyOverride ?? selectedSavedWorkbookKey;
+    const selected = savedImportWorkbooks.find((workbook) => workbook.workbookKey === requestedWorkbookKey);
     if (!selected) return;
     setError("");
     try {
@@ -739,6 +741,38 @@ export default function ResultsPage() {
       setError(err instanceof Error ? err.message : "Unable to reopen the saved workbook draft.");
     }
   };
+
+  useEffect(() => {
+    const requestedWorkbookKey = searchParams.get("resumeWorkbook");
+    if (!requestedWorkbookKey) {
+      autoResumeHandled.current = null;
+      return;
+    }
+    if (!canManage || loadingSavedWorkbooks || savedWorkbookError) return;
+    if (autoResumeHandled.current === requestedWorkbookKey) return;
+
+    const workbookExists = savedImportWorkbooks.some((workbook) => workbook.workbookKey === requestedWorkbookKey);
+    if (!workbookExists) {
+      autoResumeHandled.current = requestedWorkbookKey;
+      setError("The saved workbook linked from Report Card Publishing is not available to this account. Refresh the saved-work list and try again.");
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete("resumeWorkbook");
+        return next;
+      }, { replace: true });
+      return;
+    }
+
+    autoResumeHandled.current = requestedWorkbookKey;
+    setSelectedSavedWorkbookKey(requestedWorkbookKey);
+    void handleResumeSavedWorkbook(requestedWorkbookKey).finally(() => {
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete("resumeWorkbook");
+        return next;
+      }, { replace: true });
+    });
+  }, [canManage, handleResumeSavedWorkbook, loadingSavedWorkbooks, savedImportWorkbooks, savedWorkbookError, searchParams, setSearchParams]);
 
   const handleRefreshSavedWorkbooks = async (): Promise<void> => {
     setLoadingSavedWorkbooks(true);
@@ -1644,10 +1678,13 @@ export default function ResultsPage() {
                   {savedImportWorkbooks.map((workbook) => {
                     const separatorIndex = workbook.workbookKey.indexOf(":");
                     const sheetName = separatorIndex >= 0 ? workbook.workbookKey.slice(separatorIndex + 1) : workbook.workbookKey;
-                    const workbookIdentity = separatorIndex >= 0 ? workbook.workbookKey.slice(0, separatorIndex) : workbook.workbookKey;
+                    const updatedAt = new Date(workbook.updatedAt);
+                    const lastSaved = Number.isNaN(updatedAt.getTime())
+                      ? "saved date unavailable"
+                      : `saved ${updatedAt.toLocaleString()}`;
                     return (
                       <option key={workbook.workbookKey} value={workbook.workbookKey}>
-                        {workbookIdentity.slice(0, 12)} · {sheetName} · {workbook.entryCount} pupil review(s) · {new Date(workbook.updatedAt).toLocaleString()}
+                        {sheetName} · {workbook.entryCount} pupil review(s) · {lastSaved}
                       </option>
                     );
                   })}
