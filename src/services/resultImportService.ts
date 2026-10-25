@@ -1124,10 +1124,13 @@ export function reconcileSavedImportStudentMatches(
   entries: ResultImportPreviewEntry[],
   students: Student[],
 ): ResultImportPreviewEntry[] {
-  const mappingWarnings = [
-    "No exact admission-number or unique name match found; select the correct student manually.",
-    "Name is only a suggested match; confirm the correct student manually.",
-    "Student identity or class needs manual confirmation before import.",
+  const mappingWarningPrefixes = [
+    "No exact admission-number or unique name match found",
+    "No exact admission number or safe name match found",
+    "Name is only a suggested match",
+    "Student identity or class needs manual confirmation",
+    "The name matches ",
+    "Admission number ",
   ];
   return entries.map((entry) => {
     const selectedStudentStillExists = Boolean(entry.selectedStudentId)
@@ -1136,9 +1139,7 @@ export function reconcileSavedImportStudentMatches(
 
     const match = matchStudent(entry, students);
     const retainedWarnings = entry.warnings.filter((warning) =>
-      !mappingWarnings.some((mappingWarning) => warning.startsWith(mappingWarning.split(";")[0]))
-      && !warning.startsWith("The name matches ")
-      && !warning.startsWith("Admission number ")
+      !mappingWarningPrefixes.some((prefix) => warning.startsWith(prefix))
     );
 
     if (match.status === "matched" && match.matchedStudentId) {
@@ -1151,13 +1152,13 @@ export function reconcileSavedImportStudentMatches(
       };
     }
 
-    if (match.status === "manual-review" && match.matchedStudentId) {
+    if (match.status === "manual-review") {
       return {
         ...entry,
         matchStatus: "manual-review",
         matchedStudentId: match.matchedStudentId,
         selectedStudentId: undefined,
-        warnings: [...retainedWarnings, match.reviewReason ?? mappingWarnings[2]],
+        warnings: [...retainedWarnings, match.reviewReason ?? "Confirm this pupil's identity and class manually before importing."],
       };
     }
 
