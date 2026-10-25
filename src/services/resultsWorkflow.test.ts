@@ -150,6 +150,16 @@ const resultsPageFiles = import.meta.glob<string>(
   { eager: true, query: "?raw", import: "default" },
 );
 const resultsPage = Object.values(resultsPageFiles)[0] ?? "";
+const communicationsPageFiles = import.meta.glob<string>(
+  "../pages/admin/CommunicationsPage.tsx",
+  { eager: true, query: "?raw", import: "default" },
+);
+const communicationsPage = Object.values(communicationsPageFiles)[0] ?? "";
+const sendCommunicationFunctionFiles = import.meta.glob<string>(
+  "../../supabase/functions/send-communication/index.ts",
+  { eager: true, query: "?raw", import: "default" },
+);
+const sendCommunicationFunction = Object.values(sendCommunicationFunctionFiles)[0] ?? "";
 const resultFormFiles = import.meta.glob<string>(
   "../pages/admin/results/ResultForm.tsx",
   { eager: true, query: "?raw", import: "default" },
@@ -1029,6 +1039,22 @@ describe("Report Center period discovery and readiness", () => {
     expect(resultsPage).toContain("workbook.ownerId === requestedOwnerId");
     expect(resultsPage).toContain("autoResumeHandled");
     expect(resultsPage).not.toContain("{workbookIdentity.slice(0, 12)}");
+  });
+
+  it("keeps result publication email-free and scopes parent notifications to fully published periods", () => {
+    expect(reportCardsPage).toContain("Publishing updates online access only. It does not send emails");
+    expect(reportCardsPage).not.toContain("sendCommunication(");
+    expect(communicationsPage).toContain('value: "parents_published_results"');
+    expect(communicationsPage).toContain("Published report period");
+    expect(communicationsPage).toContain("previewCommunication(target)");
+    expect(communicationsPage).toContain("confirmMassSend");
+    expect(sendCommunicationFunction).toContain('type Audience = "parents" | "parents_published_results"');
+    expect(sendCommunicationFunction).toContain("getFullyPublishedStudentResultGroups");
+    expect(sendCommunicationFunction).toContain('group.rows.every((result) => result.status === "Published")');
+    expect(sendCommunicationFunction).toContain("directory.parentLinks");
+    expect(sendCommunicationFunction).toContain("contactCandidates(directory, eligibleStudents)");
+    expect(sendCommunicationFunction).toContain("published_results_periods: getPublishedResultsPeriods(directory)");
+    expect(sendCommunicationFunction).toContain("There are no fully published results for that period.");
   });
 
   it("uses audit-verified unpublish evidence in both the lifecycle trigger and review RPC", () => {
