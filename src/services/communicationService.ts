@@ -1,6 +1,15 @@
 import { supabase } from "../lib/supabase";
 
-export type CommunicationAudience = "parents" | "staff" | "students" | "community" | "class" | "people" | "custom";
+export type CommunicationAudience = "parents" | "parents_published_results" | "staff" | "students" | "community" | "class" | "people" | "custom";
+export type PublishedReportType = "Midterm" | "End-of-Term";
+
+export interface PublishedResultsPeriod {
+  academic_year: string;
+  term: string;
+  report_type: PublishedReportType;
+  student_count: number;
+  result_count: number;
+}
 export type CommunicationPersonSource = "contact" | "staff" | "student";
 
 export interface CommunicationPerson {
@@ -14,6 +23,7 @@ export interface CommunicationPerson {
 export interface CommunicationDirectory {
   classes: Array<{ id: string; class_name: string }>;
   people: CommunicationPerson[];
+  published_results_periods: PublishedResultsPeriod[];
   usage: CommunicationUsage;
 }
 
@@ -29,6 +39,9 @@ export interface CommunicationTarget {
   assignment_id?: string;
   people?: Array<{ source: CommunicationPersonSource; id: string }>;
   custom_emails?: string[];
+  academic_year?: string;
+  term?: string;
+  report_type?: PublishedReportType;
 }
 
 export interface CommunicationPreview {
