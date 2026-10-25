@@ -14,7 +14,7 @@ import { resolveReportTermId, toStoredTermName, type AcademicTermMatch } from ".
 import { resolveTemplateForClass } from "./reportTemplateEngine";
 import type { ReportCardData, ReportHistoryBySession, ReportHistoryItem, ReportTerm, ReportType, SubjectReportLine } from "../types/reportCard";
 import type { Result } from "../types/result";
-import type { ResultImportPreviewEntry } from "./resultImportService";
+import { reconcileSavedImportStudentMatches, type ResultImportPreviewEntry } from "./resultImportService";
 
 type ReportCardRecord = {
   class_teacher_comment?: string | null;
@@ -178,6 +178,8 @@ export type ImportReviewWorkbookSummary = ImportReviewWorkbook & {
   excludedEntryCount: number;
   unresolvedEntryCount: number;
   subjectRowCount: number;
+  duplicatePupilCount: number;
+  duplicatePupilNames: string[];
 };
 
 export async function getImportReviewSchoolId(): Promise<string> {
@@ -218,8 +220,56 @@ function uniqueSorted(values: string[]): string[] {
 
 export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWorkbookSummary[]> {
   const workbooks = await getImportReviewWorkbooks();
-  return Promise.all(workbooks.map(async (workbook) => {
-    const entries = await getImportReviewDrafts(workbook.workbookKey, workbook.ownerId);
+  if (workbooks.length === 0) return [];
+
+  const roster = await getStudents();
+  const workbookEntries = await Promise.all(workbooks.map(async (workbook) => {
+    const savedEntries = await getImportReviewDrafts(workbook.workbookKey, workbook.ownerId);
+    const entries = reconcileSavedImportStudentMatches(savedEntries, roster);
+    return { workbook, entries };
+  }));
+
+  // An included pupil can be saved in several workbook uploads for the same period.
+  // Surface this rather than importing the same pupil twice with potentially different marks.
+  const workbookKeysByPupilPeriod = new Map<string, Set<string>>();
+  for (const { workbook, entries } of workbookEntries) {
+    for (const entry of entries) {
+      if (entry.included === false) continue;
+      const studentId = entry.selectedStudentId ?? entry.matchedStudentId;
+      if (!studentId) continue;
+      const pupilPeriodKey = [
+        studentId,
+        entry.academicYear,
+        entry.term ?? "",
+        entry.reportKind,
+      ].join("::");
+      const matchingWorkbooks = workbookKeysByPupilPeriod.get(pupilPeriodKey) ?? new Set<string>();
+      matchingWorkbooks.add(workbook.workbookKey);
+      workbookKeysByPupilPeriod.set(pupilPeriodKey, matchingWorkbooks);
+    }
+  }
+
+  const duplicatePupilsByWorkbook = new Map<string, Map<string, string>>();
+  for (const { workbook, entries } of workbookEntries) {
+    const duplicates = new Map<string, string>();
+    for (const entry of entries) {
+      if (entry.included === false) continue;
+      const studentId = entry.selectedStudentId ?? entry.matchedStudentId;
+      if (!studentId) continue;
+      const pupilPeriodKey = [
+        studentId,
+        entry.academicYear,
+        entry.term ?? "",
+        entry.reportKind,
+      ].join("::");
+      if ((workbookKeysByPupilPeriod.get(pupilPeriodKey)?.size ?? 0) > 1) {
+        duplicates.set(studentId, entry.studentName);
+      }
+    }
+    duplicatePupilsByWorkbook.set(workbookSelectionKeyForSummary(workbook), duplicates);
+  }
+
+  return workbookEntries.map(({ workbook, entries }) => {
     const included = entries.filter((entry) => entry.included !== false);
     const excluded = entries.filter((entry) => entry.included === false);
     const unresolved = included.filter((entry) =>
@@ -231,6 +281,7 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
       : "Saved spreadsheet";
     const firstItemClasses = included.flatMap((entry) => entry.items.map((item) => item.className ?? ""));
     const classes = uniqueSorted([...included.map((entry) => entry.className), ...firstItemClasses]);
+    const duplicateNames = [...(duplicatePupilsByWorkbook.get(workbookSelectionKeyForSummary(workbook))?.values() ?? [])];
     return {
       ...workbook,
       entryCount: entries.length,
@@ -239,7 +290,7 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
       terms: uniqueSorted(entries.map((entry) => entry.term ? `${entry.term} Term` : "")),
       reportKinds: uniqueSorted(entries.map((entry) => entry.reportKind === "Midterm / Continuous Assessment"
         ? "Midterm (CA)"
-        : entry.reportKind === "End-of-Term"
+        : entry.reportKind === "End-of-Term / Year Report Card"
           ? "End-of-Term"
           : entry.reportKind)),
       classes,
@@ -247,10 +298,15 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
       excludedEntryCount: excluded.length,
       unresolvedEntryCount: unresolved.length,
       subjectRowCount: included.reduce((total, entry) => total + entry.items.length, 0),
+      duplicatePupilCount: duplicateNames.length,
+      duplicatePupilNames: duplicateNames,
     };
-  }));
+  });
 }
 
+function workbookSelectionKeyForSummary(workbook: Pick<ImportReviewWorkbook, "ownerId" | "workbookKey">): string {
+  return `${workbook.ownerId}::${workbook.workbookKey}`;
+}
 export async function deleteImportReviewDraft(workbookKey: string, entryKey: string, ownerId?: string): Promise<void> {
   const schoolSettings = await getSchoolSettings();
   const { error } = await supabase.rpc("delete_result_import_review_draft_v2", {
