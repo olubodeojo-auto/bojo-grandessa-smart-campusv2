@@ -210,7 +210,87 @@ function contactCandidates(directory: Directory, students = directory.students):
   }
   return directory.contacts
     .filter((contact) => contactIds.has(contact.id))
-    .map((contact) => ({ email: contact.email, name: displayName(contact.first_name, contact.last_name), source: "contact" as const }));
+    .map((contact) => ({ email: (contact.auth_user_id ? directory.authEmails.get(contact.auth_user_id) : null) ?? contact.email, name: displayName(contact.first_name, contact.last_name), source: "contact" as const }));
+}
+
+function reportTypeForResult(result: PublishedResultRow): PublishedReportType | null {
+  if (result.assessment_type === "CA") return "Midterm";
+  if (result.assessment_type === "Combined" || result.assessment_type === "Examination") return "End-of-Term";
+  return null;
+}
+
+type StudentResultGroup = {
+  academic_year: string;
+  term: string;
+  report_type: PublishedReportType;
+  student_id: string;
+  class_id: string | null;
+  rows: PublishedResultRow[];
+};
+
+function getFullyPublishedStudentResultGroups(directory: Directory): StudentResultGroup[] {
+  const groups = new Map<string, StudentResultGroup>();
+  for (const result of directory.results) {
+    const reportType = reportTypeForResult(result);
+    if (!reportType || !result.student_id || !result.academic_year || !result.term) continue;
+    const key = [
+      result.academic_year,
+      result.term,
+      reportType,
+      result.class_id ?? "",
+      result.student_id,
+    ].join("::");
+    const current = groups.get(key) ?? {
+      academic_year: result.academic_year,
+      term: result.term,
+      report_type: reportType,
+      student_id: result.student_id,
+      class_id: result.class_id,
+      rows: [],
+    };
+    current.rows.push(result);
+    groups.set(key, current);
+  }
+  return [...groups.values()].filter((group) =>
+    group.rows.length > 0 && group.rows.every((result) => result.status === "Published")
+  );
+}
+
+function getPublishedResultsPeriods(directory: Directory): PublishedResultsPeriod[] {
+  const periodMap = new Map<string, {
+    academic_year: string;
+    term: string;
+    report_type: PublishedReportType;
+    students: Set<string>;
+    result_count: number;
+  }>();
+  for (const group of getFullyPublishedStudentResultGroups(directory)) {
+    const key = [group.academic_year, group.term, group.report_type].join("::");
+    const period = periodMap.get(key) ?? {
+      academic_year: group.academic_year,
+      term: group.term,
+      report_type: group.report_type,
+      students: new Set<string>(),
+      result_count: 0,
+    };
+    period.students.add(group.student_id);
+    period.result_count += group.rows.length;
+    periodMap.set(key, period);
+  }
+  const termOrder = new Map([["First", 1], ["Second", 2], ["Third", 3]]);
+  return [...periodMap.values()]
+    .map((period) => ({
+      academic_year: period.academic_year,
+      term: period.term,
+      report_type: period.report_type,
+      student_count: period.students.size,
+      result_count: period.result_count,
+    }))
+    .sort((left, right) =>
+      right.academic_year.localeCompare(left.academic_year)
+      || (termOrder.get(left.term) ?? 9) - (termOrder.get(right.term) ?? 9)
+      || left.report_type.localeCompare(right.report_type)
+    );
 }
 
 function resolveCandidates(directory: Directory, payload: RequestPayload): Candidate[] {
@@ -223,6 +303,47 @@ function resolveCandidates(directory: Directory, payload: RequestPayload): Candi
     .map((user) => ({ email: directory.authEmails.get(user.id) ?? null, name: displayName(user.first_name, user.last_name), source: "staff" as const }));
   const studentCandidates = contactCandidates(directory);
   const parentCandidates = contactCandidates(directory);
+
+  if (audience === "parents_published_results") {
+    const academicYear = payload.academic_year?.trim() ?? "";
+    const term = payload.term?.trim() ?? "";
+    const reportType = payload.report_type;
+    if (!academicYear || !term || (reportType !== "Midterm" && reportType !== "End-of-Term")) {
+      throw new CommunicationRequestError("Choose the academic year, term, and report type before previewing parents of published results.");
+    }
+
+    const availablePeriod = getPublishedResultsPeriods(directory).some((period) =>
+      period.academic_year === academicYear && period.term === term && period.report_type === reportType
+    );
+    if (!availablePeriod) {
+      throw new CommunicationRequestError("There are no fully published results for that period. Publish and verify the results first; this action does not publish results.");
+    }
+
+    const eligibleStudentIds = new Set(getFullyPublishedStudentResultGroups(directory)
+      .filter((group) => group.academic_year === academicYear && group.term === term && group.report_type === reportType)
+      .map((group) => group.student_id));
+    const eligibleStudents = directory.students.filter((student) => eligibleStudentIds.has(student.id));
+    const contactRecipients = contactCandidates(directory, eligibleStudents);
+    const roleById = new Map(directory.roles.map((role) => [role.id, role.name.trim().toLowerCase()]));
+    const activeParentIds = new Set(directory.assignments
+      .filter((assignment) => roleById.get(assignment.role_id) === "parent" && assignment.is_active === true)
+      .map((assignment) => assignment.user_id));
+    const activeProfileIds = new Set(directory.users
+      .filter((user) => user.status === "Active" && activeParentIds.has(user.id) && directory.authEmails.has(user.id))
+      .map((user) => user.id));
+    const linkedParentRecipients = directory.parentLinks
+      .filter((link) => eligibleStudentIds.has(link.student_id) && activeProfileIds.has(link.auth_user_id))
+      .map((link) => {
+        const parent = directory.users.find((user) => user.id === link.auth_user_id);
+        return {
+          email: directory.authEmails.get(link.auth_user_id) ?? null,
+          name: parent ? displayName(parent.first_name, parent.last_name) : "Parent/Guardian",
+          source: "contact" as const,
+        };
+      });
+
+    return [...contactRecipients, ...linkedParentRecipients];
+  }
 
   if (audience === "parents") return parentCandidates;
   if (audience === "staff") return staffCandidates;
@@ -288,6 +409,7 @@ function directoryResponse(directory: Directory): Response {
   return response({
     classes: directory.classes.filter((schoolClass) => schoolClass.status !== "Inactive").map(({ id, class_name }) => ({ id, class_name })),
     people,
+    published_results_periods: getPublishedResultsPeriods(directory),
     usage: { used: 0, limit: DAILY_LIMIT, remaining: DAILY_LIMIT },
   });
 }
