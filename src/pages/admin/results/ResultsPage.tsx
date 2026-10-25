@@ -18,6 +18,7 @@ import {
   getImportReviewWorkbooks,
   saveImportReviewDraft,
   saveImportedReportCard,
+  type ImportReviewWorkbook,
 } from "../../../services/reportCardService";
 import {
   getImportReportDateErrors,
@@ -186,6 +187,10 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
+function workbookSelectionKey(workbook: Pick<ImportReviewWorkbook, "ownerId" | "workbookKey">): string {
+  return `${workbook.ownerId}::${workbook.workbookKey}`;
+}
+
 export default function ResultsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -213,11 +218,12 @@ export default function ResultsPage() {
   const [importWorkbookKey, setImportWorkbookKey] = useState<string>("");
   const [importWorkbookSheets, setImportWorkbookSheets] = useState<ResultWorkbookSheet[]>([]);
   const [selectedImportSheet, setSelectedImportSheet] = useState<string>("");
-  const [savedImportWorkbooks, setSavedImportWorkbooks] = useState<Array<{ workbookKey: string; entryCount: number; updatedAt: string }>>([]);
+  const [savedImportWorkbooks, setSavedImportWorkbooks] = useState<ImportReviewWorkbook[]>([]);
   const [selectedSavedWorkbookKey, setSelectedSavedWorkbookKey] = useState<string>("");
   const [loadingSavedWorkbooks, setLoadingSavedWorkbooks] = useState<boolean>(true);
   const [savedWorkbookError, setSavedWorkbookError] = useState<string>("");
   const [importDraftSchoolId, setImportDraftSchoolId] = useState<string>("");
+  const [importDraftOwnerId, setImportDraftOwnerId] = useState<string>("");
   const [importSubmitting, setImportSubmitting] = useState<boolean>(false);
   const [importSummary, setImportSummary] = useState<string>("");
   const [activeImportEntryKey, setActiveImportEntryKey] = useState<string | null>(null);
@@ -314,7 +320,7 @@ export default function ResultsPage() {
         if (cancelled) return;
         setImportDraftSchoolId(schoolId);
         setSavedImportWorkbooks(workbooks);
-        setSelectedSavedWorkbookKey(workbooks[0]?.workbookKey ?? "");
+        setSelectedSavedWorkbookKey(workbooks[0] ? workbookSelectionKey(workbooks[0]) : "");
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -442,7 +448,7 @@ export default function ResultsPage() {
 
     const queuedSave = (previousSave ?? Promise.resolve())
       .catch(() => undefined)
-      .then(() => saveImportReviewDraft({ workbookKey: activeWorkbookDraftKey, entry }));
+      .then(() => saveImportReviewDraft({ workbookKey: activeWorkbookDraftKey, entry, ownerId: importDraftOwnerId || undefined }));
     draftSaveQueue.current.set(saveKey, queuedSave);
     try {
       await queuedSave;
@@ -467,7 +473,7 @@ export default function ResultsPage() {
     } finally {
       if (draftSaveQueue.current.get(saveKey) === queuedSave) draftSaveQueue.current.delete(saveKey);
     }
-  }, [activeWorkbookDraftKey]);
+  }, [activeWorkbookDraftKey, importDraftOwnerId]);
 
   useEffect(() => {
     if (!activeWorkbookDraftKey || !activeImportEntryKey || !importDraftSchoolId || !user) return;
@@ -672,7 +678,7 @@ export default function ResultsPage() {
           warnings: [...new Set(warnings)],
         });
       });
-      const savedEntries = await getImportReviewDrafts(`${workbookKey}:${sheetName}`);
+      const savedEntries = await getImportReviewDrafts(`${workbookKey}:${sheetName}`, user?.id);
       const restoredEntries = reconcileSavedImportStudentMatches(
         mergeSavedImportReviewDrafts(validatedEntries, savedEntries),
         students,
@@ -700,10 +706,15 @@ export default function ResultsPage() {
     }
   };
 
-  const handleResumeSavedWorkbook = async (workbookKeyOverride?: string): Promise<void> => {
-    const requestedWorkbookKey = workbookKeyOverride ?? selectedSavedWorkbookKey;
-    const selected = savedImportWorkbooks.find((workbook) => workbook.workbookKey === requestedWorkbookKey);
-    if (!selected) return;
+  const handleResumeSavedWorkbook = async (workbookKeyOverride?: string, ownerIdOverride?: string): Promise<void> => {
+    const selected = workbookKeyOverride
+      ? savedImportWorkbooks.find((workbook) =>
+          workbook.workbookKey === workbookKeyOverride && (!ownerIdOverride || workbook.ownerId === ownerIdOverride))
+      : savedImportWorkbooks.find((workbook) => workbookSelectionKey(workbook) === selectedSavedWorkbookKey);
+    if (!selected) {
+      setError("Choose an available saved workbook first.");
+      return;
+    }
     setError("");
     try {
       const separatorIndex = selected.workbookKey.indexOf(":");
@@ -712,7 +723,7 @@ export default function ResultsPage() {
       }
       const workbookKey = selected.workbookKey.slice(0, separatorIndex);
       const sheetName = selected.workbookKey.slice(separatorIndex + 1);
-      const entries = await getImportReviewDrafts(selected.workbookKey);
+      const entries = await getImportReviewDrafts(selected.workbookKey, selected.ownerId);
       if (entries.length === 0) throw new Error("This saved workbook has no pupil reviews to restore.");
       const reconciledEntries = reconcileSavedImportStudentMatches(
         [...entries].sort((left, right) => left.index - right.index),
@@ -728,6 +739,8 @@ export default function ResultsPage() {
       const activeSubjectIndex = savedSubjectIndex >= 0 ? savedSubjectIndex : unresolvedIndex;
 
       setImportWorkbookKey(workbookKey);
+      setImportDraftOwnerId(selected.ownerId);
+      setSelectedSavedWorkbookKey(workbookSelectionKey(selected));
       setImportWorkbookFile(null);
       setImportFileName(`Saved workbook draft · ${sheetName}`);
       setImportWorkbookSheets([{
@@ -760,26 +773,33 @@ export default function ResultsPage() {
       return;
     }
     if (!canManage || loading || loadingSavedWorkbooks || savedWorkbookError) return;
-    if (autoResumeHandled.current === requestedWorkbookKey) return;
+    const requestedOwnerId = searchParams.get("resumeOwner") ?? undefined;
+    const autoResumeKey = `${requestedOwnerId ?? ""}::${requestedWorkbookKey}`;
+    if (autoResumeHandled.current === autoResumeKey) return;
 
-    const workbookExists = savedImportWorkbooks.some((workbook) => workbook.workbookKey === requestedWorkbookKey);
+    const workbookExists = savedImportWorkbooks.some((workbook) =>
+      workbook.workbookKey === requestedWorkbookKey && (!requestedOwnerId || workbook.ownerId === requestedOwnerId));
     if (!workbookExists) {
-      autoResumeHandled.current = requestedWorkbookKey;
+      autoResumeHandled.current = autoResumeKey;
       setError("The saved workbook linked from Report Card Publishing is not available to this account. Refresh the saved-work list and try again.");
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
         next.delete("resumeWorkbook");
+        next.delete("resumeOwner");
         return next;
       }, { replace: true });
       return;
     }
 
-    autoResumeHandled.current = requestedWorkbookKey;
-    setSelectedSavedWorkbookKey(requestedWorkbookKey);
-    void handleResumeSavedWorkbook(requestedWorkbookKey).finally(() => {
+    autoResumeHandled.current = autoResumeKey;
+    const selectedWorkbook = savedImportWorkbooks.find((workbook) =>
+      workbook.workbookKey === requestedWorkbookKey && (!requestedOwnerId || workbook.ownerId === requestedOwnerId));
+    if (selectedWorkbook) setSelectedSavedWorkbookKey(workbookSelectionKey(selectedWorkbook));
+    void handleResumeSavedWorkbook(requestedWorkbookKey, requestedOwnerId).finally(() => {
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
         next.delete("resumeWorkbook");
+        next.delete("resumeOwner");
         return next;
       }, { replace: true });
     });
@@ -795,8 +815,8 @@ export default function ResultsPage() {
       ]);
       setImportDraftSchoolId(schoolId);
       setSavedImportWorkbooks(workbooks);
-      if (!workbooks.some((workbook) => workbook.workbookKey === selectedSavedWorkbookKey)) {
-        setSelectedSavedWorkbookKey(workbooks[0]?.workbookKey ?? "");
+      if (!workbooks.some((workbook) => workbookSelectionKey(workbook) === selectedSavedWorkbookKey)) {
+        setSelectedSavedWorkbookKey(workbooks[0] ? workbookSelectionKey(workbooks[0]) : "");
       }
     } catch (err) {
       setSavedWorkbookError(err instanceof Error ? err.message : "Unable to list saved import drafts.");
@@ -815,6 +835,7 @@ export default function ResultsPage() {
       const sheets = await inspectResultWorkbook(file);
       if (sheets.length === 0) throw new Error("The workbook does not contain any worksheets.");
       const workbookKey = await fingerprintWorkbook(file);
+      setImportDraftOwnerId(user?.id ?? "");
       const selectedSheet = selectResultWorkbookSheet(sheets, session, term === "All" ? null : term);
       setImportWorkbookSheets(sheets);
       setSelectedImportSheet(selectedSheet);
@@ -988,7 +1009,7 @@ export default function ResultsPage() {
       }
     }
     try {
-      await deleteImportReviewDraft(activeWorkbookDraftKey, entry.studentKey);
+      await deleteImportReviewDraft(activeWorkbookDraftKey, entry.studentKey, importDraftOwnerId || undefined);
       setImportEntries((current) => current.filter((candidate) => candidate.studentKey !== entry.studentKey));
       setDraftSaveStates((current) => {
         const next = { ...current };
@@ -1694,8 +1715,8 @@ export default function ResultsPage() {
                       ? "saved date unavailable"
                       : `saved ${updatedAt.toLocaleString()}`;
                     return (
-                      <option key={workbook.workbookKey} value={workbook.workbookKey}>
-                        {sheetName} · {workbook.entryCount} pupil review(s) · {lastSaved}
+                      <option key={workbookSelectionKey(workbook)} value={workbookSelectionKey(workbook)}>
+                        {sheetName} · {workbook.entryCount} pupil review(s) · {workbook.ownerName} · {lastSaved}
                       </option>
                     );
                   })}
