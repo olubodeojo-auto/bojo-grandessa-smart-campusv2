@@ -1127,6 +1127,11 @@ export default function ReportCardsPage() {
                   {workbook.classes.length > 0 ? (
                     <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>Classes: {workbook.classes.join(", ")}</p>
                   ) : null}
+                  {workbook.duplicatePupilCount > 0 ? (
+                    <p role="alert" style={{ margin: 0, padding: "10px 12px", borderRadius: 8, border: "1px solid #fde68a", background: "#fffbeb", color: "#92400e", fontSize: 13 }}>
+                      Potential duplicate pupil review: {workbook.duplicatePupilNames.join(", ")} {workbook.duplicatePupilCount === 1 ? "also appears" : "also appear"} in another saved workbook for the same session, term and report type. Compare the saved versions and import only the school-approved version; do not import both.
+                    </p>
+                  ) : null}
                   {!isConfigured ? (
                     <p role="alert" style={{ margin: 0, padding: "9px 11px", borderRadius: 8, background: "#fff7ed", color: "#9a3412", fontSize: 13 }}>
                       This workbook&apos;s academic session or term is not configured in the school calendar yet. Enter the school&apos;s official dates before importing or publishing; do not guess dates.
