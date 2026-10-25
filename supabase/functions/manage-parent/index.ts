@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 type ParentRequest = {
-  action?: "create" | "resend_invitation" | "status" | "directory" | "link" | "unlink" | "accounts" | "links";
+  action?: "create" | "resend_invitation" | "status" | "directory" | "link" | "link_existing" | "unlink" | "accounts" | "links";
   contact_id?: string;
   student_id?: string;
   auth_user_id?: string;
@@ -38,7 +38,9 @@ function bearerToken(request: Request): string | null {
 function validateRedirect(value: string | undefined): string {
   if (!value) throw new Error("A valid /complete-account redirect URL is required.");
   const redirect = new URL(value);
-  if (redirect.pathname !== "/complete-account" || !["http:", "https:"].includes(redirect.protocol)) throw new Error("Invalid invitation redirect URL.");
+  if (redirect.origin !== "https://grandessaschool.com.ng" || redirect.pathname !== "/complete-account" || redirect.search || redirect.hash) {
+    throw new Error("Invitations must use the school’s official account-completion page.");
+  }
   return redirect.toString();
 }
 
@@ -361,6 +363,90 @@ async function handleLinks(adminClient: ReturnType<typeof createClient>, request
   return response({ links });
 }
 
+async function handleLinkExisting(
+  adminClient: ReturnType<typeof createClient>,
+  request: ParentRequest,
+): Promise<Response> {
+  if (!request.contact_id) return errorResponse("A contact id is required.", 400);
+  const { data: contact, error: contactError } = await adminClient
+    .from("contacts")
+    .select("id, first_name, last_name, relationship, email, auth_user_id")
+    .eq("id", request.contact_id)
+    .maybeSingle();
+  if (contactError) throw contactError;
+  if (!contact) return errorResponse("Contact not found.", 404);
+  if (contact.auth_user_id) {
+    await ensureParentRole(adminClient, contact.auth_user_id, (await getParentRole(adminClient)).id);
+    await ensureContactStudentLinks(adminClient, contact, contact.auth_user_id);
+    return response({ contact: { id: contact.id, auth_user_id: contact.auth_user_id }, invited: false, status: "active", linked_existing: true });
+  }
+
+  const email = contact.email?.trim().toLowerCase();
+  if (!email) return errorResponse("Add a valid email address before linking an existing parent account.", 400);
+
+  let matchingUserId: string | null = null;
+  let page = 1;
+  while (true) {
+    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw error;
+    const match = data.users.find((user) => user.email?.trim().toLowerCase() === email);
+    if (match) {
+      matchingUserId = match.id;
+      break;
+    }
+    if (data.users.length < 1000) break;
+    page += 1;
+  }
+  if (!matchingUserId) return errorResponse("No existing account uses this contact’s email address. Create an account invitation instead.", 404);
+
+  const { data: existingContact, error: existingContactError } = await adminClient
+    .from("contacts")
+    .select("id")
+    .eq("auth_user_id", matchingUserId)
+    .neq("id", contact.id)
+    .limit(1)
+    .maybeSingle();
+  if (existingContactError) throw existingContactError;
+  if (existingContact) {
+    return errorResponse("This account is already attached to a different contact record. Review the duplicate contact before linking it; no link was changed.", 409);
+  }
+
+  const { data: authUserResult, error: authError } = await adminClient.auth.admin.getUserById(matchingUserId);
+  if (authError) throw authError;
+  const authUser = authUserResult.user;
+  if (!authUser) return errorResponse("The matching account could not be loaded.", 404);
+
+  const parentRole = await getParentRole(adminClient);
+  const { error: userError } = await adminClient.from("users").upsert({
+    id: matchingUserId,
+    first_name: contact.first_name,
+    last_name: contact.last_name,
+    status: "Active",
+  }, { onConflict: "id" });
+  if (userError) throw userError;
+  await ensureParentRole(adminClient, matchingUserId, parentRole.id);
+
+  const { data: linkedContact, error: linkError } = await adminClient
+    .from("contacts")
+    .update({ auth_user_id: matchingUserId })
+    .eq("id", contact.id)
+    .is("auth_user_id", null)
+    .select("id")
+    .maybeSingle();
+  if (linkError) throw linkError;
+  if (!linkedContact) {
+    return errorResponse("The contact changed while this account was being linked. Refresh the directory and try again.", 409);
+  }
+  await ensureContactStudentLinks(adminClient, contact, matchingUserId);
+  const completed = Boolean(authUser.email_confirmed_at || authUser.last_sign_in_at);
+  return response({
+    contact: { id: contact.id, auth_user_id: matchingUserId },
+    invited: false,
+    status: completed ? "active" : "invited",
+    linked_existing: true,
+  });
+}
+
 async function handleDirectory(adminClient: ReturnType<typeof createClient>): Promise<Response> {
   type DirectoryContact = {
     id: string;
@@ -372,15 +458,13 @@ async function handleDirectory(adminClient: ReturnType<typeof createClient>): Pr
     auth_user_id: string | null;
   };
 
-  const [{ data: contacts, error: contactsError }, { data: students, error: studentsError }, { data: parentLinks, error: parentLinksError }, parentRole] = await Promise.all([
+  const [{ data: contacts, error: contactsError }, { data: students, error: studentsError }, parentRole] = await Promise.all([
     adminClient.from("contacts").select("id, first_name, last_name, relationship, email, phone, auth_user_id"),
     adminClient.from("students").select("id, first_name, last_name, admission_number, class_id, primary_contact_id, secondary_contact_id"),
-    adminClient.from("parent_student_links").select("student_id, auth_user_id, relationship"),
     getParentRole(adminClient),
   ]);
   if (contactsError) throw contactsError;
   if (studentsError) throw studentsError;
-  if (parentLinksError) throw parentLinksError;
 
   const { data: activeParentAssignments, error: activeParentAssignmentsError } = await adminClient
     .from("user_roles")
@@ -388,36 +472,39 @@ async function handleDirectory(adminClient: ReturnType<typeof createClient>): Pr
     .eq("role_id", parentRole.id)
     .eq("is_active", true);
   if (activeParentAssignmentsError) throw activeParentAssignmentsError;
-
   const activeParentUserIds = new Set((activeParentAssignments ?? []).map((assignment) => assignment.user_id));
-  const studentsCoveredByActiveParent = new Set(
-    (parentLinks ?? [])
-      .filter((link) => activeParentUserIds.has(link.auth_user_id))
-      .map((link) => link.student_id),
-  );
 
-  const authUsers = new Map<string, { emailConfirmed: boolean; signedIn: boolean }>();
+  const authUsers = new Map<string, { email: string | null; emailConfirmed: boolean; signedIn: boolean }>();
+  const authUsersByEmail = new Map<string, { id: string; emailConfirmed: boolean; signedIn: boolean }>();
   let page = 1;
   while (true) {
     const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 });
     if (error) throw error;
     for (const user of data.users) {
+      const normalizedEmail = user.email?.trim().toLowerCase() ?? null;
       authUsers.set(user.id, {
+        email: normalizedEmail,
         emailConfirmed: Boolean(user.email_confirmed_at),
         signedIn: Boolean(user.last_sign_in_at),
       });
+      if (normalizedEmail && !authUsersByEmail.has(normalizedEmail)) {
+        authUsersByEmail.set(normalizedEmail, {
+          id: user.id,
+          emailConfirmed: Boolean(user.email_confirmed_at),
+          signedIn: Boolean(user.last_sign_in_at),
+        });
+      }
     }
     if (data.users.length < 1000) break;
     page += 1;
   }
 
-  const classes = new Map<string, string>();
   const { data: classRows, error: classesError } = await adminClient.from("classes").select("id, class_name");
   if (classesError) throw classesError;
+  const classes = new Map<string, string>();
   for (const row of classRows ?? []) classes.set(row.id, row.class_name);
 
-  const studentById = new Map<string, Record<string, unknown>>();
-  const studentsByContact = new Map<string, Map<string, Record<string, unknown>>>();
+  const studentIdsByContact = new Map<string, Map<string, Record<string, unknown>>>();
   for (const student of students ?? []) {
     const studentData = {
       id: student.id,
@@ -426,37 +513,14 @@ async function handleDirectory(adminClient: ReturnType<typeof createClient>): Pr
       admission_number: student.admission_number,
       class_name: classes.get(student.class_id) ?? null,
     };
-    studentById.set(student.id, studentData);
     for (const contactId of [student.primary_contact_id, student.secondary_contact_id]) {
       if (!contactId) continue;
-      const current = studentsByContact.get(contactId) ?? new Map<string, Record<string, unknown>>();
+      const current = studentIdsByContact.get(contactId) ?? new Map<string, Record<string, unknown>>();
       current.set(student.id, studentData);
-      studentsByContact.set(contactId, current);
+      studentIdsByContact.set(contactId, current);
     }
   }
 
-  const authenticatedContacts = new Map<string, DirectoryContact>();
-  for (const contact of contacts ?? []) {
-    if (contact.auth_user_id && !authenticatedContacts.has(contact.auth_user_id)) {
-      authenticatedContacts.set(contact.auth_user_id, contact);
-    }
-  }
-
-  const studentsByAuthUser = new Map<string, Map<string, Record<string, unknown>>>();
-  for (const link of parentLinks ?? []) {
-    const studentData = studentById.get(link.student_id);
-    if (!studentData) continue;
-
-    const accountStudents = studentsByAuthUser.get(link.auth_user_id) ?? new Map<string, Record<string, unknown>>();
-    accountStudents.set(link.student_id, studentData);
-    studentsByAuthUser.set(link.auth_user_id, accountStudents);
-  }
-
-  const accountStatus = (authUserId: string): "inactive" | "invited" | "active" => {
-    if (!activeParentUserIds.has(authUserId)) return "inactive";
-    const authUser = authUsers.get(authUserId);
-    return authUser?.emailConfirmed || authUser?.signedIn ? "active" : "invited";
-  };
   const contactData = (contact: DirectoryContact) => ({
     id: contact.id,
     first_name: contact.first_name,
@@ -466,26 +530,39 @@ async function handleDirectory(adminClient: ReturnType<typeof createClient>): Pr
     phone: contact.phone,
   });
 
-  const entries = [...authenticatedContacts.entries()]
-    .filter(([authUserId, contact]) => studentsByAuthUser.has(authUserId) || studentsByContact.has(contact.id))
-    .map(([authUserId, contact]) => ({
-      contact: contactData(contact),
-      students: [...(studentsByAuthUser.get(authUserId)?.values() ?? [])],
-      account_status: accountStatus(authUserId),
-    }));
+  const entries = (contacts ?? []).flatMap((contact) => {
+    const linkedStudents = [...(studentIdsByContact.get(contact.id)?.values() ?? [])];
+    if (linkedStudents.length === 0) return [];
 
-  for (const contact of contacts ?? []) {
-    if (contact.auth_user_id) continue;
-    const contactStudents = studentsByContact.get(contact.id);
-    if (!contactStudents?.size) continue;
-
-    const uncoveredStudents = [...contactStudents.entries()]
-      .filter(([studentId]) => !studentsCoveredByActiveParent.has(studentId))
-      .map(([, student]) => student);
-    if (uncoveredStudents.length > 0) {
-      entries.push({ contact: contactData(contact), students: uncoveredStudents, account_status: "not_created" });
+    let status: "not_created" | "inactive" | "invited" | "active" | "account_exists_unlinked" | "account_conflict";
+    if (contact.auth_user_id) {
+      const authUser = authUsers.get(contact.auth_user_id);
+      if (!activeParentUserIds.has(contact.auth_user_id)) {
+        status = "inactive";
+      } else if (authUser?.emailConfirmed || authUser?.signedIn) {
+        status = "active";
+      } else {
+        status = "invited";
+      }
+    } else {
+      const normalizedEmail = contact.email?.trim().toLowerCase() ?? "";
+      const matchingAuthUser = normalizedEmail ? authUsersByEmail.get(normalizedEmail) : undefined;
+      if (!normalizedEmail || !matchingAuthUser) {
+        status = "not_created";
+      } else {
+        const usedByAnotherContact = (contacts ?? []).some((candidate) =>
+          candidate.id !== contact.id && candidate.auth_user_id === matchingAuthUser.id
+        );
+        status = usedByAnotherContact ? "account_conflict" : "account_exists_unlinked";
+      }
     }
-  }
+
+    return [{
+      contact: contactData(contact),
+      students: linkedStudents,
+      account_status: status,
+    }];
+  });
 
   return response({ entries });
 }
@@ -506,6 +583,7 @@ Deno.serve(async (request) => {
     await assertManager(adminClient, authData.user.id);
     const payload = (await request.json()) as ParentRequest;
     if (payload.action === "create") return await handleCreate(adminClient, payload);
+    if (payload.action === "link_existing") return await handleLinkExisting(adminClient, payload);
     if (payload.action === "resend_invitation") return await handleResend(authClient, adminClient, payload);
     if (payload.action === "status") return await handleStatus(adminClient, payload);
     if (payload.action === "directory") return await handleDirectory(adminClient);
