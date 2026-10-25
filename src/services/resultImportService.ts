@@ -1016,6 +1016,19 @@ export function getImportScoreWarnings(entry: ResultImportPreviewEntry): string[
   return warnings;
 }
 
+function getImportRosterNameCandidates(student: Student): string[] {
+  const firstName = (student.first_name ?? "").trim();
+  const firstGivenName = firstName.split(/\s+/).filter(Boolean)[0] ?? "";
+  const lastName = (student.last_name ?? "").trim();
+  return [
+    `${firstName} ${student.middle_name ?? ""} ${lastName}`,
+    `${firstName} ${lastName}`,
+    `${lastName} ${firstName}`,
+    `${firstGivenName} ${lastName}`,
+    `${lastName} ${firstGivenName}`,
+  ].filter((candidate) => candidate.trim().length > 0);
+}
+
 function matchStudent(
   entry: ResultImportPreviewEntry,
   students: Student[]
@@ -1030,11 +1043,7 @@ function matchStudent(
     if (byAdmission.length === 1) {
       const candidate = byAdmission[0];
       const normalizedName = normalizeMatchValue(entry.studentName);
-      const rosterNames = [
-        `${candidate.first_name} ${candidate.middle_name ?? ""} ${candidate.last_name}`,
-        `${candidate.first_name} ${candidate.last_name}`,
-        `${candidate.last_name} ${candidate.first_name}`,
-      ].map(normalizeMatchValue);
+      const rosterNames = getImportRosterNameCandidates(candidate).map(normalizeMatchValue);
       if (normalizedName && !rosterNames.includes(normalizedName)) {
         return {
           status: "manual-review",
@@ -1066,12 +1075,9 @@ function matchStudent(
     return { status: "unmatched" };
   }
 
-  const byName = students.filter((student) => {
-    const candidateName = normalizeMatchValue(`${student.first_name} ${student.middle_name ?? ""} ${student.last_name}`);
-    const firstLastName = normalizeMatchValue(`${student.first_name} ${student.last_name}`);
-    const reversedName = normalizeMatchValue(`${student.last_name} ${student.first_name}`);
-    return candidateName === normalizedName || firstLastName === normalizedName || reversedName === normalizedName;
-  });
+  const byName = students.filter((student) =>
+    getImportRosterNameCandidates(student).some((candidateName) => normalizeMatchValue(candidateName) === normalizedName)
+  );
 
   const normalizedClass = normalizeMatchValue(entry.className);
   const classMatches = normalizedClass
@@ -1105,6 +1111,64 @@ function matchStudent(
   }
 
   return { status: "unmatched" };
+}
+
+export function resolveImportStudentMatch(
+  entry: ResultImportPreviewEntry,
+  students: Student[],
+): { status: ResultImportMatchStatus; matchedStudentId?: string; reviewReason?: string } {
+  return matchStudent(entry, students);
+}
+
+export function reconcileSavedImportStudentMatches(
+  entries: ResultImportPreviewEntry[],
+  students: Student[],
+): ResultImportPreviewEntry[] {
+  const mappingWarnings = [
+    "No exact admission-number or unique name match found; select the correct student manually.",
+    "Name is only a suggested match; confirm the correct student manually.",
+    "Student identity or class needs manual confirmation before import.",
+  ];
+  return entries.map((entry) => {
+    const selectedStudentStillExists = Boolean(entry.selectedStudentId)
+      && students.some((student) => student.id === entry.selectedStudentId);
+    if (selectedStudentStillExists) return entry;
+
+    const match = matchStudent(entry, students);
+    const retainedWarnings = entry.warnings.filter((warning) =>
+      !mappingWarnings.some((mappingWarning) => warning.startsWith(mappingWarning.split(";")[0]))
+      && !warning.startsWith("The name matches ")
+      && !warning.startsWith("Admission number ")
+    );
+
+    if (match.status === "matched" && match.matchedStudentId) {
+      return {
+        ...entry,
+        matchStatus: "matched",
+        matchedStudentId: match.matchedStudentId,
+        selectedStudentId: match.matchedStudentId,
+        warnings: retainedWarnings,
+      };
+    }
+
+    if (match.status === "manual-review" && match.matchedStudentId) {
+      return {
+        ...entry,
+        matchStatus: "manual-review",
+        matchedStudentId: match.matchedStudentId,
+        selectedStudentId: undefined,
+        warnings: [...retainedWarnings, match.reviewReason ?? mappingWarnings[2]],
+      };
+    }
+
+    return {
+      ...entry,
+      matchStatus: "unmatched",
+      matchedStudentId: undefined,
+      selectedStudentId: undefined,
+      warnings: [...retainedWarnings, "No exact admission-number or safe name match found; select or add the correct student manually."],
+    };
+  });
 }
 
 export async function parseResultWorkbook(
