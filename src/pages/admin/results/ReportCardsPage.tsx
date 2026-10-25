@@ -11,7 +11,7 @@ import FormField, { inputStyle } from "../../../components/forms/FormField";
 import SectionCard from "../../../components/ui/SectionCard";
 import Button from "../../../components/ui/Button";
 import { type AcademicCalendarConfig } from "../../../config/grandessaCalendar";
-import { buildStudentReportCard, deleteReportCard, getSavedReportCards, saveReportCardDetails, type SavedReportCard } from "../../../services/reportCardService";
+import { buildStudentReportCard, deleteReportCard, getImportReviewWorkbooks, getSavedReportCards, saveReportCardDetails, type ImportReviewWorkbook, type SavedReportCard } from "../../../services/reportCardService";
 import { getAcademicSessionSetups, saveAcademicSessionSetup } from "../../../services/academicSessionService";
 import { getClasses } from "../../../services/classService";
 import { deleteResult, getResultPublicationEvidence, getResults, publishResult, reviewResult } from "../../../services/resultService";
@@ -141,6 +141,9 @@ export default function ReportCardsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [savedReports, setSavedReports] = useState<SavedReportCard[]>([]);
+  const [savedImportWorkbooks, setSavedImportWorkbooks] = useState<ImportReviewWorkbook[]>([]);
+  const [loadingImportWorkbooks, setLoadingImportWorkbooks] = useState(true);
+  const [importWorkbooksError, setImportWorkbooksError] = useState("");
   const [results, setResults] = useState<Result[]>([]);
   const [publicationEvidence, setPublicationEvidence] = useState<Map<string, ResultPublicationEvidence>>(() => new Map());
   const [publicationEvidenceError, setPublicationEvidenceError] = useState("");
@@ -192,6 +195,18 @@ export default function ReportCardsPage() {
       setSavedReports(records);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load saved report cards.");
+    }
+  }, []);
+
+  const refreshSavedImportWorkbooks = useCallback(async (): Promise<void> => {
+    setLoadingImportWorkbooks(true);
+    setImportWorkbooksError("");
+    try {
+      setSavedImportWorkbooks(await getImportReviewWorkbooks());
+    } catch (err) {
+      setImportWorkbooksError(err instanceof Error ? err.message : "Unable to load saved spreadsheet reviews.");
+    } finally {
+      setLoadingImportWorkbooks(false);
     }
   }, []);
 
@@ -271,6 +286,10 @@ export default function ReportCardsPage() {
   useEffect(() => {
     void refreshSavedReportCards();
   }, [refreshSavedReportCards]);
+
+  useEffect(() => {
+    void refreshSavedImportWorkbooks();
+  }, [refreshSavedImportWorkbooks]);
 
   useEffect(() => {
     async function loadStudents(): Promise<void> {
@@ -1028,6 +1047,65 @@ export default function ReportCardsPage() {
         </div>
       ) : null}
 
+      <section className="card" aria-labelledby="saved-import-reviews-heading" style={{ display: "grid", gap: 14, padding: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <h2 id="saved-import-reviews-heading" style={{ margin: 0, fontSize: 22 }}>Saved work waiting for review</h2>
+            <p style={{ color: "#64748b", margin: "6px 0 0", maxWidth: 760 }}>
+              Spreadsheet reviews saved earlier appear here, even before they become result records. Continue a review to match pupils, check subject scores and import the approved records. Saving or reviewing work does not publish it or email parents.
+            </p>
+            <p style={{ color: "#334155", fontWeight: 700, margin: "8px 0 0" }}>
+              {savedImportWorkbooks.length} saved workbook(s) · {savedImportWorkbooks.reduce((total, workbook) => total + workbook.entryCount, 0)} saved pupil review(s)
+            </p>
+          </div>
+          <Button type="button" variant="secondary" onClick={() => void refreshSavedImportWorkbooks()} disabled={loadingImportWorkbooks}>
+            {loadingImportWorkbooks ? "Refreshing…" : "Refresh saved work"}
+          </Button>
+        </div>
+
+        {importWorkbooksError ? (
+          <div role="alert" style={{ padding: 10, border: "1px solid #fecaca", borderRadius: 10, background: "#fef2f2", color: "#991b1b" }}>
+            {importWorkbooksError}
+          </div>
+        ) : null}
+        {loadingImportWorkbooks ? (
+          <p role="status" style={{ color: "#64748b", margin: 0 }}>Checking for saved spreadsheet reviews…</p>
+        ) : null}
+        {!loadingImportWorkbooks && !importWorkbooksError && savedImportWorkbooks.length === 0 ? (
+          <p style={{ color: "#64748b", margin: 0 }}>There are no saved spreadsheet reviews available to resume. Existing result records and their publication status appear below.</p>
+        ) : null}
+        {savedImportWorkbooks.length > 0 ? (
+          <div style={{ display: "grid", gap: 10 }}>
+            {savedImportWorkbooks.map((workbook) => {
+              const separatorIndex = workbook.workbookKey.indexOf(":");
+              const sheetName = separatorIndex >= 0
+                ? workbook.workbookKey.slice(separatorIndex + 1)
+                : "Saved spreadsheet";
+              const updatedAt = new Date(workbook.updatedAt);
+              const lastSaved = Number.isNaN(updatedAt.getTime())
+                ? "Last saved date unavailable"
+                : `Last saved ${updatedAt.toLocaleString()}`;
+              return (
+                <article key={workbook.workbookKey} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 16 }}>Saved spreadsheet review · {sheetName}</h3>
+                    <p style={{ margin: "5px 0 0", color: "#64748b", fontSize: 13 }}>
+                      {workbook.entryCount} pupil review(s) · {lastSaved}
+                    </p>
+                  </div>
+                  <Button type="button" onClick={() => {
+                    const params = new URLSearchParams({ resumeWorkbook: workbook.workbookKey });
+                    navigate(`/admin/results?${params.toString()}`);
+                  }}>
+                    Continue review in Results
+                  </Button>
+                </article>
+              );
+            })}
+          </div>
+        ) : null}
+      </section>
+
       <SectionCard>
         <div style={{ display: "grid", gap: 14 }}>
           <FormField label="Search pupil">
@@ -1049,7 +1127,9 @@ export default function ReportCardsPage() {
               title={reportSearch ? "No pupil report periods found" : "No report periods available"}
               description={reportSearch
                 ? "Try a different pupil name or admission number."
-                : "Periods appear here when result rows or saved report-card details exist. Add or complete subject results to begin."}
+                : savedImportWorkbooks.length > 0
+                  ? "No result records are ready to publish yet. Saved spreadsheet reviews are listed above; continue one, reconcile the pupil matches and scores, and import the checked records before publishing."
+                  : "Periods appear here when result rows or saved report-card details exist. Add or complete subject results to begin."}
             />
           ) : (
             <div style={{ display: "grid", gap: 10 }}>
