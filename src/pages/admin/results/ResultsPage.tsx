@@ -29,6 +29,7 @@ import {
   isImportEntryReady,
   inspectResultWorkbook,
   parseResultWorkbook,
+  reconcileSavedImportStudentMatches,
   buildReviewedImportResultValues,
   resolveImportStudentAssignment,
   selectCreatedImportStudent,
@@ -672,7 +673,10 @@ export default function ResultsPage() {
         });
       });
       const savedEntries = await getImportReviewDrafts(`${workbookKey}:${sheetName}`);
-      const restoredEntries = mergeSavedImportReviewDrafts(validatedEntries, savedEntries);
+      const restoredEntries = reconcileSavedImportStudentMatches(
+        mergeSavedImportReviewDrafts(validatedEntries, savedEntries),
+        students,
+      );
       setImportEntries(withSelectedDuplicateWarnings(restoredEntries));
       setDraftSaveStates(Object.fromEntries(savedEntries.map((entry) => [entry.studentKey, { state: "saved" as const }])));
       setImportResultStates({});
@@ -710,7 +714,11 @@ export default function ResultsPage() {
       const sheetName = selected.workbookKey.slice(separatorIndex + 1);
       const entries = await getImportReviewDrafts(selected.workbookKey);
       if (entries.length === 0) throw new Error("This saved workbook has no pupil reviews to restore.");
-      const restoredEntries = withSelectedDuplicateWarnings([...entries].sort((left, right) => left.index - right.index));
+      const reconciledEntries = reconcileSavedImportStudentMatches(
+        [...entries].sort((left, right) => left.index - right.index),
+        students,
+      );
+      const restoredEntries = withSelectedDuplicateWarnings(reconciledEntries);
       const savedCursor = readReviewCursor(selected.workbookKey);
       const activeEntry = restoredEntries.find((entry) => entry.studentKey === savedCursor?.entryKey);
       const unresolvedIndex = activeEntry?.items.findIndex((item) => !item.subjectId) ?? -1;
@@ -751,7 +759,7 @@ export default function ResultsPage() {
       autoResumeHandled.current = null;
       return;
     }
-    if (!canManage || loadingSavedWorkbooks || savedWorkbookError) return;
+    if (!canManage || loading || loadingSavedWorkbooks || savedWorkbookError) return;
     if (autoResumeHandled.current === requestedWorkbookKey) return;
 
     const workbookExists = savedImportWorkbooks.some((workbook) => workbook.workbookKey === requestedWorkbookKey);
@@ -775,7 +783,7 @@ export default function ResultsPage() {
         return next;
       }, { replace: true });
     });
-  }, [canManage, handleResumeSavedWorkbook, loadingSavedWorkbooks, savedImportWorkbooks, savedWorkbookError, searchParams, setSearchParams]);
+  }, [canManage, handleResumeSavedWorkbook, loading, loadingSavedWorkbooks, savedImportWorkbooks, savedWorkbookError, searchParams, setSearchParams]);
 
   const handleRefreshSavedWorkbooks = async (): Promise<void> => {
     setLoadingSavedWorkbooks(true);
