@@ -15,6 +15,7 @@ const statusLabels: Record<ParentAccountStatus | "all", string> = {
   inactive: "No Active Parent Account",
   invited: "Invitation Pending",
   active: "Active",
+  link_missing: "Student Link Missing",
   account_exists_unlinked: "Existing Account — Link Required",
   account_conflict: "Duplicate Contact Needs Review",
 };
@@ -24,6 +25,7 @@ const statusColors: Record<ParentAccountStatus, { background: string; color: str
   inactive: { background: "#f1f5f9", color: "#475569" },
   invited: { background: "#fef3c7", color: "#92400e" },
   active: { background: "#dcfce7", color: "#166534" },
+  link_missing: { background: "#fef3c7", color: "#92400e" },
   account_exists_unlinked: { background: "#dbeafe", color: "#1d4ed8" },
   account_conflict: { background: "#fee2e2", color: "#991b1b" },
 };
@@ -92,7 +94,7 @@ export default function ParentAccountsPage() {
     try {
       if (entry.account_status === "not_created") {
         await createParentPortalAccount(entry.contact.id);
-      } else if (entry.account_status === "account_exists_unlinked") {
+      } else if (entry.account_status === "account_exists_unlinked" || entry.account_status === "link_missing") {
         await linkExistingParentPortalAccount(entry.contact.id);
       } else if (entry.account_status === "invited") {
         await resendParentPortalInvite(entry.contact.id);
@@ -129,6 +131,7 @@ export default function ParentAccountsPage() {
             ["Invitations pending", entries.filter((entry) => entry.account_status === "invited").length, "#92400e", "#fffbeb"],
             ["Needs an account", entries.filter((entry) => entry.account_status === "not_created").length, "#475569", "#f8fafc"],
             ["Existing account to link", entries.filter((entry) => entry.account_status === "account_exists_unlinked").length, "#1d4ed8", "#eff6ff"],
+            ["Missing child link", entries.filter((entry) => entry.account_status === "link_missing").length, "#92400e", "#fffbeb"],
             ["Needs contact review", entries.filter((entry) => entry.account_status === "account_conflict" || entry.account_status === "inactive").length, "#991b1b", "#fef2f2"],
           ] as const).map(([label, count, color, background]) => (
             <div key={label} style={{ padding: 14, borderRadius: 10, background, border: "1px solid #e2e8f0" }}>
@@ -228,6 +231,7 @@ export default function ParentAccountsPage() {
                               {working ? "Working..." :
                                 entry.account_status === "invited" ? "Resend invitation" :
                                   entry.account_status === "account_exists_unlinked" ? "Link existing account" :
+                                    entry.account_status === "link_missing" ? "Repair child link" :
                                     entry.account_status === "inactive" ? "Restore portal access" :
                                       "Create account & invite"}
                             </button>
