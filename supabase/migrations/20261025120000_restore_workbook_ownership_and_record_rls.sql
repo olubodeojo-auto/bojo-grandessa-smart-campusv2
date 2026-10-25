@@ -228,7 +228,11 @@ revoke all on function public.delete_result_import_review_draft_v2(uuid, text, t
 grant execute on function public.delete_result_import_review_draft_v2(uuid, text, text, uuid) to authenticated;
 
 -- The report-card authorization policies already exist and become effective once RLS is enabled.
+revoke all on public.report_cards from public, anon;
 alter table public.report_cards enable row level security;
+
+-- Parent-child links are never directly available to anonymous clients.
+revoke all on public.parent_student_links from public, anon;
 
 -- Contact records are private school records; access is limited to authenticated staff.
 revoke all on public.contacts from public, anon, authenticated;
