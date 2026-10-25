@@ -110,6 +110,16 @@ const workflowSecurityMigrationFiles = import.meta.glob<string>(
   { eager: true, query: "?raw", import: "default" },
 );
 const workflowSecurityMigration = Object.values(workflowSecurityMigrationFiles)[0] ?? "";
+const importWorkflowStatusMigrationFiles = import.meta.glob<string>(
+  "../../supabase/migrations/20261025140000_mark_imported_workbook_entries.sql",
+  { eager: true, query: "?raw", import: "default" },
+);
+const importWorkflowStatusMigration = Object.values(importWorkflowStatusMigrationFiles)[0] ?? "";
+const reportCardDateFixMigrationFiles = import.meta.glob<string>(
+  "../../supabase/migrations/20261025131500_fix_report_card_import_rpc_date_types.sql",
+  { eager: true, query: "?raw", import: "default" },
+);
+const reportCardDateFixMigration = Object.values(reportCardDateFixMigrationFiles)[0] ?? "";
 const academicSessionMigrationFiles = import.meta.glob<string>(
   "../../supabase/migrations/20261015000000_academic_session_term_admin_access.sql",
   { eager: true, query: "?raw", import: "default" },
@@ -2903,6 +2913,28 @@ describe("results workflow migration contract", () => {
     expect(reportCardsPage).toContain("resumeOwner: workbook.ownerId");
     expect(resultsPage).toContain('searchParams.get("resumeOwner")');
     expect(resultsPage).toContain("workbook.ownerId === requestedOwnerId");
+  });
+
+  it("marks already imported workbook pupils and separates published results from drafts", () => {
+    expect(importWorkflowStatusMigration).toContain("mark_result_import_review_draft_status_v2");
+    expect(importWorkflowStatusMigration).toContain("target_workflow_status not in ('published', 'imported_draft')");
+    expect(importWorkflowStatusMigration).toContain("'workflowStatus', target_workflow_status");
+    expect(importWorkflowStatusMigration).toContain("matching_status_count <> result_count");
+    expect(reportCardService).toContain("workflowStatus");
+    expect(reportCardService).toContain("publishedSubjectRowCount");
+    expect(reportCardService).toContain("draftImportedSubjectRowCount");
+    expect(reportCardsPage).toContain("Published:");
+    expect(reportCardsPage).toContain("Imported as Draft:");
+    expect(resultsPage).toContain("completedEntries.length > 0");
+    expect(resultsPage).toContain("All pupil entries in this workbook have already been imported");
+    expect(resultsPage).toContain("!entry.workflowStatus");
+  });
+
+  it("uses date-compatible field types for the imported report-card RPC", () => {
+    expect(reportCardDateFixMigration).toContain("term_ending date");
+    expect(reportCardDateFixMigration).toContain("next_term_begins date");
+    expect(reportCardDateFixMigration).toContain("revoke all on function public.save_imported_report_card(uuid,jsonb,jsonb,jsonb) from public, anon");
+    expect(reportCardDateFixMigration).toContain("grant execute on function public.save_imported_report_card(uuid,jsonb,jsonb,jsonb) to authenticated");
   });
 
   it("stores private review drafts without changing RLS and restores them through owner-scoped RPCs", () => {
