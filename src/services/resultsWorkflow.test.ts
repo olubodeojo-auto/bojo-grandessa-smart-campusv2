@@ -1009,6 +1009,18 @@ describe("Report Center period discovery and readiness", () => {
     expect(reportCardsPage).toContain("Publishing unavailable: {publishBlockReason}");
   });
 
+  it("surfaces saved workbook reviews in Report Card Publishing and opens the selected draft directly", () => {
+    expect(reportCardsPage).toContain("Saved work waiting for review");
+    expect(reportCardsPage).toContain("getImportReviewWorkbooks");
+    expect(reportCardsPage).toContain("Continue review in Results");
+    expect(reportCardsPage).toContain("resumeWorkbook: workbook.workbookKey");
+    expect(reportCardsPage).toContain("Saving or reviewing work does not publish it or email parents.");
+    expect(resultsPage).toContain('searchParams.get("resumeWorkbook")');
+    expect(resultsPage).toContain("handleResumeSavedWorkbook(requestedWorkbookKey)");
+    expect(resultsPage).toContain("autoResumeHandled");
+    expect(resultsPage).not.toContain("{workbookIdentity.slice(0, 12)}");
+  });
+
   it("uses audit-verified unpublish evidence in both the lifecycle trigger and review RPC", () => {
     expect(legacyRepublishMigration).toContain("public.has_verified_result_unpublish_history");
     expect(legacyRepublishMigration).toContain("audit.old_record ->> 'status' = 'Published'");
