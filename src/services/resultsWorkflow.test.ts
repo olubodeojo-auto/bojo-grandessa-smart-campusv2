@@ -18,6 +18,8 @@ import {
   getUnresolvedIncludedResultEntries,
   isImportEntryReady,
   mergeSavedImportReviewDrafts,
+  reconcileSavedImportStudentMatches,
+  resolveImportStudentMatch,
   resolveImportStudentAssignment,
   resolveExistingResultImportDecision,
   selectCreatedImportStudent,
@@ -1421,6 +1423,49 @@ describe("result workbook import preview", () => {
     expect(nameOnlyEntry?.matchStatus).toBe("matched");
     expect(nameOnlyEntry?.matchedStudentId).toBe("student-1");
     expect(nameOnlyEntry?.selectedStudentId).toBe("student-1");
+  });
+
+  it("matches surname-first pupil names safely and keeps class conflicts in manual review", () => {
+    const rosterStudent: Student = {
+      ...student("student-1", "Jason Oyewumi", "GDS-0010", "Basic 4"),
+      first_name: "Jason Ifeoluwanimi",
+      middle_name: "Ifeoluwanimi",
+      last_name: "Oyewumi",
+    };
+    const entry: ResultImportPreviewEntry = {
+      index: 0,
+      studentKey: "pupil-1",
+      studentName: "OYEWUMI JASON",
+      admissionNumber: "",
+      academicYear: "2026/2027",
+      term: "First",
+      assessmentType: "CA",
+      reportKind: "Midterm / Continuous Assessment",
+      className: "Basic 4",
+      teacherName: "",
+      matchStatus: "unmatched",
+      included: true,
+      warnings: ["No exact admission-number or unique name match found; select the correct student manually."],
+      notices: [],
+      items: [],
+    };
+
+    expect(resolveImportStudentMatch(entry, [rosterStudent])).toMatchObject({
+      status: "matched",
+      matchedStudentId: "student-1",
+    });
+    expect(resolveImportStudentMatch({ ...entry, className: "Basic 2" }, [rosterStudent])).toMatchObject({
+      status: "manual-review",
+      matchedStudentId: "student-1",
+    });
+
+    const [safeMatch, classConflict] = reconcileSavedImportStudentMatches(
+      [entry, { ...entry, studentKey: "pupil-2", className: "Basic 2" }],
+      [rosterStudent],
+    );
+    expect(safeMatch).toMatchObject({ matchStatus: "matched", selectedStudentId: "student-1" });
+    expect(classConflict).toMatchObject({ matchStatus: "manual-review", matchedStudentId: "student-1" });
+    expect(classConflict.selectedStudentId).toBeUndefined();
   });
 
   it("resolves only unambiguous existing subjects through known spelling aliases", () => {
