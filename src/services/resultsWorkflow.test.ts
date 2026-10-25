@@ -1018,12 +1018,15 @@ describe("Report Center period discovery and readiness", () => {
 
   it("surfaces saved workbook reviews in Report Card Publishing and opens the selected draft directly", () => {
     expect(reportCardsPage).toContain("Saved work waiting for review");
-    expect(reportCardsPage).toContain("getImportReviewWorkbooks");
-    expect(reportCardsPage).toContain("Continue review in Results");
+    expect(reportCardsPage).toContain("getImportReviewWorkbookSummaries");
+    expect(reportCardsPage).toContain("Continue review");
     expect(reportCardsPage).toContain("resumeWorkbook: workbook.workbookKey");
+    expect(reportCardsPage).toContain("resumeOwner: workbook.ownerId");
+    expect(reportCardsPage).toContain("Pupil matches resolved");
     expect(reportCardsPage).toContain("Saving or reviewing work does not publish it or email parents.");
     expect(resultsPage).toContain('searchParams.get("resumeWorkbook")');
-    expect(resultsPage).toContain("handleResumeSavedWorkbook(requestedWorkbookKey)");
+    expect(resultsPage).toContain("handleResumeSavedWorkbook(requestedWorkbookKey, requestedOwnerId)");
+    expect(resultsPage).toContain("workbook.ownerId === requestedOwnerId");
     expect(resultsPage).toContain("autoResumeHandled");
     expect(resultsPage).not.toContain("{workbookIdentity.slice(0, 12)}");
   });
@@ -1254,7 +1257,7 @@ describe("Add Results saved draft recovery", () => {
     expect(groupSavedResultDrafts([resultDraft]).flatMap((group) => group.results.map((row) => row.id)))
       .toEqual(["database-result"]);
     expect(resultsPage).toContain("Saved Workbook Drafts");
-    expect(resultsPage).toContain("getImportReviewDrafts(selected.workbookKey)");
+    expect(resultsPage).toContain("getImportReviewDrafts(selected.workbookKey, selected.ownerId)");
     expect(resultsPage).toContain("Resume saved draft");
     expect(resultsPage).not.toContain('role="tablist"');
   });
@@ -2899,7 +2902,7 @@ describe("results workflow migration contract", () => {
     expect(resultsPage).toContain("Resume saved draft");
     expect(resultsPage).toContain("document.addEventListener(\"visibilitychange\"");
     expect(resultsPage).toContain("window.addEventListener(\"pagehide\"");
-    expect(resultsPage).toContain("getImportReviewDrafts(selected.workbookKey)");
+    expect(resultsPage).toContain("getImportReviewDrafts(selected.workbookKey, selected.ownerId)");
     expect(resultsPage).toContain("importReviewCursorKey(user.id, importDraftSchoolId");
     expect(resultsPage).toContain("subjectRowKey: activeSubjectRowKey");
     expect(resultsPage).toContain("const [activeImportEntryKey, setActiveImportEntryKey] = useState<string | null>(null)");
