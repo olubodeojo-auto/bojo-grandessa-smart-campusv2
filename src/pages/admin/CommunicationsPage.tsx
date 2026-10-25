@@ -232,6 +232,7 @@ export default function CommunicationsPage() {
     if (error) return "Resolve the preview error before sending.";
     if (!subject.trim()) return "Add a subject before sending.";
     if (!message.trim()) return "Add a message before sending.";
+    if (audience === "parents_published_results" && !selectedPublishedResultsPeriod) return "Choose a period with fully published results before sending.";
     if (audience === "class" && !classId) return "Choose a class before sending.";
     if (audience === "people" && people.length === 0) return "Select at least one person before sending.";
     if (audience === "custom" && parseCustomEmails(customEmails).length === 0) return "Enter at least one email address before sending.";
@@ -239,7 +240,7 @@ export default function CommunicationsPage() {
     if (preview.recipient_count === 0) return "No valid email recipients were found.";
     if (preview.usage.remaining < preview.recipient_count) return "This message exceeds the remaining daily email quota.";
     return "";
-  }, [audience, classId, customEmails, error, loading, message, people.length, preview, previewLoading, subject]);
+  }, [audience, classId, customEmails, error, loading, message, people.length, preview, previewLoading, selectedPublishedResultsPeriod, subject]);
 
   useEffect(() => {
     if (!testEmail && user?.email) setTestEmail(user.email);
@@ -268,8 +269,9 @@ export default function CommunicationsPage() {
       subject,
       message,
       messageHtml,
+      publishedResultsPeriodKey,
     } satisfies CommunicationDraft));
-  }, [audience, classId, customEmails, message, messageHtml, selectedPeople, subject]);
+  }, [audience, classId, customEmails, message, messageHtml, publishedResultsPeriodKey, selectedPeople, subject]);
 
   useEffect(() => {
     let active = true;
@@ -290,6 +292,13 @@ export default function CommunicationsPage() {
   }, []);
 
   useEffect(() => {
+    if (audience === "parents_published_results" && !selectedPublishedResultsPeriod) {
+      setPreview(null);
+      setPreviewLoading(false);
+      setError("");
+      return;
+    }
+
     let active = true;
     setPreviewLoading(true);
     void previewCommunication(target)
@@ -311,12 +320,26 @@ export default function CommunicationsPage() {
     return () => {
       active = false;
     };
-  }, [target]);
+  }, [audience, selectedPublishedResultsPeriod, target]);
 
   function handleAudienceChange(nextAudience: CommunicationAudience): void {
     setAudience(nextAudience);
     setError("");
     setSuccess("");
+    if (nextAudience === "parents_published_results") {
+      const defaultSubject = "Your child's results are now available";
+      const defaultMessage = "Dear Parent/Guardian,\n\nGrandessa Smart Campus has published the results for the selected academic period. Please sign in to the parent dashboard to view your child's report.\n\nRegards,\nGrandessa Smart Campus";
+      setSubject((current) => current.trim() ? current : defaultSubject);
+      setMessage((current) => current.trim() ? current : defaultMessage);
+      setMessageHtml((current) => current.trim() ? current : escapeHtml(defaultMessage).replace(/\n/g, "<br>"));
+    }
+  }
+
+  function handlePublishedResultsPeriodChange(nextKey: string): void {
+    setPublishedResultsPeriodKey(nextKey);
+    setError("");
+    setSuccess("");
+    setShowConfirmationModal(false);
   }
 
   function togglePerson(person: CommunicationPerson): void {
@@ -426,6 +449,36 @@ export default function CommunicationsPage() {
               {audienceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
+
+          {audience === "parents_published_results" ? (
+            <div style={{ display: "grid", gap: 8, minWidth: 280 }}>
+              <label style={{ display: "grid", gap: 6 }}>
+                Published report period
+                <select
+                  value={publishedResultsPeriodKey}
+                  onChange={(event) => handlePublishedResultsPeriodChange(event.target.value)}
+                  disabled={loading || !directory?.published_results_periods.length}
+                  required
+                >
+                  <option value="">Choose a published period</option>
+                  {(directory?.published_results_periods ?? []).map((period) => (
+                    <option key={getPublishedPeriodKey(period)} value={getPublishedPeriodKey(period)}>
+                      {period.academic_year} · {period.term} Term · {period.report_type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {!loading && (directory?.published_results_periods.length ?? 0) === 0 ? (
+                <p role="status" style={{ margin: 0, color: "#92400e", fontSize: 13 }}>
+                  No fully published report periods are available yet. Publish and verify results in Report Card Publishing first; that step does not send emails.
+                </p>
+              ) : selectedPublishedResultsPeriod ? (
+                <p role="status" style={{ margin: 0, color: "#475569", fontSize: 13 }}>
+                  This message will go only to linked parent/guardian accounts and saved contact emails for {selectedPublishedResultsPeriod.student_count} pupil(s) whose {selectedPublishedResultsPeriod.report_type.toLowerCase()} subject results are all published ({selectedPublishedResultsPeriod.result_count} result record(s)).
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           {audience === "class" ? (
             <label style={{ display: "grid", gap: 6 }}>
