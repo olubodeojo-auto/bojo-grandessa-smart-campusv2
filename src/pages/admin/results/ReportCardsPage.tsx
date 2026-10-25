@@ -11,7 +11,7 @@ import FormField, { inputStyle } from "../../../components/forms/FormField";
 import SectionCard from "../../../components/ui/SectionCard";
 import Button from "../../../components/ui/Button";
 import { type AcademicCalendarConfig } from "../../../config/grandessaCalendar";
-import { buildStudentReportCard, deleteReportCard, getImportReviewWorkbooks, getSavedReportCards, saveReportCardDetails, type ImportReviewWorkbook, type SavedReportCard } from "../../../services/reportCardService";
+import { buildStudentReportCard, deleteReportCard, getImportReviewWorkbookSummaries, getSavedReportCards, saveReportCardDetails, type ImportReviewWorkbookSummary, type SavedReportCard } from "../../../services/reportCardService";
 import { getAcademicSessionSetups, saveAcademicSessionSetup } from "../../../services/academicSessionService";
 import { getClasses } from "../../../services/classService";
 import { deleteResult, getResultPublicationEvidence, getResults, publishResult, reviewResult } from "../../../services/resultService";
@@ -141,7 +141,7 @@ export default function ReportCardsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [savedReports, setSavedReports] = useState<SavedReportCard[]>([]);
-  const [savedImportWorkbooks, setSavedImportWorkbooks] = useState<ImportReviewWorkbook[]>([]);
+  const [savedImportWorkbooks, setSavedImportWorkbooks] = useState<ImportReviewWorkbookSummary[]>([]);
   const [loadingImportWorkbooks, setLoadingImportWorkbooks] = useState(true);
   const [importWorkbooksError, setImportWorkbooksError] = useState("");
   const [results, setResults] = useState<Result[]>([]);
@@ -202,7 +202,7 @@ export default function ReportCardsPage() {
     setLoadingImportWorkbooks(true);
     setImportWorkbooksError("");
     try {
-      setSavedImportWorkbooks(await getImportReviewWorkbooks());
+      setSavedImportWorkbooks(await getImportReviewWorkbookSummaries());
     } catch (err) {
       setImportWorkbooksError(err instanceof Error ? err.message : "Unable to load saved spreadsheet reviews.");
     } finally {
@@ -1055,7 +1055,10 @@ export default function ReportCardsPage() {
               Spreadsheet reviews saved earlier appear here, even before they become result records. Continue a review to match pupils, check subject scores and import the approved records. Saving or reviewing work does not publish it or email parents.
             </p>
             <p style={{ color: "#334155", fontWeight: 700, margin: "8px 0 0" }}>
-              {savedImportWorkbooks.length} saved workbook(s) · {savedImportWorkbooks.reduce((total, workbook) => total + workbook.entryCount, 0)} saved pupil review(s)
+              {savedImportWorkbooks.length} saved workbook(s) · {savedImportWorkbooks.reduce((total, workbook) => total + workbook.includedEntryCount, 0)} included pupil review(s) · {savedImportWorkbooks.reduce((total, workbook) => total + workbook.subjectRowCount, 0)} subject scores
+            </p>
+            <p style={{ color: "#64748b", fontSize: 13, margin: "6px 0 0" }}>
+              Publishing updates online access only. It does not send emails; parent notifications must be a separate action after publication.
             </p>
           </div>
           <Button type="button" variant="secondary" onClick={() => void refreshSavedImportWorkbooks()} disabled={loadingImportWorkbooks}>
@@ -1077,28 +1080,58 @@ export default function ReportCardsPage() {
         {savedImportWorkbooks.length > 0 ? (
           <div style={{ display: "grid", gap: 10 }}>
             {savedImportWorkbooks.map((workbook) => {
-              const separatorIndex = workbook.workbookKey.indexOf(":");
-              const sheetName = separatorIndex >= 0
-                ? workbook.workbookKey.slice(separatorIndex + 1)
-                : "Saved spreadsheet";
+              const periodParts = [...workbook.academicYears, ...workbook.terms, ...workbook.reportKinds];
+              const periodLabel = periodParts.length > 0
+                ? [...new Set(periodParts)].join(" · ")
+                : "Period needs review";
               const updatedAt = new Date(workbook.updatedAt);
               const lastSaved = Number.isNaN(updatedAt.getTime())
                 ? "Last saved date unavailable"
                 : `Last saved ${updatedAt.toLocaleString()}`;
+              const isConfigured = workbook.academicYears.every((year) =>
+                workbook.terms.every((termLabel) => {
+                  const session = academicSessions.find((item) => item.session_name === year);
+                  const termName = termLabel.replace(/ Term$/, "");
+                  return Boolean(session?.terms.some((item) => item.term_name === termName));
+                })
+              );
               return (
-                <article key={workbook.workbookKey} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 }}>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: 16 }}>Saved spreadsheet review · {sheetName}</h3>
-                    <p style={{ margin: "5px 0 0", color: "#64748b", fontSize: 13 }}>
-                      {workbook.entryCount} pupil review(s) · {lastSaved}
-                    </p>
+                <article key={`${workbook.ownerId}::${workbook.workbookKey}`} style={{ display: "grid", gap: 10, border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: 17 }}>{periodLabel}</h3>
+                      <p style={{ margin: "5px 0 0", color: "#64748b", fontSize: 13 }}>
+                        Worksheet: {workbook.sheetName} · Saved by {workbook.ownerName} · {lastSaved}
+                      </p>
+                    </div>
+                    <Button type="button" onClick={() => {
+                      const params = new URLSearchParams({
+                        resumeWorkbook: workbook.workbookKey,
+                        resumeOwner: workbook.ownerId,
+                      });
+                      navigate(`/admin/results?${params.toString()}`);
+                    }}>
+                      Continue review
+                    </Button>
                   </div>
-                  <Button type="button" onClick={() => {
-                    const params = new URLSearchParams({ resumeWorkbook: workbook.workbookKey });
-                    navigate(`/admin/results?${params.toString()}`);
-                  }}>
-                    Continue review in Results
-                  </Button>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: "#334155", fontSize: 13 }}>
+                    <span>{workbook.includedEntryCount} included pupil(s)</span>
+                    <span>·</span>
+                    <span>{workbook.subjectRowCount} subject score(s)</span>
+                    <span>·</span>
+                    <span style={{ color: workbook.unresolvedEntryCount > 0 ? "#92400e" : "#166534", fontWeight: 700 }}>
+                      {workbook.unresolvedEntryCount > 0 ? `${workbook.unresolvedEntryCount} pupil match(es) need review` : "Pupil matches resolved"}
+                    </span>
+                    {workbook.excludedEntryCount > 0 ? <><span>·</span><span>{workbook.excludedEntryCount} excluded duplicate/ignored pupil review(s)</span></> : null}
+                  </div>
+                  {workbook.classes.length > 0 ? (
+                    <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>Classes: {workbook.classes.join(", ")}</p>
+                  ) : null}
+                  {!isConfigured ? (
+                    <p role="alert" style={{ margin: 0, padding: "9px 11px", borderRadius: 8, background: "#fff7ed", color: "#9a3412", fontSize: 13 }}>
+                      This workbook&apos;s academic session or term is not configured in the school calendar yet. Enter the school&apos;s official dates before importing or publishing; do not guess dates.
+                    </p>
+                  ) : null}
                 </article>
               );
             })}
