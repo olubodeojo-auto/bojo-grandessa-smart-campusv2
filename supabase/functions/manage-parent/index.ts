@@ -524,6 +524,17 @@ async function handleDirectory(adminClient: ReturnType<typeof createClient>): Pr
     .filter((user) => user.status === "Active")
     .map((user) => user.id));
 
+  const { data: parentLinkRows, error: parentLinkError } = await adminClient
+    .from("parent_student_links")
+    .select("student_id, auth_user_id");
+  if (parentLinkError) throw parentLinkError;
+  const linkedStudentIdsByAuthUser = new Map<string, Set<string>>();
+  for (const link of parentLinkRows ?? []) {
+    const studentIds = linkedStudentIdsByAuthUser.get(link.auth_user_id) ?? new Set<string>();
+    studentIds.add(link.student_id);
+    linkedStudentIdsByAuthUser.set(link.auth_user_id, studentIds);
+  }
+
   const authUsers = new Map<string, { email: string | null; emailConfirmed: boolean; signedIn: boolean }>();
   const authUsersByEmail = new Map<string, { id: string; emailConfirmed: boolean; signedIn: boolean }>();
   let page = 1;
@@ -584,17 +595,23 @@ async function handleDirectory(adminClient: ReturnType<typeof createClient>): Pr
     const linkedStudents = [...(studentIdsByContact.get(contact.id)?.values() ?? [])];
     if (linkedStudents.length === 0) return [];
 
-    let status: "not_created" | "inactive" | "invited" | "active" | "account_exists_unlinked" | "account_conflict";
+    let status: "not_created" | "inactive" | "invited" | "active" | "link_missing" | "account_exists_unlinked" | "account_conflict";
     if (contact.auth_user_id) {
       const authUser = authUsers.get(contact.auth_user_id);
       if (!activeParentUserIds.has(contact.auth_user_id)
         || !activeProfileUserIds.has(contact.auth_user_id)
         || !authUsers.has(contact.auth_user_id)) {
         status = "inactive";
-      } else if (authUser?.emailConfirmed || authUser?.signedIn) {
-        status = "active";
       } else {
-        status = "invited";
+        const linkedStudentIds = linkedStudentIdsByAuthUser.get(contact.auth_user_id) ?? new Set<string>();
+        const hasMissingStudentLink = linkedStudents.some((student) => !linkedStudentIds.has(String(student.id)));
+        if (hasMissingStudentLink) {
+          status = "link_missing";
+        } else if (authUser?.emailConfirmed || authUser?.signedIn) {
+          status = "active";
+        } else {
+          status = "invited";
+        }
       }
     } else {
       const normalizedEmail = contact.email?.trim().toLowerCase() ?? "";
