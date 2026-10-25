@@ -1104,25 +1104,47 @@ export default function ReportCardsPage() {
                         Worksheet: {workbook.sheetName} · Saved by {workbook.ownerName} · {lastSaved}
                       </p>
                     </div>
-                    <Button type="button" onClick={() => {
-                      const params = new URLSearchParams({
-                        resumeWorkbook: workbook.workbookKey,
-                        resumeOwner: workbook.ownerId,
-                      });
-                      navigate(`/admin/results?${params.toString()}`);
-                    }}>
-                      Continue review
-                    </Button>
+                    {workbook.includedEntryCount > 0 ? (
+                      <Button type="button" onClick={() => {
+                        const params = new URLSearchParams({
+                          resumeWorkbook: workbook.workbookKey,
+                          resumeOwner: workbook.ownerId,
+                        });
+                        navigate(`/admin/results?${params.toString()}`);
+                      }}>
+                        Continue review
+                      </Button>
+                    ) : null}
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: "#334155", fontSize: 13 }}>
-                    <span>{workbook.includedEntryCount} included pupil(s)</span>
-                    <span>·</span>
-                    <span>{workbook.subjectRowCount} subject score(s)</span>
-                    <span>·</span>
-                    <span style={{ color: workbook.unresolvedEntryCount > 0 ? "#92400e" : "#166534", fontWeight: 700 }}>
-                      {workbook.unresolvedEntryCount > 0 ? `${workbook.unresolvedEntryCount} pupil match(es) need review` : "Pupil matches resolved"}
-                    </span>
-                    {workbook.excludedEntryCount > 0 ? <><span>·</span><span>{workbook.excludedEntryCount} excluded duplicate/ignored pupil review(s)</span></> : null}
+                    {workbook.includedEntryCount > 0 ? (
+                      <>
+                        <span>{workbook.includedEntryCount} pupil review(s) waiting to import</span>
+                        <span>·</span>
+                        <span>{workbook.subjectRowCount} score(s) waiting to import</span>
+                        <span>·</span>
+                        <span style={{ color: workbook.unresolvedEntryCount > 0 ? "#92400e" : "#166534", fontWeight: 700 }}>
+                          {workbook.unresolvedEntryCount > 0 ? `${workbook.unresolvedEntryCount} pupil match(es) need review` : "Pupil matches resolved"}
+                        </span>
+                      </>
+                    ) : (
+                      <span style={{ color: workbook.importedEntryCount > 0 ? "#166534" : "#64748b", fontWeight: 700 }}>
+                        {workbook.importedEntryCount > 0 ? "All included pupil entries have already been imported" : "No included pupil entries are waiting to import"}
+                      </span>
+                    )}
+                    {workbook.excludedEntryCount > 0 ? <><span>·</span><span>{workbook.excludedEntryCount} excluded duplicate/ignored review(s)</span></> : null}
+                    {workbook.publishedEntryCount > 0 ? (
+                      <>
+                        <span>·</span>
+                        <span style={{ color: "#166534", fontWeight: 700 }}>Published: {workbook.publishedEntryCount} pupil(s), {workbook.publishedSubjectRowCount} result(s)</span>
+                      </>
+                    ) : null}
+                    {workbook.draftImportedEntryCount > 0 ? (
+                      <>
+                        <span>·</span>
+                        <span style={{ color: "#92400e", fontWeight: 700 }}>Imported as Draft: {workbook.draftImportedEntryCount} pupil(s), {workbook.draftImportedSubjectRowCount} result(s)</span>
+                      </>
+                    ) : null}
                   </div>
                   {workbook.duplicatePupilCount > 0 ? (
                     <p role="alert" style={{ margin: 0, padding: "10px 12px", borderRadius: 8, border: "1px solid #fde68a", background: "#fffbeb", color: "#92400e", fontSize: 13 }}>
@@ -1131,11 +1153,6 @@ export default function ReportCardsPage() {
                   ) : null}
                   {workbook.classes.length > 0 ? (
                     <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>Classes: {workbook.classes.join(", ")}</p>
-                  ) : null}
-                  {workbook.duplicatePupilCount > 0 ? (
-                    <p role="alert" style={{ margin: 0, padding: "10px 12px", borderRadius: 8, border: "1px solid #fde68a", background: "#fffbeb", color: "#92400e", fontSize: 13 }}>
-                      Potential duplicate pupil review: {workbook.duplicatePupilNames.join(", ")} {workbook.duplicatePupilCount === 1 ? "also appears" : "also appear"} in another saved workbook for the same session, term and report type. Compare the saved versions and import only the school-approved version; do not import both.
-                    </p>
                   ) : null}
                   {!isConfigured ? (
                     <p role="alert" style={{ margin: 0, padding: "9px 11px", borderRadius: 8, background: "#fff7ed", color: "#9a3412", fontSize: 13 }}>
