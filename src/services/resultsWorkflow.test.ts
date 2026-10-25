@@ -105,6 +105,11 @@ const importDraftListingMigrationFiles = import.meta.glob<string>(
   { eager: true, query: "?raw", import: "default" },
 );
 const importDraftListingMigration = Object.values(importDraftListingMigrationFiles)[0] ?? "";
+const workflowSecurityMigrationFiles = import.meta.glob<string>(
+  "../../supabase/migrations/20261025120000_restore_workbook_ownership_and_record_rls.sql",
+  { eager: true, query: "?raw", import: "default" },
+);
+const workflowSecurityMigration = Object.values(workflowSecurityMigrationFiles)[0] ?? "";
 const academicSessionMigrationFiles = import.meta.glob<string>(
   "../../supabase/migrations/20261015000000_academic_session_term_admin_access.sql",
   { eager: true, query: "?raw", import: "default" },
@@ -2715,7 +2720,7 @@ describe("results workflow migration contract", () => {
     expect(academicSessionMigration).not.toMatch(/execute format\([\s\S]*?drop policy/);
   });
 
-  it("uses school-scoped report identity and role grants without enabling RLS", () => {
+  it("keeps historical report and academic migrations separate from explicit RLS hardening", () => {
     expect(reportMigration).toContain("on public.report_cards(school_id, student_id, class_id, academic_year, term, report_type)");
     expect(reportMigration).toContain("create unique index if not exists uidx_report_cards_period_type");
     expect(reportMigration.indexOf("add column if not exists report_type"))
@@ -2845,6 +2850,32 @@ describe("results workflow migration contract", () => {
     expect(parentReportAccess).toContain("r.status = 'Published'");
   });
 
+  it("enforces existing report-card policies and restricts contact records to authenticated staff", () => {
+    expect(workflowSecurityMigration).toContain("alter table public.report_cards enable row level security");
+    expect(workflowSecurityMigration).toContain("alter table public.contacts enable row level security");
+    expect(workflowSecurityMigration).toContain("revoke all on public.contacts from public, anon, authenticated");
+    expect(workflowSecurityMigration).toContain("grant select, insert, update on public.contacts to authenticated");
+    expect(workflowSecurityMigration).toContain('create policy "Contacts staff manage"');
+    expect(workflowSecurityMigration).toContain("public.is_active_staff_user()");
+    expect(reportMigration).toContain('create policy "Report cards administrators manage"');
+    expect(reportMigration).toContain('create policy "Report cards assigned teachers read"');
+    expect(reportMigration).toContain('create policy "Report cards parents read published reports"');
+    expect(workflowSecurityMigration).not.toContain("alter table public.result_import_review_drafts enable row level security");
+  });
+
+  it("lists and resumes saved workbooks by their staff owner", () => {
+    expect(workflowSecurityMigration).toContain("get_result_import_review_workbooks_v2");
+    expect(workflowSecurityMigration).toContain("get_result_import_review_drafts_v2");
+    expect(workflowSecurityMigration).toContain("save_result_import_review_draft_v2");
+    expect(workflowSecurityMigration).toContain("delete_result_import_review_draft_v2");
+    expect(workflowSecurityMigration).toContain("d.created_by = owner_to_read");
+    expect(reportCardService).toContain("target_owner_id: params.ownerId ?? null");
+    expect(reportCardsPage).toContain("getImportReviewWorkbookSummaries");
+    expect(reportCardsPage).toContain("resumeOwner: workbook.ownerId");
+    expect(resultsPage).toContain('searchParams.get("resumeOwner")');
+    expect(resultsPage).toContain("workbook.ownerId === requestedOwnerId");
+  });
+
   it("stores private review drafts without changing RLS and restores them through owner-scoped RPCs", () => {
     expect(importDraftMigration).toContain("create table if not exists public.result_import_review_drafts");
     expect(importDraftMigration).toContain("unique (school_id, created_by, workbook_key, entry_key)");
@@ -2856,7 +2887,9 @@ describe("results workflow migration contract", () => {
     expect(importDraftMigration).not.toMatch(/alter\s+table\s+public\.result_import_review_drafts\s+enable\s+row\s+level\s+security/i);
     expect(reportCardService).toContain('rpc("save_result_import_review_draft"');
     expect(reportCardService).toContain('rpc("get_result_import_review_drafts"');
-    expect(reportCardService).toContain('rpc("get_result_import_review_workbooks"');
+    expect(reportCardService).toContain('rpc("get_result_import_review_workbooks_v2"');
+    expect(reportCardService).toContain('rpc("get_result_import_review_drafts_v2"');
+    expect(reportCardService).toContain('rpc("save_result_import_review_draft_v2"');
     expect(importDraftListingMigration).toMatch(/create or replace function public\.get_result_import_review_workbooks\(\s*target_school_id uuid\s*\)[\s\S]*?d\.school_id = target_school_id[\s\S]*?d\.created_by = actor_id[\s\S]*?group by d\.workbook_key/);
     expect(importDraftListingMigration).toMatch(/where d\.school_id = target_school_id\s+and\s*\(\s*public\.is_assignment_admin\(\)\s+or\s*\(\s*d\.created_by = actor_id[\s\S]*?c\.id = d\.class_id[\s\S]*?c\.class_teacher_id = actor_id/);
     expect(importDraftListingMigration.trimStart()).toMatch(/^do \$\$/);
