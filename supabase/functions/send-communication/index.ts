@@ -146,18 +146,39 @@ async function listAuthEmails(adminClient: ReturnType<typeof createClient>): Pro
   return authEmails;
 }
 
+async function loadAllPublishedWorkflowResults(adminClient: ReturnType<typeof createClient>): Promise<PublishedResultRow[]> {
+  const rows: PublishedResultRow[] = [];
+  const pageSize = 1000;
+  let offset = 0;
+  while (true) {
+    const { data, error } = await adminClient
+      .from("results")
+      .select("id, student_id, class_id, academic_year, term, assessment_type, status")
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    const page = (data ?? []) as PublishedResultRow[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+    offset += pageSize;
+  }
+  return rows;
+}
+
 async function loadDirectory(adminClient: ReturnType<typeof createClient>): Promise<Directory> {
-  const [contactsResult, studentsResult, usersResult, assignmentsResult, rolesResult, classesResult, authEmails] = await Promise.all([
-    adminClient.from("contacts").select("id, first_name, last_name, email"),
+  const [contactsResult, studentsResult, usersResult, assignmentsResult, rolesResult, classesResult, parentLinksResult, results, authEmails] = await Promise.all([
+    adminClient.from("contacts").select("id, first_name, last_name, email, auth_user_id"),
     adminClient.from("students").select("id, first_name, last_name, class_id, primary_contact_id, secondary_contact_id, status"),
     adminClient.from("users").select("id, first_name, last_name, status"),
     adminClient.from("user_roles").select("user_id, role_id, is_active").eq("is_active", true),
     adminClient.from("roles").select("id, name"),
     adminClient.from("classes").select("id, class_name, class_teacher_id, status"),
+    adminClient.from("parent_student_links").select("student_id, auth_user_id"),
+    loadAllPublishedWorkflowResults(adminClient),
     listAuthEmails(adminClient),
   ]);
 
-  for (const result of [contactsResult, studentsResult, usersResult, assignmentsResult, rolesResult, classesResult]) {
+  for (const result of [contactsResult, studentsResult, usersResult, assignmentsResult, rolesResult, classesResult, parentLinksResult]) {
     if (result.error) throw result.error;
   }
 
@@ -168,6 +189,8 @@ async function loadDirectory(adminClient: ReturnType<typeof createClient>): Prom
     assignments: (assignmentsResult.data ?? []) as AssignmentRow[],
     roles: (rolesResult.data ?? []) as RoleRow[],
     classes: (classesResult.data ?? []) as ClassRow[],
+    parentLinks: (parentLinksResult.data ?? []) as ParentStudentLinkRow[],
+    results,
     authEmails,
   };
 }
