@@ -186,6 +186,10 @@ export type ImportReviewWorkbookSummary = ImportReviewWorkbook & {
   draftImportedSubjectRowCount: number;
   duplicatePupilCount: number;
   duplicatePupilNames: string[];
+  unresolvedPupilNames: string[];
+  reportTypeReviewPupilNames: string[];
+  missingScorePupilNames: string[];
+  subjectReviewPupilNames: string[];
 };
 
 export async function getImportReviewSchoolId(): Promise<string> {
@@ -285,6 +289,13 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
     const unresolved = included.filter((entry) =>
       entry.matchStatus !== "matched" || !entry.selectedStudentId
     );
+    const reportTypeReview = included.filter((entry) => entry.reportKind === "Unclear");
+    const missingScores = included.filter((entry) => entry.items.length === 0);
+    const subjectReview = included.filter((entry) =>
+      entry.warnings.some((warning) =>
+        /subject .*must be resolved|no valid subject rows detected|subject.*needs? review/i.test(warning)
+      )
+    );
     const separatorIndex = workbook.workbookKey.indexOf(":");
     const sheetName = separatorIndex >= 0
       ? workbook.workbookKey.slice(separatorIndex + 1)
@@ -317,6 +328,10 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
       draftImportedSubjectRowCount: importedDrafts.reduce((total, entry) => total + subjectCount(entry), 0),
       duplicatePupilCount: duplicateNames.length,
       duplicatePupilNames: duplicateNames,
+      unresolvedPupilNames: uniqueSorted(unresolved.map((entry) => entry.studentName)),
+      reportTypeReviewPupilNames: uniqueSorted(reportTypeReview.map((entry) => entry.studentName)),
+      missingScorePupilNames: uniqueSorted(missingScores.map((entry) => entry.studentName)),
+      subjectReviewPupilNames: uniqueSorted(subjectReview.map((entry) => entry.studentName)),
     };
   });
 }
