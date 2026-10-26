@@ -2963,6 +2963,12 @@ describe("results workflow migration contract", () => {
     expect(reportCardService).toContain("workflowStatus");
     expect(reportCardService).toContain("publishedSubjectRowCount");
     expect(reportCardService).toContain("draftImportedSubjectRowCount");
+    expect(reportCardService).toContain("unresolvedPupilNames");
+    expect(reportCardService).toContain("reportTypeReviewPupilNames");
+    expect(reportCardService).toContain("missingScorePupilNames");
+    expect(reportCardsPage).toContain("What needs to happen next");
+    expect(reportCardsPage).toContain("Confirm pupil matches:");
+    expect(reportCardsPage).toContain("Choose Midterm (CA) or End-of-Term for:");
     expect(reportCardsPage).toContain("Published:");
     expect(reportCardsPage).toContain("Imported as Draft:");
     expect(resultsPage).toContain("completedEntries.length > 0");
