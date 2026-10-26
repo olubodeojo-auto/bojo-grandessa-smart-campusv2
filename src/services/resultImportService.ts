@@ -1145,6 +1145,14 @@ export function reconcileSavedImportStudentMatches(
       && students.some((student) => student.id === entry.selectedStudentId);
     if (selectedStudentStillExists) return entry;
 
+    // Preserve an intentionally saved candidate for manual review. The candidate is
+    // not selected for import; it remains only a hint until a staff member confirms it.
+    const retainedManualReviewCandidate = entry.matchStatus === "manual-review"
+      && Boolean(entry.matchedStudentId)
+      && students.some((student) => student.id === entry.matchedStudentId)
+      && entry.warnings.some((warning) => warning.startsWith("Possible match:"));
+    if (retainedManualReviewCandidate) return entry;
+
     const match = matchStudent(entry, students);
     const retainedWarnings = entry.warnings.filter((warning) =>
       !mappingWarningPrefixes.some((prefix) => warning.startsWith(prefix))
