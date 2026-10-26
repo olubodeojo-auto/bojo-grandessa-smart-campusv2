@@ -1133,6 +1133,7 @@ export function reconcileSavedImportStudentMatches(
   students: Student[],
 ): ResultImportPreviewEntry[] {
   const mappingWarningPrefixes = [
+    "Select the correct student before import",
     "No exact admission-number or unique name match found",
     "No exact admission number or safe name match found",
     "Name is only a suggested match",
