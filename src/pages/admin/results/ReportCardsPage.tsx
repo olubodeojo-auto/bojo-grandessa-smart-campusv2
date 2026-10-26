@@ -1146,6 +1146,34 @@ export default function ReportCardsPage() {
                       </>
                     ) : null}
                   </div>
+                  {workbook.includedEntryCount > 0 ? (
+                    <div role="note" style={{ display: "grid", gap: 6, padding: "11px 12px", borderRadius: 8, background: "#f8fafc", border: "1px solid #cbd5e1", color: "#334155", fontSize: 13 }}>
+                      <p style={{ margin: 0, fontWeight: 700 }}>What needs to happen next</p>
+                      {workbook.unresolvedPupilNames.length > 0 ? (
+                        <p style={{ margin: 0 }}>
+                          <strong>Confirm pupil matches:</strong> {workbook.unresolvedPupilNames.join(", ")}.
+                        </p>
+                      ) : (
+                        <p style={{ margin: 0 }}>Pupil names are linked to school records.</p>
+                      )}
+                      {workbook.reportTypeReviewPupilNames.length > 0 ? (
+                        <p style={{ margin: 0 }}>
+                          <strong>Choose Midterm (CA) or End-of-Term for:</strong> {workbook.reportTypeReviewPupilNames.join(", ")}.
+                        </p>
+                      ) : null}
+                      {workbook.missingScorePupilNames.length > 0 ? (
+                        <p style={{ margin: 0 }}>
+                          <strong>No subject rows were found for:</strong> {workbook.missingScorePupilNames.join(", ")}. Check the original worksheet before importing.
+                        </p>
+                      ) : null}
+                      {workbook.subjectReviewPupilNames.length > 0 ? (
+                        <p style={{ margin: 0 }}>
+                          <strong>Resolve subject names before importing:</strong> {workbook.subjectReviewPupilNames.join(", ")}.
+                        </p>
+                      ) : null}
+                      <p style={{ margin: 0 }}>Then check the marks and import the verified entries. Publishing is a separate step, and neither review nor publishing sends parent emails.</p>
+                    </div>
+                  ) : null}
                   {workbook.duplicatePupilCount > 0 ? (
                     <p role="alert" style={{ margin: 0, padding: "10px 12px", borderRadius: 8, border: "1px solid #fde68a", background: "#fffbeb", color: "#92400e", fontSize: 13 }}>
                       Possible duplicate across saved uploads: {workbook.duplicatePupilNames.join(", ")} {workbook.duplicatePupilCount === 1 ? "also has" : "also have"} an included draft for this same session, term and report type. Compare the versions and import only the school-approved one.
