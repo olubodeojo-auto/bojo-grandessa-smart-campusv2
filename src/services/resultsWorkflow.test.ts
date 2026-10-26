@@ -1512,6 +1512,46 @@ describe("result workbook import preview", () => {
     expect(classConflict.selectedStudentId).toBeUndefined();
   });
 
+  it("preserves a saved possible-match candidate across refresh without selecting it for import", () => {
+    const candidate: Student = {
+      ...student("student-olise", "Kikiolanimi Zina Olise", "GDS-0023", "Basic 3"),
+      first_name: "Kikiolanimi Zina",
+      middle_name: "Kikiolanimi",
+      last_name: "Olise",
+    };
+    const entry: ResultImportPreviewEntry = {
+      index: 0,
+      studentKey: "pupil-olise-zina",
+      studentName: "OLISE ZINA",
+      admissionNumber: "",
+      academicYear: "2026/2027",
+      term: "First",
+      assessmentType: "CA",
+      reportKind: "Unclear",
+      className: "Basic 2",
+      teacherName: "",
+      matchStatus: "manual-review",
+      matchedStudentId: "student-olise",
+      selectedStudentId: undefined,
+      included: true,
+      warnings: [
+        "Choose a report type before import.",
+        "Possible match: Kikiolanimi Zina Olise (GDS-0023, Basic 3); confirm the class and identity.",
+      ],
+      notices: [],
+      items: [],
+    };
+
+    const [reconciled] = reconcileSavedImportStudentMatches([entry], [candidate]);
+
+    expect(reconciled).toMatchObject({
+      matchStatus: "manual-review",
+      matchedStudentId: "student-olise",
+    });
+    expect(reconciled.selectedStudentId).toBeUndefined();
+    expect(reconciled.warnings.join(" ")).toContain("Possible match: Kikiolanimi Zina Olise");
+  });
+
   it("resolves only unambiguous existing subjects through known spelling aliases", () => {
     expect(resolveSubjectMatch([{ subject_name: "Maths" }], "Mathematics")?.subject_name).toBe("Maths");
     expect(resolveSubjectMatch([{ subject_name: "Computer Studies" }], "Computer (ICT)")?.subject_name).toBe("Computer Studies");
