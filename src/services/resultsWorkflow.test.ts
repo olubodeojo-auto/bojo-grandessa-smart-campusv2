@@ -7,6 +7,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   getImportScoreWarnings,
+  areImportedResultValuesEquivalent,
+  normalizeImportSubjectKey,
   inspectResultWorkbook,
   parseResultWorkbook,
   buildReviewedImportResultValues,
@@ -115,6 +117,22 @@ const importWorkflowStatusMigrationFiles = import.meta.glob<string>(
   { eager: true, query: "?raw", import: "default" },
 );
 const importWorkflowStatusMigration = Object.values(importWorkflowStatusMigrationFiles)[0] ?? "";
+
+const atomicImportMigrationFiles = import.meta.glob<string>(
+  "../../supabase/migrations/20261027153409_atomic_results_import_tracking_and_subject_mappings.sql",
+  { eager: true, query: "?raw", import: "default" },
+);
+const atomicImportMigration = Object.values(atomicImportMigrationFiles)[0] ?? "";
+const importReviewIntegrityMigrationFiles = import.meta.glob<string>(
+  "../../supabase/migrations/20261027153557_enforce_review_items_before_completion.sql",
+  { eager: true, query: "?raw", import: "default" },
+);
+const importReviewIntegrityMigration = Object.values(importReviewIntegrityMigrationFiles)[0] ?? "";
+const importStatusHardeningMigrationFiles = import.meta.glob<string>(
+  "../../supabase/migrations/20261027154550_harden_import_marks_and_duplicate_rows.sql",
+  { eager: true, query: "?raw", import: "default" },
+);
+const importStatusHardeningMigration = Object.values(importStatusHardeningMigrationFiles)[0] ?? "";
 const reportCardDateFixMigrationFiles = import.meta.glob<string>(
   "../../supabase/migrations/20261025125245_fix_report_card_import_rpc_date_types_20261025.sql",
   { eager: true, query: "?raw", import: "default" },
@@ -3036,7 +3054,7 @@ describe("results workflow migration contract", () => {
   });
 
   it("saves each imported pupil's results and report details in one database transaction", () => {
-    expect(reportCardService).toContain('rpc("save_imported_report_card"');
+    expect(reportCardService).toContain('rpc("save_imported_report_card_and_track_v1"');
     expect(reportCardService).toMatch(/target_school_id:\s*schoolSettings\.school_id,[\s\S]*?result_updates:\s*flattenImportedResultUpdates\(params\.updates\),[\s\S]*?result_inserts:\s*params\.inserts,[\s\S]*?report_details:/);
     expect(reportMigration).toMatch(/create or replace function public\.save_imported_report_card\(\s*target_school_id uuid,\s*result_updates jsonb,\s*result_inserts jsonb,\s*report_details jsonb\s*\)/);
     expect(reportMigration).toContain("notify pgrst, 'reload schema'");
@@ -3087,7 +3105,14 @@ describe("results workflow migration contract", () => {
     expect(importWorkflowStatusMigration).toContain("matching_status_count <> result_count");
     expect(reportCardService).toContain("workflowStatus");
     expect(reportCardService).toContain('rpc("mark_result_import_review_draft_status_v2"');
-    expect(resultsPage).toContain("markImportReviewDraftStatus");
+    expect(resultsPage).not.toContain("markImportReviewDraftStatus({");
+    expect(resultsPage).toContain("save_imported_report_card_and_track_v1");
+    expect(atomicImportMigration).toContain("save_imported_report_card_and_track_v1");
+    expect(atomicImportMigration).toContain("target_existing_result_ids");
+    expect(atomicImportMigration).toContain("workflow_status");
+    expect(importReviewIntegrityMigration).toContain("result_import_review_drafts_completed_entry_integrity_check");
+    expect(importStatusHardeningMigration).toContain("More than one saved result exists for a pupil subject");
+    expect(importStatusHardeningMigration).toContain("The saved subject rows have missing or invalid marks");
     expect(resultsPage).toContain("Add subject row");
     expect(resultsPage).toContain("No subject scores were found in the worksheet.");
     expect(reportCardService).toContain("publishedSubjectRowCount");
@@ -3214,5 +3239,73 @@ describe("results workflow migration contract", () => {
     expect(resultsMigration).not.toContain("new.remark is distinct from public.result_expected_remark");
     expect(resultsMigration).toContain("status in ('Published', 'Approved')");
     expect(resultsMigration).toContain("public.is_parent_linked_student(student_id)");
+  });
+});
+
+describe("safe result import retries and remembered subject labels", () => {
+  it("normalizes source subject labels without punctuation or case differences", () => {
+    expect(normalizeImportSubjectKey("Poetry / Phonic")).toBe("poetryphonic");
+    expect(normalizeImportSubjectKey(" POETRY-PHONIC ")).toBe("poetryphonic");
+    expect(normalizeImportSubjectKey("Mathematics")).toBe("mathematics");
+  });
+
+  it("reuses an existing result only when its marks match the candidate", () => {
+    const existingCA = {
+      id: "result-ca",
+      assessment_type: "CA",
+      continuous_assessment: 26,
+      maximum_score: 40,
+      examination: null,
+      total_score: null,
+      grade: null,
+      remark: null,
+    } as Result;
+    expect(areImportedResultValuesEquivalent(existingCA, {
+      assessment_type: "CA",
+      continuous_assessment: 26,
+      maximum_score: 40,
+    })).toBe(true);
+    expect(areImportedResultValuesEquivalent(existingCA, {
+      assessment_type: "CA",
+      continuous_assessment: 25,
+      maximum_score: 40,
+    })).toBe(false);
+
+    const existingCombined = {
+      ...existingCA,
+      assessment_type: "Combined",
+      continuous_assessment: 30,
+      maximum_score: null,
+      examination: 50,
+      total_score: 80,
+      grade: "A",
+      remark: "Excellent",
+    } as Result;
+    expect(areImportedResultValuesEquivalent(existingCombined, {
+      assessment_type: "Combined",
+      continuous_assessment: 30,
+      examination: 50,
+      total_score: 80,
+      grade: "A",
+      remark: "Excellent",
+    })).toBe(true);
+    expect(areImportedResultValuesEquivalent(existingCombined, {
+      assessment_type: "Combined",
+      continuous_assessment: 30,
+      examination: 49,
+      total_score: 79,
+      grade: "A",
+      remark: "Excellent",
+    })).toBe(false);
+  });
+
+  it("keeps import status and marks tied to the same transaction", () => {
+    expect(atomicImportMigration).toContain("save_imported_report_card_and_track_v1");
+    expect(atomicImportMigration).toContain("public.mark_result_import_review_draft_status_v2");
+    expect(atomicImportMigration).toContain("target_existing_result_ids");
+    expect(importReviewIntegrityMigration).toContain("cardinality(imported_result_ids) = jsonb_array_length");
+    expect(importStatusHardeningMigration).toContain("invalidMarks");
+    expect(importStatusHardeningMigration).toContain("More than one saved result exists for a pupil subject");
+    expect(importStatusHardeningMigration).toContain("The saved subject rows have missing or invalid marks");
   });
 });

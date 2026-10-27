@@ -90,9 +90,15 @@ export async function saveImportedReportCard(params: {
   updates: Array<{ id: string; values: Partial<Result> }>;
   inserts: Array<Omit<Result, "id" | "created_at" | "updated_at">>;
   reportDetails: Parameters<typeof saveReportCardDetails>[0];
-}): Promise<void> {
+  tracking: {
+    workbookKey: string;
+    entryKey: string;
+    ownerId: string;
+    existingResultIds: string[];
+  };
+}): Promise<{ resultIds: string[]; workflowStatus: "published" | "imported_draft" }> {
   const schoolSettings = await getSchoolSettings();
-  const { error } = await supabase.rpc("save_imported_report_card", {
+  const { data, error } = await supabase.rpc("save_imported_report_card_and_track_v1", {
     target_school_id: schoolSettings.school_id,
     result_updates: flattenImportedResultUpdates(params.updates),
     result_inserts: params.inserts,
@@ -116,8 +122,28 @@ export async function saveImportedReportCard(params: {
       term_ending: params.reportDetails.termEnding,
       next_term_begins: params.reportDetails.nextTermBegins,
     },
+    target_workbook_key: params.tracking.workbookKey,
+    target_entry_key: params.tracking.entryKey,
+    target_owner_id: params.tracking.ownerId,
+    target_existing_result_ids: params.tracking.existingResultIds,
   });
-  if (error) throw new Error(`Unable to atomically save this pupil's imported results and report card: ${error.message}`);
+  if (error) {
+    throw new Error(`The result save failed for this pupil. Your saved review remains available; no result changes from this save were committed: ${error.message}`);
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("The server did not return a verified result status. Refresh Reports before retrying this pupil.");
+  }
+  const response = data as { result_ids?: unknown; workflow_status?: unknown };
+  if (!Array.isArray(response.result_ids)
+    || response.result_ids.length === 0
+    || response.result_ids.some((id) => typeof id !== "string")
+    || (response.workflow_status !== "published" && response.workflow_status !== "imported_draft")) {
+    throw new Error("The server did not return a complete result record for this pupil. Refresh Reports before retrying.");
+  }
+  return {
+    resultIds: response.result_ids as string[],
+    workflowStatus: response.workflow_status,
+  };
 }
 
 export async function saveImportReviewDraft(params: {
@@ -224,6 +250,59 @@ export type ImportReviewWorkbookSummary = ImportReviewWorkbook & {
 export async function getImportReviewSchoolId(): Promise<string> {
   const schoolSettings = await getSchoolSettings();
   return schoolSettings.school_id;
+}
+
+export type ImportSubjectMapping = {
+  classId: string;
+  sourceSubjectName: string;
+  sourceSubjectKey: string;
+  subjectId: string;
+  subjectName: string;
+  updatedAt: string;
+};
+
+export async function getImportSubjectMappings(): Promise<ImportSubjectMapping[]> {
+  const schoolSettings = await getSchoolSettings();
+  const { data, error } = await supabase.rpc("get_result_import_subject_mappings_v1", {
+    target_school_id: schoolSettings.school_id,
+  });
+  if (error) throw new Error(`Unable to load saved subject mappings: ${error.message}`);
+  if (!Array.isArray(data)) throw new Error("The saved subject mappings response has an invalid shape.");
+  return data.map((row) => {
+    if (!row || typeof row !== "object"
+      || typeof row.class_id !== "string"
+      || typeof row.source_subject_name !== "string"
+      || typeof row.source_subject_key !== "string"
+      || typeof row.subject_id !== "string"
+      || typeof row.subject_name !== "string"
+      || typeof row.updated_at !== "string") {
+      throw new Error("A saved subject mapping is malformed.");
+    }
+    return {
+      classId: row.class_id,
+      sourceSubjectName: row.source_subject_name,
+      sourceSubjectKey: row.source_subject_key,
+      subjectId: row.subject_id,
+      subjectName: row.subject_name,
+      updatedAt: row.updated_at,
+    };
+  });
+}
+
+export async function saveImportSubjectMapping(params: {
+  classId: string;
+  sourceSubjectName: string;
+  subjectId: string;
+}): Promise<void> {
+  if (!params.classId || !params.subjectId || !params.sourceSubjectName.trim()) return;
+  const schoolSettings = await getSchoolSettings();
+  const { error } = await supabase.rpc("save_result_import_subject_mapping_v1", {
+    target_school_id: schoolSettings.school_id,
+    target_class_id: params.classId,
+    target_source_subject_name: params.sourceSubjectName.trim(),
+    target_subject_id: params.subjectId,
+  });
+  if (error) throw new Error(`Unable to remember this subject mapping for future uploads: ${error.message}`);
 }
 
 export async function getImportReviewWorkbooks(): Promise<ImportReviewWorkbook[]> {

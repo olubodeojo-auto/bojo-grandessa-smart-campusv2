@@ -35,6 +35,7 @@ export type ResultImportItem = {
   calculationMode: "Manual" | "Automatic";
   reportKind: ResultImportReportKind;
   subjectName: string;
+  sourceSubjectName?: string;
   subjectId?: string;
   className: string;
   classId?: string;
@@ -423,6 +424,35 @@ function normalizeMatchValue(value: string): string {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
+}
+
+export function normalizeImportSubjectKey(value: string): string {
+  return normalizeMatchValue(value);
+}
+
+function sameNumericValue(left: unknown, right: unknown): boolean {
+  const normalize = (value: unknown): number | null => {
+    if (value === null || value === undefined || (typeof value === "string" && !value.trim())) return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  return normalize(left) === normalize(right);
+}
+
+export function areImportedResultValuesEquivalent(
+  existing: Result,
+  candidate: Partial<Result>,
+): boolean {
+  if (existing.assessment_type !== (candidate.assessment_type ?? existing.assessment_type)) return false;
+  if (!sameNumericValue(existing.continuous_assessment, candidate.continuous_assessment)) return false;
+  if (!sameNumericValue(existing.maximum_score ?? null, candidate.maximum_score ?? null)) return false;
+  if (existing.assessment_type !== "CA") {
+    if (!sameNumericValue(existing.examination, candidate.examination)) return false;
+    if (!sameNumericValue(existing.total_score, candidate.total_score)) return false;
+    if ((existing.grade ?? "").trim() !== (candidate.grade ?? "").trim()) return false;
+    if ((existing.remark ?? "").trim() !== (candidate.remark ?? "").trim()) return false;
+  }
+  return true;
 }
 
 const subjectNameAliases = [
@@ -985,14 +1015,25 @@ function hasNonBlankMark(value: unknown): boolean {
 export function getImportScoreWarnings(entry: ResultImportPreviewEntry): string[] {
   const warnings = entry.items.flatMap((item) => {
     const errors = item.invalidMarks?.map((field) => `${item.subjectName}: ${field} mark is not a valid number.`) ?? [];
-    if (item.assessmentType === "CA" && item.continuousAssessment === null) {
-      errors.push(`${item.subjectName}: CA mark is missing.`);
+    if (item.assessmentType === "CA") {
+      if (item.continuousAssessment === null) errors.push(`${item.subjectName}: CA mark is missing.`);
+      if (!(item.maximumScore !== null && Number.isFinite(item.maximumScore) && item.maximumScore > 0)) {
+        errors.push(`${item.subjectName}: maximum score is missing.`);
+      }
     }
-    if (item.assessmentType === "Combined"
-      && item.continuousAssessment === null
-      && item.examination === null
-      && item.totalScore === null) {
-      errors.push(`${item.subjectName}: subject marks are missing.`);
+    const effectiveTotal = item.assessmentType === "CA"
+      ? item.totalScore
+      : item.calculationMode === "Automatic"
+        ? calculateResult(item.assessmentType, item.continuousAssessment, item.examination).total
+        : item.totalScore;
+    if (item.assessmentType === "Combined") {
+      if (item.continuousAssessment === null) errors.push(`${item.subjectName}: end-of-term CA mark is missing.`);
+      if (item.examination === null) errors.push(`${item.subjectName}: examination mark is missing.`);
+      if (effectiveTotal === null) errors.push(`${item.subjectName}: total mark is missing.`);
+    }
+    if (item.assessmentType === "Examination") {
+      if (item.examination === null) errors.push(`${item.subjectName}: examination mark is missing.`);
+      if (effectiveTotal === null) errors.push(`${item.subjectName}: total mark is missing.`);
     }
     const scoreFieldLabels: Record<ResultImportScoreField, string> = {
       continuousAssessment: "CA",
@@ -1261,6 +1302,7 @@ function normalizeSavedImportEntry(entry: ResultImportPreviewEntry): ResultImpor
       const maximumScoreWasBlank = isBlankScoreValue(rawItem.maximumScore);
       return {
         ...item,
+        sourceSubjectName: item.sourceSubjectName?.trim() || item.subjectName,
         assessmentType,
         reportKind: entry.reportKind,
         continuousAssessment,

@@ -16,14 +16,17 @@ import {
   getImportReviewDrafts,
   getImportReviewSchoolId,
   getImportReviewWorkbooks,
-  markImportReviewDraftStatus,
+  getImportSubjectMappings,
   saveImportReviewDraft,
+  saveImportSubjectMapping,
   saveImportedReportCard,
   type ImportReviewWorkbook,
 } from "../../../services/reportCardService";
 import {
   getImportReportDateErrors,
   getImportScoreWarnings,
+  areImportedResultValuesEquivalent,
+  normalizeImportSubjectKey,
   getImportEntryKey,
   getImportSubjectRowKey,
   getNextUnresolvedImportSubjectIndex,
@@ -648,16 +651,26 @@ export default function ResultsPage() {
         sheetName,
         term === "All" ? null : term,
       );
+      const subjectMappings = await getImportSubjectMappings();
       const validatedEntries = entries.map((entry) => {
         const warnings = entry.warnings.filter((warning) =>
           !warning.startsWith("Class missing from workbook.")
           && !warning.startsWith("A subject could not be identified."),
         );
         const resolvedItems = entry.items.map((item) => {
+          const sourceSubjectName = item.sourceSubjectName?.trim() || item.subjectName;
           const classEntity = uniqueByName(classes, (candidate) => candidate.class_name, item.className || entry.className);
-          const subject = resolveSubjectMatch(subjects, item.subjectName);
+          const savedMapping = classEntity
+            ? subjectMappings.find((mapping) =>
+                mapping.classId === classEntity.id
+                && mapping.sourceSubjectKey === normalizeImportSubjectKey(sourceSubjectName))
+            : undefined;
+          const savedSubject = savedMapping
+            ? subjects.find((candidate) => candidate.id === savedMapping.subjectId)
+            : undefined;
+          const subject = savedSubject ?? resolveSubjectMatch(subjects, sourceSubjectName);
           if (!classEntity) warnings.push(`Class "${item.className || entry.className || "missing"}" is missing or ambiguous in the school records.`);
-          if (!subject) warnings.push(`Subject "${item.subjectName}" is missing or ambiguous in the school records.`);
+          if (!subject) warnings.push(`Subject "${sourceSubjectName}" is missing or ambiguous in the school records.`);
           if (classEntity && isTeacher && !isAdmin
             && !teacherAssignments.some((assignment) => assignment.class_id === classEntity.id)) {
             warnings.push(`You are not the class teacher for ${classEntity.class_name}.`);
@@ -667,9 +680,10 @@ export default function ResultsPage() {
           }
           return {
             ...item,
+            sourceSubjectName,
             className: classEntity?.class_name ?? item.className,
             classId: classEntity?.id,
-            subjectName: subject?.subject_name ?? item.subjectName,
+            subjectName: subject?.subject_name ?? sourceSubjectName,
             subjectId: subject?.id,
           };
         });
@@ -694,7 +708,7 @@ export default function ResultsPage() {
       setDraftSaveStates(Object.fromEntries(savedEntries.filter((entry) => !entry.workflowStatus).map((entry) => [entry.studentKey, { state: "saved" as const }])));
       setImportResultStates({});
       const savedCursor = readReviewCursor(`${workbookKey}:${sheetName}`);
-      const restoredActive = restoredEntries.find((entry) => entry.studentKey === savedCursor?.entryKey);
+      const restoredActive = restoredEntries.find((entry) => entry.studentKey === savedCursor?.entryKey) ?? restoredEntries[0];
       setActiveImportEntryKey(restoredActive?.studentKey ?? null);
       const unresolvedIndex = restoredActive?.items.findIndex((item) => !item.subjectId) ?? -1;
       const savedSubjectIndex = restoredActive && savedCursor?.subjectRowKey
@@ -1171,10 +1185,32 @@ export default function ResultsPage() {
     }
 
     const selectedSubject = subjects.find((candidate) => candidate.id === id);
+    const sourceItem = currentEntry.items[itemIndex];
+    const sourceSubjectName = (sourceItem?.sourceSubjectName ?? sourceItem?.subjectName ?? "").trim();
     const items = currentEntry.items.map((item, currentItemIndex) => {
-      if (currentItemIndex !== itemIndex) return item;
-      return { ...item, subjectId: selectedSubject?.id, subjectName: selectedSubject?.subject_name ?? item.subjectName };
+      if (currentItemIndex !== itemIndex) {
+        return { ...item, sourceSubjectName: item.sourceSubjectName?.trim() || item.subjectName };
+      }
+      return {
+        ...item,
+        sourceSubjectName: item.sourceSubjectName?.trim() || item.subjectName,
+        subjectId: selectedSubject?.id,
+        subjectName: selectedSubject?.subject_name ?? item.subjectName,
+      };
     });
+    if (selectedSubject && sourceItem?.classId && sourceSubjectName) {
+      void saveImportSubjectMapping({
+        classId: sourceItem.classId,
+        sourceSubjectName,
+        subjectId: selectedSubject.id,
+      }).then(() => {
+        setImportSummary(`Remembered "${sourceSubjectName}" as "${selectedSubject.subject_name}" for ${sourceItem.className || currentEntry.className || "this class"} on future uploads.`);
+      }).catch((err: unknown) => {
+        setError(err instanceof Error
+          ? `This subject choice remains in the current pupil review, but it could not be remembered for future uploads: ${err.message}`
+          : "This subject choice remains in the current pupil review, but it could not be remembered for future uploads.");
+      });
+    }
     if (!selectedSubject) {
       setActiveSubjectRowKey(getImportSubjectRowKey(currentEntry, itemIndex));
       setCompletedSubjectMappingEntryKey(null);
@@ -1474,31 +1510,18 @@ export default function ResultsPage() {
         if (!studentId) throw new Error("Select a student record before importing this pupil.");
         const student = studentsMap.get(studentId);
         if (!student) throw new Error("Import preview is out of date. Reload the workbook and select the pupil again.");
+
         const entryCreates: Array<Omit<Result, "id" | "created_at" | "updated_at">> = [];
         const entryUpdates: Array<{ id: string; values: Partial<Result> }> = [];
-        let skipped = 0;
-        entry.items.forEach((item, itemIndex) => {
+        const reusedExistingResultIds: string[] = [];
+        let reused = 0;
+
+        for (const [itemIndex, item] of entry.items.entries()) {
           const classEntity = classes.find((candidate) => candidate.id === item.classId);
           const subject = subjects.find((candidate) => candidate.id === item.subjectId);
           const resultTerm = item.term ?? entry.term;
           if (!classEntity || !subject) throw new Error("Import preview is out of date. Reload the workbook and correct its class or subject matches.");
           if (!resultTerm) throw new Error("Workbook term is missing. Import cancelled without saving this pupil's results.");
-
-          const matches = getExistingImportMatches(entry, item, currentResults);
-          const choice = importExistingChoices[importItemKey(entry, itemIndex)];
-          const decision = resolveExistingResultImportDecision(matches, choice);
-          if (decision.action === "skip") {
-            skipped += 1;
-            return;
-          }
-          const updateTarget = decision.action === "update" ? decision.result : undefined;
-          if (updateTarget?.status === "Published") {
-            throw new Error(`Unpublish ${student.first_name} ${student.last_name}'s ${subject.subject_name} result before updating it.`);
-          }
-          if (updateTarget && !isAdmin
-            && (!user || !canTeacherEditResult(updateTarget, user.id, teacherAssignments))) {
-            throw new Error(`You no longer have permission to update ${student.first_name} ${student.last_name}'s ${subject.subject_name} result.`);
-          }
 
           const values = buildReviewedImportResultValues({
             studentId: student.id,
@@ -1512,23 +1535,72 @@ export default function ResultsPage() {
             term: resultTerm,
             item,
           });
+          const matches = getExistingImportMatches(entry, item, currentResults);
+          if (matches.length > 1) {
+            throw new Error(`More than one saved ${subject.subject_name} result exists for ${student.first_name} ${student.last_name}. Resolve the duplicate result records before importing this pupil.`);
+          }
+          const choice = importExistingChoices[importItemKey(entry, itemIndex)];
+          const decision = resolveExistingResultImportDecision(matches, choice);
+          if (decision.action === "skip") {
+            const existing = matches[0];
+            if (!existing || !["Draft", "Published"].includes(existing.status)
+              || !areImportedResultValuesEquivalent(existing, values)) {
+              throw new Error(existing?.status === "Published"
+                ? `The published ${subject.subject_name} result for ${student.first_name} ${student.last_name} differs from this worksheet. Do not overwrite a published result from an upload; review it through the normal results workflow.`
+                : existing && existing.status !== "Draft"
+                  ? `The ${subject.subject_name} result is currently ${existing.status}. Use the normal results review process before updating it from a workbook.`
+                  : `The saved ${subject.subject_name} result for ${student.first_name} ${student.last_name} has different marks. Choose an eligible Draft result to update, or correct the worksheet marks before saving.`);
+            }
+            reusedExistingResultIds.push(existing.id);
+            reused += 1;
+            continue;
+          }
+
+          const updateTarget = decision.action === "update" ? decision.result : undefined;
+          if (updateTarget && updateTarget.status !== "Draft") {
+            throw new Error(`Only Draft subject results can be updated from a workbook. ${subject.subject_name} is currently ${updateTarget.status}; use the normal results review process.`);
+          }
+          if (updateTarget && !isAdmin
+            && (!user || !canTeacherEditResult(updateTarget, user.id, teacherAssignments))) {
+            throw new Error(`You no longer have permission to update ${student.first_name} ${student.last_name}'s ${subject.subject_name} result.`);
+          }
+
           if (updateTarget) entryUpdates.push({ id: updateTarget.id, values });
           else entryCreates.push({ ...values, status: "Draft" });
-        });
+        }
+
+        if (entryUpdates.length + entryCreates.length + reusedExistingResultIds.length !== entry.items.length) {
+          throw new Error("Every subject must be linked to one saved or new result before this pupil can be saved.");
+        }
+        const targetResultIds = [
+          ...entryUpdates.map((update) => update.id),
+          ...reusedExistingResultIds,
+        ];
+        if (new Set(targetResultIds).size !== targetResultIds.length) {
+          throw new Error("The same saved subject result was selected more than once. Refresh the pupil review before saving.");
+        }
 
         const reportClassId = entry.items[0]?.classId;
         if (!reportClassId || !entry.term) throw new Error("A saved class and term are required for the report card.");
         const workbookKey = activeWorkbookDraftKey;
         const ownerId = importDraftOwnerId || user?.id;
         if (!workbookKey || !ownerId) throw new Error("The saved pupil review could not be identified. Reopen the pupil from Reports and try again.");
-        // Persist the canonical student ID/name/class and original worksheet name before saving results.
+
+        // Save the review first so a failed transaction leaves the pupil's corrections available.
+        // Marks, report-card details and exact result links are then saved together.
         await saveImportReviewDraft({ workbookKey, entry, ownerId });
         const details = entry.reportDetails;
         const termEnding = normalizeImportDate(details?.termEnding ?? "", "Term ending");
         const nextTermBegins = normalizeImportDate(details?.nextTermBegins ?? "", "Next term begins");
-        await saveImportedReportCard({
+        const saveOutcome = await saveImportedReportCard({
           updates: entryUpdates,
           inserts: entryCreates,
+          tracking: {
+            workbookKey,
+            entryKey: entry.studentKey,
+            ownerId,
+            existingResultIds: reusedExistingResultIds,
+          },
           reportDetails: {
             studentId,
             academicYear: entry.academicYear,
@@ -1551,52 +1623,12 @@ export default function ResultsPage() {
           },
         });
 
-        let workflowStatusError: string | undefined;
-        if (skipped === 0) {
-          try {
-            const savedResults = await getResults();
-            const importedResultIds: string[] = [];
-            for (const item of entry.items) {
-              const itemTerm = item.term ?? entry.term;
-              const matches = savedResults.filter((candidate) =>
-                candidate.student_id === student.id
-                && candidate.class_id === item.classId
-                && candidate.subject_id === item.subjectId
-                && candidate.academic_year === (item.academicYear || entry.academicYear)
-                && candidate.term === itemTerm
-                && candidate.assessment_type === item.assessmentType
-                && candidate.status === "Draft"
-              );
-              if (matches.length !== 1) {
-                throw new Error(`Expected one saved draft result for ${item.subjectName || "a subject"}, found ${matches.length}. The import remains available for reconciliation.`);
-              }
-              importedResultIds.push(matches[0].id);
-            }
-            if (new Set(importedResultIds).size !== importedResultIds.length) {
-              throw new Error("Duplicate saved result IDs were found. The import remains available for reconciliation.");
-            }
-            await markImportReviewDraftStatus({
-              workbookKey,
-              entryKey: entry.studentKey,
-              ownerId,
-              studentId,
-              classId: reportClassId,
-              workflowStatus: "imported_draft",
-              resultIds: importedResultIds,
-            });
-          } catch (statusError) {
-            workflowStatusError = statusError instanceof Error
-              ? statusError.message
-              : "Unable to update the saved import status. Do not import this pupil again.";
-          }
-        }
-
         return {
           name: formatName(student.first_name, student.last_name),
           created: entryCreates.length,
           updated: entryUpdates.length,
-          skipped,
-          workflowStatusError,
+          reused,
+          workflowStatus: saveOutcome.workflowStatus,
         };
       });
 
@@ -1612,10 +1644,10 @@ export default function ResultsPage() {
       const failedNames = outcomes.failed.map(({ entry, error: failure }) => `${entry.studentName || "Unknown pupil"}: ${failure}`);
       const createdRows = outcomes.saved.reduce((total, { value }) => total + value.created, 0);
       const updatedRows = outcomes.saved.reduce((total, { value }) => total + value.updated, 0);
-      const skippedRows = outcomes.saved.reduce((total, { value }) => total + value.skipped, 0);
-      const workflowStatusWarnings = outcomes.saved
-        .filter(({ value }) => value.workflowStatusError)
-        .map(({ entry, value }) => `${entry.studentName}: ${value.workflowStatusError}`);
+      const reusedRows = outcomes.saved.reduce((total, { value }) => total + value.reused, 0);
+      const verifiedStatuses = outcomes.saved.map(({ entry, value }) =>
+        `${entry.studentName}: ${value.workflowStatus === "published" ? "already published" : "saved as draft"}`,
+      );
       await loadData();
       setError([
         failedNames.length > 0 ? `Import failed for ${failedNames.join("; ")}` : "",
@@ -1623,10 +1655,8 @@ export default function ResultsPage() {
       setImportSummary([
         successfulNames.length > 0 ? `Saved: ${successfulNames.join(", ")}.` : "",
         failedNames.length > 0 ? `Failed: ${failedNames.join("; ")}.` : "",
-        `Created ${createdRows} result row(s), updated ${updatedRows}, skipped ${skippedRows}.`,
-        workflowStatusWarnings.length > 0
-          ? `Import status needs attention (do not repeat the import): ${workflowStatusWarnings.join("; ")}.`
-          : "",
+        `Created ${createdRows} result row(s), updated ${updatedRows}, reused ${reusedRows} exact matches.`,
+        verifiedStatuses.length > 0 ? `Database-verified status: ${verifiedStatuses.join("; ")}.` : "",
       ].filter(Boolean).join(" "));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to import results.";
@@ -2110,7 +2140,11 @@ export default function ResultsPage() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0, overflow: "hidden" }}>
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Workbook: {importFileName || "Uploaded file"}</div>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Results Run · {importFileName || "Uploaded file"}</div>
+          <p style={{ margin: "6px 0 8px", color: "#475569", fontSize: 13 }}>
+            Review one pupil at a time. Saving creates or updates draft results and never publishes automatically.
+            Subject mappings you confirm are remembered for the same class on future uploads.
+          </p>
           {importWorkbookSheets.length > 1 ? (
             <label style={{ display: "grid", gap: 4, maxWidth: 420, margin: "8px 0" }}>
               Worksheet
@@ -2648,8 +2682,10 @@ export default function ResultsPage() {
                           const key = importItemKey(entry, itemIndex);
                           const selectedExisting = matches.find((candidate) => candidate.id === importExistingChoices[key]);
                           const updateableMatches = matches.filter((candidate) =>
-                            (isAdmin && canAdministratorEditResult(candidate))
-                              || Boolean(user && isTeacher && canTeacherEditResult(candidate, user.id, teacherAssignments)),
+                            candidate.status === "Draft" && (
+                              (isAdmin && canAdministratorEditResult(candidate))
+                                || Boolean(user && isTeacher && canTeacherEditResult(candidate, user.id, teacherAssignments))
+                            ),
                           );
                           const invalid = new Set(item.invalidMarks ?? []);
                           const markErrors = validateAssessmentMarks({
@@ -2744,7 +2780,7 @@ export default function ResultsPage() {
                                   <label style={{ display: "grid", gap: 4 }}>
                                     <span>{matches.length} existing match(es)</span>
                                     <select aria-label={`Existing result action for ${item.subjectName}`} value={selectedExisting?.id ?? ""} onChange={(event) => setImportExistingChoices((current) => ({ ...current, [key]: event.target.value }))}>
-                                      <option value="">Skip existing result</option>
+                                      <option value="">Use existing only if the marks match</option>
                                       {updateableMatches.map((candidate) => <option key={candidate.id} value={candidate.id}>Update {candidate.status}</option>)}
                                     </select>
                                   </label>
