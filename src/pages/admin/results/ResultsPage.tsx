@@ -1982,7 +1982,7 @@ export default function ResultsPage() {
             <div>
               <h2 id="saved-result-drafts-heading" style={{ margin: 0 }}>Saved Result Drafts</h2>
               <p style={{ color: "#64748b", margin: "6px 0 0" }}>
-                These are actual subject-result rows already saved in the Results records, grouped by pupil, session, term and assessment. They can be resumed here and reviewed/published through the results workflow. They are different from the unreconciled workbook pupils shown above.
+                Individual Draft result rows are grouped by pupil, session, term and assessment. The stored result row does not identify whether it originated from manual entry or an import; workbook review drafts are listed separately below. These are actual subject-result rows already saved in the Results records and can be resumed here through the results workflow. They are different from the unreconciled workbook pupils shown above.
               </p>
             </div>
             <span>{savedResultDraftGroups.length} pupil/period group(s)</span>
