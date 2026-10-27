@@ -2972,7 +2972,7 @@ describe("results workflow migration contract", () => {
     expect(reportCardsPage).toContain("Here is what needs doing for this sheet");
     expect(reportCardsPage).toContain("Matched to the school register (use these full registered names):");
     expect(reportCardsPage).toContain("Choose the report type for:");
-    expect(reportCardsPage).toContain("Confirm these names/classes before importing");
+    expect(reportCardsPage).toContain("Needs your confirmation — please check the original class list:");
     expect(reportCardsPage).toContain("Open this sheet");
     expect(reportCardsPage).toContain("Published:");
     expect(reportCardsPage).toContain("Imported as Draft:");
