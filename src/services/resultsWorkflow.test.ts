@@ -1030,20 +1030,25 @@ describe("Report Center period discovery and readiness", () => {
   });
 
   it("keeps the administrator Publish action visible and disabled with its blocker reason", () => {
-    expect(reportCardsPage).toContain("{publishAction.visible ? (");
+    expect(reportCardsPage).toContain("const showPublishAction = publishAction.visible && statusLabel !== \"Published\";");
+    expect(reportCardsPage).toContain("{showPublishAction ? (");
     expect(reportCardsPage).toContain("disabled={publishAction.disabled}");
     expect(reportCardsPage).toContain("getReportCenterPublishActionState(");
-    expect(reportCardsPage).toContain("Publishing unavailable: {publishBlockReason}");
+    expect(reportCardsPage).toContain("Action needed before publishing: {formatPublicationBlocker(publishBlockReason)}");
   });
 
   it("surfaces saved workbook reviews in Report Card Publishing and opens the selected draft directly", () => {
-    expect(reportCardsPage).toContain("Saved work waiting for review");
+    expect(reportCardsPage).toContain("Saved worksheet reviews");
     expect(reportCardsPage).toContain("getImportReviewWorkbookSummaries");
     expect(reportCardsPage).toContain("Open this sheet");
+    expect(reportCardsPage).toContain("Spreadsheet imports (saved worksheets)");
+    expect(reportCardsPage).toContain("Individual pupil results");
+    expect(reportCardsPage).toContain("Drafts &amp; needs attention");
+    expect(reportCardsPage).toContain("Published");
     expect(reportCardsPage).toContain("resumeWorkbook: workbook.workbookKey");
     expect(reportCardsPage).toContain("resumeOwner: workbook.ownerId");
     expect(reportCardsPage).toContain("Pupil matches resolved");
-    expect(reportCardsPage).toContain("Saving or reviewing work does not publish it or email parents.");
+    expect(reportCardsPage).toContain("Saving or reviewing work does not publish results or email parents.");
     expect(resultsPage).toContain('searchParams.get("resumeWorkbook")');
     expect(resultsPage).toContain("handleResumeSavedWorkbook(requestedWorkbookKey, requestedOwnerId)");
     expect(resultsPage).toContain("workbook.ownerId === requestedOwnerId");
@@ -1052,7 +1057,7 @@ describe("Report Center period discovery and readiness", () => {
   });
 
   it("keeps result publication email-free and scopes parent notifications to fully published periods", () => {
-    expect(reportCardsPage).toContain("Publishing updates online access only. It does not send emails");
+    expect(reportCardsPage).toContain("Saving or reviewing work does not publish results or email parents.");
     expect(reportCardsPage).not.toContain("sendCommunication(");
     expect(communicationsPage).toContain('value: "parents_published_results"');
     expect(communicationsPage).toContain("Published report period");
@@ -2855,16 +2860,16 @@ describe("results workflow migration contract", () => {
     expect(reportCardsPage).toContain("await deleteResult(result.id)");
     expect(reportCardsPage).toContain("await deleteReportCard(period.savedReport.id)");
     expect(reportCardsPage).toContain("Delete all ${period.results.length} draft subject result(s)");
-    expect(reportCardsPage).toContain("Preview Report Card");
-    expect(reportCardsPage).toContain("Edit Report Card Comments");
-    expect(reportCardsPage).toContain("Edit Subject Results");
+    expect(reportCardsPage).toContain("Preview report");
+    expect(reportCardsPage).toContain("Edit report details");
+    expect(reportCardsPage).toContain("Edit subject marks");
     expect(reportCardsPage).toContain('onClick={() => void openReportPeriod(period)}');
     expect(reportCardsPage).toContain('onClick={() => void openReportPeriod(period, true)}');
     expect(reportCardsPage).toContain('onClick={() => navigateToResults(period)}');
     expect(reportCardsPage).toContain("getReportCenterPublishBlockReason(period, results, isAdministrator, publicationEvidence)");
     expect(reportCardsPage).toContain("getReportCenterPublishActionState(");
-    expect(reportCardsPage).toContain("Publish Report Card");
-    expect(reportCardsPage).toContain("Unpublish Report Card");
+    expect(reportCardsPage).toContain("Publish results");
+    expect(reportCardsPage).toContain("Unpublish results");
     expect(reportCardsPage).toContain('period.results.every((result) => result.status === "Published")');
     expect(reportCardsPage).toContain("canDeleteDraftReportPeriod(period, isAdministrator)");
     expect(reportCardsPage).toContain('reviewResult(resultId, "unpublish", note)');
@@ -2889,9 +2894,11 @@ describe("results workflow migration contract", () => {
     expect(reviewFunction).toContain("raise exception 'Result not found.'");
     expect(reviewFunction).toContain("status = 'Published'");
     expect(reportCardsPage).toContain("Class: ${className}\\nSession: ${period.academicYear}\\nTerm: ${period.term}");
-    expect(reportCardsPage).toContain("Report-card presentation details have no separate publication status.");
+    expect(reportCardsPage).toContain("Publish subject results");
     expect(reportCardsPage).toContain("includeUnpublished: isAdministrator");
     expect(reportCardsPage).toContain("This preview includes unpublished subject results.");
+    expect(reportCardsPage).toContain("reportPreviewRef.current?.scrollIntoView({ behavior: \"smooth\", block: \"start\" });");
+    expect(reportCardsPage).toContain("<div ref={reportPreviewRef} style={{ scrollMarginTop: 16 }}>");
     expect(reportCardsPage).toContain("unpublishVerificationErrors[period.key]");
     expect(reportCardsPage).toContain("Unpublish retry is blocked until status is refreshed.");
     expect(reportCardsPage).toContain("search: student ? `${student.first_name} ${student.last_name}`.trim() : \"\"");
@@ -2901,7 +2908,7 @@ describe("results workflow migration contract", () => {
   });
 
   it("keeps report comments editing separate from the read-only preview", () => {
-    expect(reportCardsPage).toContain('title={`Edit Report Card Comments · ${report.student.first_name} ${report.student.last_name}`}');
+    expect(reportCardsPage).toContain('title={`Edit report details · ${report.student.first_name} ${report.student.last_name}`}');
     expect(reportCardsPage).toContain("Save Changes");
     expect(reportCardsPage).toContain(">Cancel</Button>");
     expect(reportCardsPage).toContain('window.confirm("Discard unsaved report-card detail changes?")');

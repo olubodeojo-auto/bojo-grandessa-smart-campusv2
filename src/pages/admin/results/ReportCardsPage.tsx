@@ -75,6 +75,22 @@ const savedBadgeStyle: React.CSSProperties = {
   padding: "4px 9px",
 };
 
+function formatPublicationBlocker(reason: string): string {
+  const missingSubjects = reason.match(/^Missing subject results observed for this class and session:\s*(.+)\.$/i);
+  if (missingSubjects) {
+    return `Missing subject result: ${missingSubjects[1]}. Open Edit subject marks to add it before publishing.`;
+  }
+  const friendlyMessages: Record<string, string> = {
+    "No subject-result rows are available for this report period.": "No subject marks have been imported for this pupil yet.",
+    "A subject is missing or has duplicate result rows.": "A subject is missing or listed more than once. Check the subject list.",
+    "One or more Midterm CA marks are missing.": "A Midterm CA mark is blank. Complete it before publishing.",
+    "One or more Midterm subject maximum scores are missing.": "A subject maximum score is missing. Complete it before publishing.",
+    "One or more End-of-Term CA, examination, or total marks are missing.": "An End-of-Term CA, examination or total mark is missing. Complete it before publishing.",
+    "All subject results in this report period are already published.": "All subject results are already published.",
+  };
+  return friendlyMessages[reason] ?? reason;
+}
+
 function emptySessionSetup(): AcademicSessionSetup {
   return {
     sessionId: null,
@@ -165,6 +181,7 @@ export default function ReportCardsPage() {
   const [sessionSetupError, setSessionSetupError] = useState("");
   const [schoolSettings, setSchoolSettings] = useState<SchoolSettings | null>(null);
   const [report, setReport] = useState<ReportCardData | null>(null);
+  const reportPreviewRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState("");
@@ -259,6 +276,12 @@ export default function ReportCardsPage() {
   useEffect(() => {
     resetReportDetailsFields(report);
   }, [report, resetReportDetailsFields]);
+
+  useEffect(() => {
+    if (report && !editingReportDetails) {
+      reportPreviewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [report, editingReportDetails]);
 
   useEffect(() => {
     async function loadAcademicSessions(): Promise<void> {
@@ -392,6 +415,15 @@ export default function ReportCardsPage() {
     return !query || pupilName.includes(query) || admissionNumber.includes(query) || className.toLowerCase().includes(query);
   }), [classes, reportPeriods, reportSearch, results, students]);
 
+  const needsAttentionReportPeriods = useMemo(
+    () => filteredReportPeriods.filter((period) => getReportCenterPeriodStatus(period) !== "Published"),
+    [filteredReportPeriods],
+  );
+  const publishedReportPeriods = useMemo(
+    () => filteredReportPeriods.filter((period) => getReportCenterPeriodStatus(period) === "Published"),
+    [filteredReportPeriods],
+  );
+
   async function openReportPeriod(period: ReportCenterPeriod, editDetails = false): Promise<void> {
     const student = students.find((candidate) => candidate.id === period.studentId);
     if (!student) {
@@ -480,7 +512,7 @@ export default function ReportCardsPage() {
         ?? period.results.find((result) => result.class_name)?.class_name
         ?? "Class unavailable";
       const confirmed = window.confirm(
-        `Publish report card for ${student.first_name} ${student.last_name}?\n\nClass: ${className}\nSession: ${period.academicYear}\nTerm: ${period.term}\nSubject results to publish: ${pendingResults.length}\n\nEach subject result will be published using the existing authorized review and validation workflow. Report-card presentation details have no separate publication status.`,
+        `Publish subject results for ${student.first_name} ${student.last_name}?\n\nClass: ${className}\nSession: ${period.academicYear}\nTerm: ${period.term}\nSubject results to publish: ${pendingResults.length}\n\nOnly this pupil's subject results will be published after the existing checks pass. This does not send emails.`,
       );
       if (!confirmed) return;
 
@@ -1027,12 +1059,134 @@ export default function ReportCardsPage() {
     }
   }
 
+  function renderReportPeriodCard(period: ReportCenterPeriod) {
+                const pupil = students.find((candidate) => candidate.id === period.studentId);
+                const pupilName = pupil ? `${pupil.first_name} ${pupil.last_name}`.trim() : "Pupil unavailable";
+                const className = classes.find((candidate) => candidate.id === period.classId)?.class_name
+                  ?? period.results.find((result) => result.class_name)?.class_name
+                  ?? "Class unavailable";
+                const statusLabel = getReportCenterPeriodStatus(period);
+                const completeness = getReportCenterCompleteness(period, results);
+                const periodEvidenceError = getPublicationEvidenceErrorForPeriod(period);
+                const publishBlockReason = periodEvidenceError
+                  || getReportCenterPublishBlockReason(period, results, isAdministrator, publicationEvidence);
+                const isPublishing = publishingKey === period.key;
+                const publishAction = getReportCenterPublishActionState(
+                  period,
+                  results,
+                  isAdministrator,
+                  Boolean(publishingKey),
+                  publishVerificationErrors[period.key],
+                  publicationEvidence,
+                  periodEvidenceError,
+                );
+                const showPublishAction = publishAction.visible && statusLabel !== "Published";
+                const isUnpublishing = unpublishingKey === period.key;
+                const isDeleting = deletingKey === period.key;
+                const canUnpublish = isAdministrator && period.results.length > 0
+                  && period.results.every((result) => result.status === "Published");
+                const canDeleteDraft = canDeleteDraftReportPeriod(period, isAdministrator);
+                const canDeleteReport = canDeleteReportPeriod(period, isAdministrator);
+                return (
+                  <article key={period.key} aria-labelledby={`report-period-${period.key}`} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, display: "grid", gap: 12, minWidth: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                          <h2 id={`report-period-${period.key}`} style={{ margin: 0, fontSize: 19 }}>{pupilName}</h2>
+                          <span style={statusBadgeStyle(statusLabel)}>{statusLabel}</span>
+                        </div>
+                        <p style={{ color: "#64748b", fontSize: 13, margin: "5px 0 0" }}>
+                          Admission no.: {pupil?.admission_number || "Unavailable"} · Class: {className}
+                        </p>
+                        <p style={{ color: "#334155", fontSize: 13, margin: "3px 0 0" }}>
+                          {period.academicYear} · {period.term} Term · {period.reportType === "Midterm" ? "Midterm (CA)" : "End-of-Term"}
+                        </p>
+                      </div>
+                      {period.savedReport ? <span style={savedBadgeStyle}>Report details saved</span> : null}
+                    </div>
+
+                    <div style={{ display: "grid", gap: 4, padding: "11px 13px", borderRadius: 10, border: completeness.complete ? "1px solid #bbf7d0" : "1px solid #fed7aa", background: completeness.complete ? "#f0fdf4" : "#fff7ed" }}>
+                      <p style={{ margin: 0, color: completeness.complete ? "#166534" : "#92400e", fontSize: 13, fontWeight: 700 }}>
+                        {completeness.complete ? `Subject marks checked · ${period.results.length} result(s)` : `Needs attention · ${period.results.length} subject result(s)`}
+                      </p>
+                      <p style={{ margin: 0, color: completeness.complete ? "#166534" : "#92400e", fontSize: 13 }}>
+                        {completeness.complete ? "All available subject marks are present and valid." : formatPublicationBlocker(completeness.reason)}
+                      </p>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Button type="button" variant="secondary" onClick={() => void openReportPeriod(period)} disabled={period.results.length === 0} title={period.results.length === 0 ? "Subject results are required to preview a report card." : undefined}>
+                        Preview report
+                      </Button>
+                      <Button type="button" variant="secondary" onClick={() => void openReportPeriod(period, true)} disabled={period.results.length === 0 || !isAdministrator} title={!isAdministrator ? "Only an administrator can edit report-card details." : period.results.length === 0 ? "Subject results are required to open report-card details." : undefined}>
+                        Edit report details
+                      </Button>
+                      <Button type="button" variant="secondary" onClick={() => navigateToResults(period)} disabled={period.results.length === 0} title={period.results.length === 0 ? "No subject results are available to edit." : undefined}>
+                        Edit subject marks
+                      </Button>
+                      {showPublishAction ? (
+                        <Button type="button" onClick={() => void publishReportPeriod(period)} disabled={publishAction.disabled} title={publishAction.reason ? formatPublicationBlocker(publishAction.reason) : "Publish this pupil's subject results after all checks pass."}>
+                          {isPublishing ? "Publishing…" : "Publish results"}
+                        </Button>
+                      ) : null}
+                      {canUnpublish ? (
+                        <Button type="button" variant="secondary" onClick={() => void unpublishReportPeriod(period)} disabled={Boolean(unpublishingKey) || Boolean(publishingKey) || Boolean(unpublishVerificationErrors[period.key])} title={unpublishVerificationErrors[period.key] || "Move each published subject result to Returned through the existing review workflow."}>
+                          {isUnpublishing ? "Unpublishing…" : "Unpublish results"}
+                        </Button>
+                      ) : null}
+                      {canDeleteReport ? (
+                        <Button type="button" variant="secondary" onClick={() => void deleteReportPeriod(period)} disabled={Boolean(deletingKey) || Boolean(publishingKey) || Boolean(unpublishingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
+                          {isDeleting ? "Deleting report card…" : "Delete Report Card"}
+                        </Button>
+                      ) : null}
+                      {canDeleteDraft ? (
+                        <Button type="button" variant="secondary" onClick={() => void deleteDraftPeriod(period)} disabled={Boolean(deletingKey) || Boolean(publishingKey) || Boolean(unpublishingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
+                          {isDeleting ? "Deleting draft…" : "Delete Draft"}
+                        </Button>
+                      ) : null}
+                      {isAdministrator && period.results.length === 0 && period.savedReport ? (
+                        <Button type="button" variant="secondary" onClick={() => void deleteSavedReportDetails(period)} disabled={Boolean(deletingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
+                          {isDeleting ? "Deleting details…" : "Delete Saved Details"}
+                        </Button>
+                      ) : null}
+                      {isAdministrator && (publishVerificationErrors[period.key] || unpublishVerificationErrors[period.key]) ? (
+                        <Button type="button" variant="secondary" onClick={() => void verifyPublishStatus(period)} disabled={Boolean(publishingKey)}>
+                          Verify saved status
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    {isAdministrator && statusLabel !== "Published" && publishAction.disabled && publishBlockReason && publishBlockReason !== completeness.reason ? (
+                      <p role="status" style={{ color: "#92400e", fontSize: 13, margin: 0 }}>
+                        Action needed before publishing: {formatPublicationBlocker(publishBlockReason)}
+                      </p>
+                    ) : null}
+                    {statusLabel === "Published" ? (
+                      <p role="status" style={{ color: "#475569", fontSize: 13, margin: 0 }}>
+                        To change published marks, choose Unpublish results first. Publish again after the corrections have been reviewed.
+                      </p>
+                    ) : null}
+                    {isAdministrator && publishVerificationErrors[period.key] ? (
+                      <p role="alert" style={{ color: "#991b1b", fontSize: 13, margin: 0 }}>
+                        {publishVerificationErrors[period.key]} Publication retry is blocked until status is verified.
+                      </p>
+                    ) : null}
+                    {isAdministrator && unpublishVerificationErrors[period.key] ? (
+                      <p role="alert" style={{ color: "#991b1b", fontSize: 13, margin: 0 }}>
+                        {unpublishVerificationErrors[period.key]} Unpublish retry is blocked until status is refreshed.
+                      </p>
+                    ) : null}
+                  </article>
+                );
+
+  }
+
   return (
     <div style={{ display: "grid", gap: 20 }}>
       <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>Report Card Publishing</h1>
-          <p style={{ color: "#666", marginTop: 8 }}>Review, edit and publish pupil report cards.</p>
+          <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>Pupil Report Cards</h1>
+          <p style={{ color: "#666", marginTop: 8 }}>Review each pupil separately. Drafts and published reports are shown in separate lists below.</p>
         </div>
       </div>
 
@@ -1047,18 +1201,28 @@ export default function ReportCardsPage() {
         </div>
       ) : null}
 
-      <section className="card" aria-labelledby="saved-import-reviews-heading" style={{ display: "grid", gap: 14, padding: 18 }}>
+      <details className="card" style={{ padding: 18 }}>
+        <summary style={{ cursor: "pointer", listStyle: "none", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ minWidth: 0 }}>
+            <strong style={{ display: "block", color: "#0f172a", fontSize: 16 }}>Spreadsheet imports (saved worksheets)</strong>
+            <span style={{ display: "block", color: "#64748b", fontSize: 13, marginTop: 4 }}>Separate from pupil result status. Open only when checking a saved upload.</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+            <span style={{ color: "#475569", fontSize: 13, fontWeight: 700 }}>
+              {savedImportWorkbooks.length} workbook(s) · {savedImportWorkbooks.reduce((total, workbook) => total + workbook.includedEntryCount, 0)} pupil record(s) to review
+            </span>
+            <span style={{ color: "#1d4ed8", fontSize: 13, fontWeight: 700 }}>Open review queue ▾</span>
+          </div>
+        </summary>
+        <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <h2 id="saved-import-reviews-heading" style={{ margin: 0, fontSize: 22 }}>Saved work waiting for review</h2>
+            <h2 id="saved-import-reviews-heading" style={{ margin: 0, fontSize: 22 }}>Saved worksheet reviews</h2>
             <p style={{ color: "#64748b", margin: "6px 0 0", maxWidth: 760 }}>
-              Spreadsheet reviews saved earlier appear here, even before they become result records. Continue a review to match pupils, check subject scores and import the approved records. Saving or reviewing work does not publish it or email parents.
+              Open a saved worksheet when you need to reconcile pupil names, check marks or continue an import. Saving or reviewing work does not publish results or email parents.
             </p>
             <p style={{ color: "#334155", fontWeight: 700, margin: "8px 0 0" }}>
               {savedImportWorkbooks.length} saved workbook(s) · {savedImportWorkbooks.reduce((total, workbook) => total + workbook.includedEntryCount, 0)} included pupil review(s) · {savedImportWorkbooks.reduce((total, workbook) => total + workbook.subjectRowCount, 0)} subject scores
-            </p>
-            <p style={{ color: "#64748b", fontSize: 13, margin: "6px 0 0" }}>
-              Publishing updates online access only. It does not send emails; parent notifications must be a separate action after publication.
             </p>
           </div>
           <Button type="button" variant="secondary" onClick={() => void refreshSavedImportWorkbooks()} disabled={loadingImportWorkbooks}>
@@ -1203,10 +1367,15 @@ export default function ReportCardsPage() {
             })}
           </div>
         ) : null}
-      </section>
+        </div>
+      </details>
 
       <SectionCard>
-        <div style={{ display: "grid", gap: 14 }}>
+        <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 22 }}>Individual pupil results</h2>
+            <p style={{ color: "#64748b", margin: "6px 0 0" }}>Each card belongs to one pupil and one report period. Use the actions on that card to preview, edit or publish that pupil&apos;s results.</p>
+          </div>
           <FormField label="Search pupil">
             <input
               style={{ ...inputStyle, fontSize: 16, padding: "14px 16px" }}
@@ -1216,145 +1385,58 @@ export default function ReportCardsPage() {
               aria-label="Search pupil by name or admission number"
             />
           </FormField>
-          <div style={{ color: "#64748b", fontSize: 13 }}>
-                {loadingPeriods ? "Finding report periods…" : `${filteredReportPeriods.length} report period(s)`}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+            <div style={{ border: "1px solid #fed7aa", background: "#fff7ed", borderRadius: 10, padding: "10px 12px" }}>
+              <div style={{ color: "#9a3412", fontSize: 12, fontWeight: 700 }}>Drafts &amp; needs attention</div>
+              <div style={{ color: "#7c2d12", fontSize: 25, fontWeight: 800 }}>{needsAttentionReportPeriods.length}</div>
+            </div>
+            <div style={{ border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: 10, padding: "10px 12px" }}>
+              <div style={{ color: "#166534", fontSize: 12, fontWeight: 700 }}>Published</div>
+              <div style={{ color: "#14532d", fontSize: 25, fontWeight: 800 }}>{publishedReportPeriods.length}</div>
+            </div>
           </div>
           {loadingPeriods ? (
-            <EmptyState title="Finding reports" description="Checking existing result rows and saved report details." />
+            <EmptyState title="Finding pupil reports" description="Loading individual pupil result periods." />
           ) : filteredReportPeriods.length === 0 ? (
             <EmptyState
-              title={reportSearch ? "No pupil report periods found" : "No report periods available"}
+              title={reportSearch ? "No matching pupil reports" : "No pupil reports yet"}
               description={reportSearch
-                ? "Try a different pupil name or admission number."
+                ? "Try a different name, admission number or class."
                 : savedImportWorkbooks.length > 0
-                  ? "No result records are ready to publish yet. Saved spreadsheet reviews are listed above; continue one, reconcile the pupil matches and scores, and import the checked records before publishing."
-                  : "Periods appear here when result rows or saved report-card details exist. Add or complete subject results to begin."}
+                  ? "No result records have been imported yet. Open Spreadsheet imports above to continue a saved worksheet review."
+                  : "Pupil reports will appear here once subject results or saved report details exist."}
             />
           ) : (
-            <div style={{ display: "grid", gap: 10 }}>
-              {filteredReportPeriods.map((period) => {
-                const pupil = students.find((candidate) => candidate.id === period.studentId);
-                const pupilName = pupil ? `${pupil.first_name} ${pupil.last_name}`.trim() : "Pupil unavailable";
-                const className = classes.find((candidate) => candidate.id === period.classId)?.class_name
-                  ?? period.results.find((result) => result.class_name)?.class_name
-                  ?? "Class unavailable";
-                const statusLabel = getReportCenterPeriodStatus(period);
-                const completeness = getReportCenterCompleteness(period, results);
-                const periodEvidenceError = getPublicationEvidenceErrorForPeriod(period);
-                const publishBlockReason = periodEvidenceError
-                  || getReportCenterPublishBlockReason(period, results, isAdministrator, publicationEvidence);
-                const isPublishing = publishingKey === period.key;
-                const publishAction = getReportCenterPublishActionState(
-                  period,
-                  results,
-                  isAdministrator,
-                  Boolean(publishingKey),
-                  publishVerificationErrors[period.key],
-                  publicationEvidence,
-                  periodEvidenceError,
-                );
-                const isUnpublishing = unpublishingKey === period.key;
-                const isDeleting = deletingKey === period.key;
-                const canUnpublish = isAdministrator && period.results.length > 0
-                  && period.results.every((result) => result.status === "Published");
-                const canDeleteDraft = canDeleteDraftReportPeriod(period, isAdministrator);
-                const canDeleteReport = canDeleteReportPeriod(period, isAdministrator);
-                return (
-                  <article key={period.key} aria-labelledby={`report-period-${period.key}`} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, display: "grid", gap: 12 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 16, alignItems: "start" }}>
-                      <div>
-                        <h2 id={`report-period-${period.key}`} style={{ margin: 0, fontSize: 20 }}>{pupilName}</h2>
-                        <p style={{ color: "#64748b", fontSize: 13, margin: "4px 0 0" }}>
-                          Admission number: {pupil?.admission_number || "Unavailable"} · Class: {className}
-                        </p>
-                        <p style={{ color: "#334155", fontSize: 13, margin: "3px 0 0" }}>
-                          {period.academicYear} · {period.term} Term · {period.reportType === "Midterm" ? "Midterm" : "End-of-Term"}
-                        </p>
-                      </div>
-                      {period.savedReport ? <span style={savedBadgeStyle}>Report details saved</span> : null}
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 12 }}>
-                      <div>
-                        <div style={{ color: "#64748b", fontSize: 12, marginBottom: 5 }}>Publication status</div>
-                        <span style={statusBadgeStyle(statusLabel)}>{statusLabel}</span>
-                      </div>
-                      <div>
-                        <div style={{ color: "#64748b", fontSize: 12, marginBottom: 5 }}>Subject-result completeness</div>
-                        <strong style={{ color: completeness.complete ? "#166534" : "#92400e" }}>
-                          {completeness.complete ? "Complete" : "Incomplete"} · {period.results.length} subject result(s)
-                        </strong>
-                        <p style={{ color: completeness.complete ? "#166534" : "#92400e", fontSize: 13, margin: "4px 0 0" }}>
-                          {completeness.reason}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <Button type="button" variant="secondary" onClick={() => void openReportPeriod(period)} disabled={period.results.length === 0} title={period.results.length === 0 ? "Subject results are required to preview a report card." : undefined}>
-                        Preview Report Card
-                      </Button>
-                      <Button type="button" variant="secondary" onClick={() => void openReportPeriod(period, true)} disabled={period.results.length === 0 || !isAdministrator} title={!isAdministrator ? "Only an administrator can edit report-card details." : period.results.length === 0 ? "Subject results are required to open report-card details." : undefined}>
-                        Edit Report Card Comments
-                      </Button>
-                      <Button type="button" variant="secondary" onClick={() => navigateToResults(period)} disabled={period.results.length === 0} title={period.results.length === 0 ? "No subject results are available to edit." : undefined}>
-                        Edit Subject Results
-                      </Button>
-                      {publishAction.visible ? (
-                        <Button type="button" onClick={() => void publishReportPeriod(period)} disabled={publishAction.disabled} title={publishAction.reason || "Publish each eligible subject result through the authorized review workflow."}>
-                          {isPublishing ? "Publishing…" : "Publish Report Card"}
-                        </Button>
-                      ) : null}
-                      {canUnpublish ? (
-                        <Button type="button" variant="secondary" onClick={() => void unpublishReportPeriod(period)} disabled={Boolean(unpublishingKey) || Boolean(publishingKey) || Boolean(unpublishVerificationErrors[period.key])} title={unpublishVerificationErrors[period.key] || "Move each published subject result to Returned through the existing review workflow."}>
-                          {isUnpublishing ? "Unpublishing…" : "Unpublish Report Card"}
-                        </Button>
-                      ) : null}
-                      {canDeleteReport ? (
-                        <Button type="button" variant="secondary" onClick={() => void deleteReportPeriod(period)} disabled={Boolean(deletingKey) || Boolean(publishingKey) || Boolean(unpublishingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
-                          {isDeleting ? "Deleting report card…" : "Delete Report Card"}
-                        </Button>
-                      ) : null}
-                      {canDeleteDraft ? (
-                        <Button type="button" variant="secondary" onClick={() => void deleteDraftPeriod(period)} disabled={Boolean(deletingKey) || Boolean(publishingKey) || Boolean(unpublishingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
-                          {isDeleting ? "Deleting draft…" : "Delete Draft"}
-                        </Button>
-                      ) : null}
-                      {isAdministrator && period.results.length === 0 && period.savedReport ? (
-                        <Button type="button" variant="secondary" onClick={() => void deleteSavedReportDetails(period)} disabled={Boolean(deletingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
-                          {isDeleting ? "Deleting details…" : "Delete Saved Details"}
-                        </Button>
-                      ) : null}
-                      {isAdministrator && (publishVerificationErrors[period.key] || unpublishVerificationErrors[period.key]) ? (
-                        <Button type="button" variant="secondary" onClick={() => void verifyPublishStatus(period)} disabled={Boolean(publishingKey)}>
-                          Verify saved status
-                        </Button>
-                      ) : null}
-                    </div>
-
-                    {isAdministrator && publishAction.disabled && publishBlockReason ? (
-                      <p role="status" style={{ color: "#92400e", fontSize: 13, margin: 0 }}>
-                        Publishing unavailable: {publishBlockReason}
-                      </p>
-                    ) : null}
-                    {statusLabel === "Published" ? (
-                      <p role="status" style={{ color: "#475569", fontSize: 13, margin: 0 }}>
-                        To correct subject results, unpublish this report first. Corrections remain Returned until explicitly published again.
-                      </p>
-                    ) : null}
-                    {isAdministrator && publishVerificationErrors[period.key] ? (
-                      <p role="alert" style={{ color: "#991b1b", fontSize: 13, margin: 0 }}>
-                        {publishVerificationErrors[period.key]} Publication retry is blocked until status is verified.
-                      </p>
-                    ) : null}
-                    {isAdministrator && unpublishVerificationErrors[period.key] ? (
-                      <p role="alert" style={{ color: "#991b1b", fontSize: 13, margin: 0 }}>
-                        {unpublishVerificationErrors[period.key]} Unpublish retry is blocked until status is refreshed.
-                      </p>
-                    ) : null}
-                  </article>
-                );
-              })}
+            <div style={{ display: "grid", gap: 22, minWidth: 0 }}>
+              <section aria-labelledby="report-drafts-heading" style={{ display: "grid", gap: 10, minWidth: 0 }}>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <h3 id="report-drafts-heading" style={{ margin: 0, fontSize: 18 }}>Drafts &amp; needs attention</h3>
+                    <span style={{ ...statusBadgeStyle("Draft"), fontSize: 13 }}>{needsAttentionReportPeriods.length} pupil report(s)</span>
+                  </div>
+                  <p style={{ color: "#64748b", fontSize: 13, margin: "4px 0 0" }}>These reports are not fully published. Open each pupil&apos;s card to check scores, preview or publish when all checks pass.</p>
+                </div>
+                {needsAttentionReportPeriods.length === 0 ? (
+                  <p style={{ color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 10, padding: 14, margin: 0 }}>No drafts or reports needing attention in this search.</p>
+                ) : (
+                  <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
+                    {needsAttentionReportPeriods.map((period) => renderReportPeriodCard(period))}
+                  </div>
+                )}
+              </section>
+              <section aria-labelledby="report-published-heading" style={{ display: "grid", gap: 10, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                  <h3 id="report-published-heading" style={{ margin: 0, fontSize: 18 }}>Published</h3>
+                  <span style={{ ...statusBadgeStyle("Published"), fontSize: 13 }}>{publishedReportPeriods.length} pupil report(s)</span>
+                </div>
+                {publishedReportPeriods.length === 0 ? (
+                  <p style={{ color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 10, padding: 14, margin: 0 }}>No published reports in this search.</p>
+                ) : (
+                  <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
+                    {publishedReportPeriods.map((period) => renderReportPeriodCard(period))}
+                  </div>
+                )}
+              </section>
             </div>
           )}
         </div>
@@ -1576,7 +1658,7 @@ export default function ReportCardsPage() {
       {loading ? (
         <EmptyState title="Building report card" description="Please wait while report data is generated." />
       ) : report ? (
-        <div>
+        <div ref={reportPreviewRef} style={{ scrollMarginTop: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
             <div>
               <h2 style={{ margin: 0 }}>Report preview</h2>
@@ -1598,7 +1680,7 @@ export default function ReportCardsPage() {
           ) : null}
           {editingReportDetails && isAdministrator ? <AppModal
             open={editingReportDetails && isAdministrator}
-            title={`Edit Report Card Comments · ${report.student.first_name} ${report.student.last_name}`}
+            title={`Edit report details · ${report.student.first_name} ${report.student.last_name}`}
             size="lg"
             dialogStyle={{
               height: "calc(100dvh - 32px)",
