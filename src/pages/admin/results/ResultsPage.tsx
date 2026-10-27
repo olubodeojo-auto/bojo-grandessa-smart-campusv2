@@ -16,6 +16,7 @@ import {
   getImportReviewDrafts,
   getImportReviewSchoolId,
   getImportReviewWorkbooks,
+  markImportReviewDraftStatus,
   saveImportReviewDraft,
   saveImportedReportCard,
   type ImportReviewWorkbook,
@@ -1517,6 +1518,11 @@ export default function ResultsPage() {
 
         const reportClassId = entry.items[0]?.classId;
         if (!reportClassId || !entry.term) throw new Error("A saved class and term are required for the report card.");
+        const workbookKey = activeWorkbookDraftKey;
+        const ownerId = importDraftOwnerId || user?.id;
+        if (!workbookKey || !ownerId) throw new Error("The saved pupil review could not be identified. Reopen the pupil from Reports and try again.");
+        // Persist the canonical student ID/name/class and original worksheet name before saving results.
+        await saveImportReviewDraft({ workbookKey, entry, ownerId });
         const details = entry.reportDetails;
         const termEnding = normalizeImportDate(details?.termEnding ?? "", "Term ending");
         const nextTermBegins = normalizeImportDate(details?.nextTermBegins ?? "", "Next term begins");
@@ -1545,11 +1551,52 @@ export default function ResultsPage() {
           },
         });
 
+        let workflowStatusError: string | undefined;
+        if (skipped === 0) {
+          try {
+            const savedResults = await getResults();
+            const importedResultIds: string[] = [];
+            for (const item of entry.items) {
+              const itemTerm = item.term ?? entry.term;
+              const matches = savedResults.filter((candidate) =>
+                candidate.student_id === student.id
+                && candidate.class_id === item.classId
+                && candidate.subject_id === item.subjectId
+                && candidate.academic_year === (item.academicYear || entry.academicYear)
+                && candidate.term === itemTerm
+                && candidate.assessment_type === item.assessmentType
+                && candidate.status === "Draft"
+              );
+              if (matches.length !== 1) {
+                throw new Error(`Expected one saved draft result for ${item.subjectName || "a subject"}, found ${matches.length}. The import remains available for reconciliation.`);
+              }
+              importedResultIds.push(matches[0].id);
+            }
+            if (new Set(importedResultIds).size !== importedResultIds.length) {
+              throw new Error("Duplicate saved result IDs were found. The import remains available for reconciliation.");
+            }
+            await markImportReviewDraftStatus({
+              workbookKey,
+              entryKey: entry.studentKey,
+              ownerId,
+              studentId,
+              classId: reportClassId,
+              workflowStatus: "imported_draft",
+              resultIds: importedResultIds,
+            });
+          } catch (statusError) {
+            workflowStatusError = statusError instanceof Error
+              ? statusError.message
+              : "Unable to update the saved import status. Do not import this pupil again.";
+          }
+        }
+
         return {
           name: formatName(student.first_name, student.last_name),
           created: entryCreates.length,
           updated: entryUpdates.length,
           skipped,
+          workflowStatusError,
         };
       });
 
@@ -1566,6 +1613,9 @@ export default function ResultsPage() {
       const createdRows = outcomes.saved.reduce((total, { value }) => total + value.created, 0);
       const updatedRows = outcomes.saved.reduce((total, { value }) => total + value.updated, 0);
       const skippedRows = outcomes.saved.reduce((total, { value }) => total + value.skipped, 0);
+      const workflowStatusWarnings = outcomes.saved
+        .filter(({ value }) => value.workflowStatusError)
+        .map(({ entry, value }) => `${entry.studentName}: ${value.workflowStatusError}`);
       await loadData();
       setError([
         failedNames.length > 0 ? `Import failed for ${failedNames.join("; ")}` : "",
@@ -1574,6 +1624,9 @@ export default function ResultsPage() {
         successfulNames.length > 0 ? `Saved: ${successfulNames.join(", ")}.` : "",
         failedNames.length > 0 ? `Failed: ${failedNames.join("; ")}.` : "",
         `Created ${createdRows} result row(s), updated ${updatedRows}, skipped ${skippedRows}.`,
+        workflowStatusWarnings.length > 0
+          ? `Import status needs attention (do not repeat the import): ${workflowStatusWarnings.join("; ")}.`
+          : "",
       ].filter(Boolean).join(" "));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to import results.";
