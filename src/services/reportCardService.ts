@@ -160,6 +160,32 @@ export async function getImportReviewDrafts(workbookKey: string, ownerId?: strin
   });
 }
 
+export async function markImportReviewDraftStatus(params: {
+  workbookKey: string;
+  entryKey: string;
+  ownerId?: string;
+  studentId: string;
+  classId: string;
+  workflowStatus: "published" | "imported_draft";
+  resultIds: string[];
+}): Promise<void> {
+  if (params.resultIds.length === 0) {
+    throw new Error("At least one saved subject result is required to update a pupil's import status.");
+  }
+  const schoolSettings = await getSchoolSettings();
+  const { error } = await supabase.rpc("mark_result_import_review_draft_status_v2", {
+    target_school_id: schoolSettings.school_id,
+    target_workbook_key: params.workbookKey,
+    target_entry_key: params.entryKey,
+    target_owner_id: params.ownerId ?? null,
+    target_student_id: params.studentId,
+    target_class_id: params.classId,
+    target_workflow_status: params.workflowStatus,
+    target_result_ids: params.resultIds,
+  });
+  if (error) throw new Error(`Unable to update ${params.workflowStatus === "published" ? "published" : "draft"} status for this pupil's import: ${error.message}`);
+}
+
 export type ImportReviewWorkbook = {
   workbookKey: string;
   ownerId: string;
