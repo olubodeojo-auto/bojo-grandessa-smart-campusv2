@@ -12,7 +12,7 @@ import SectionCard from "../../../components/ui/SectionCard";
 import Button from "../../../components/ui/Button";
 import { type AcademicCalendarConfig } from "../../../config/grandessaCalendar";
 import { buildStudentReportCard, deleteReportCard, getImportReviewDrafts, getImportReviewWorkbooks, getSavedReportCards, saveReportCardDetails, type SavedReportCard } from "../../../services/reportCardService";
-import { reconcileSavedImportStudentMatches, type ResultImportPreviewEntry } from "../../../services/resultImportService";
+import { getImportScoreWarnings, reconcileSavedImportStudentMatches, type ResultImportPreviewEntry } from "../../../services/resultImportService";
 import { getAcademicSessionSetups, saveAcademicSessionSetup } from "../../../services/academicSessionService";
 import { getClasses } from "../../../services/classService";
 import { deleteResult, getResultPublicationEvidence, getResults, publishResult, reviewResult } from "../../../services/resultService";
@@ -84,7 +84,14 @@ function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingIm
   if (unresolvedSubject) {
     return { label: "Subject to confirm", explanation: `Confirm the subject for "${unresolvedSubject.subjectName}" before importing.` };
   }
-  if (entry.items.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
+  const scoreWarnings = getImportScoreWarnings(entry);
+  if (scoreWarnings.some((warning) => /mark is missing|subject marks are missing/i.test(warning))) {
+    return {
+      label: "Missing subject marks",
+      explanation: "One or more subject marks are blank. Open Reconcile this pupil, complete the blank mark cells, and save the draft before publishing.",
+    };
+  }
+  if (scoreWarnings.length > 0 || entry.items.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
     return { label: "Check marks", explanation: "One or more marks need correction before this pupil's results can be imported." };
   }
   return { label: "Ready to review", explanation: "Check the subject marks, then complete this pupil's import." };
