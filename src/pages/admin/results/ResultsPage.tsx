@@ -46,6 +46,7 @@ import {
   saveImportEntriesIndependently,
   serializeImportReviewCursor,
   summarizeImportPreview,
+  type ResultImportItem,
   type ResultImportPreviewEntry,
   type ResultImportReportDetailNumericField,
   type ResultImportReportKind,
@@ -1187,6 +1188,75 @@ export default function ResultsPage() {
     })));
   };
 
+  const handleAddImportSubjectRow = (entryIndex: number): void => {
+    const currentEntry = importEntries[entryIndex];
+    if (!currentEntry) return;
+    const selectedStudent = currentEntry.selectedStudentId
+      ? studentsMap.get(currentEntry.selectedStudentId)
+      : undefined;
+    const workbookClass = classes.find((candidate) =>
+      candidate.class_name.trim().toLowerCase() === currentEntry.className.trim().toLowerCase()
+    );
+    const assignment = resolveImportStudentAssignment(
+      selectedStudent ?? (workbookClass ? { class_id: workbookClass.id } : undefined),
+      classes,
+    );
+    const assessmentType: Result["assessment_type"] =
+      currentEntry.reportKind === "End-of-Term / Year Report Card" ? "Combined" : "CA";
+    const newItem: ResultImportItem = {
+      assessmentType,
+      calculationMode: currentEntry.items[0]?.calculationMode ?? "Manual",
+      reportKind: currentEntry.reportKind,
+      subjectName: "",
+      subjectId: undefined,
+      className: assignment.className || currentEntry.className,
+      classId: assignment.classId,
+      teacherName: assignment.teacherName || currentEntry.teacherName,
+      academicYear: currentEntry.academicYear,
+      term: currentEntry.term,
+      continuousAssessment: null,
+      maximumScore: assessmentType === "CA" ? 40 : null,
+      examination: null,
+      totalScore: null,
+      grade: null,
+      remark: null,
+      notices: [],
+      invalidMarks: [],
+      manualEntry: true,
+      scoreInputText: assessmentType === "CA"
+        ? { continuousAssessment: "", maximumScore: "40" }
+        : { continuousAssessment: "", examination: "", totalScore: "" },
+    };
+    markDraftDirty(currentEntry.studentKey);
+    setImportEntries((current) => withSelectedDuplicateWarnings(updateImportEntryByKey(current, currentEntry.studentKey, (entry) => {
+      const warnings = entry.warnings.filter((warning) => !warning.startsWith("No valid subject rows detected."));
+      return validateImportMappings({
+        ...entry,
+        className: assignment.className || entry.className,
+        teacherName: assignment.teacherName || entry.teacherName,
+        warnings,
+        items: [...entry.items, newItem],
+      });
+    })));
+    setActiveSubjectRowKey(getImportSubjectRowKey(currentEntry, currentEntry.items.length));
+    setCompletedSubjectMappingEntryKey(null);
+    setSubjectSearch("");
+  };
+
+  const handleRemoveImportSubjectRow = (entryIndex: number, itemIndex: number): void => {
+    const currentEntry = importEntries[entryIndex];
+    if (!currentEntry?.items[itemIndex]?.manualEntry) return;
+    markDraftDirty(currentEntry.studentKey);
+    setImportEntries((current) => withSelectedDuplicateWarnings(updateImportEntryByKey(current, currentEntry.studentKey, (entry) =>
+      validateImportMappings({
+        ...entry,
+        items: entry.items.filter((_, index) => index !== itemIndex),
+      })
+    )));
+    setActiveSubjectRowKey(null);
+    setCompletedSubjectMappingEntryKey(null);
+  };
+
   const handleImportTeacherNameChange = (entryIndex: number, teacherName: string): void => {
     const currentEntry = importEntries[entryIndex];
     if (!currentEntry) return;
@@ -2326,11 +2396,21 @@ export default function ResultsPage() {
                       </select>
                     </label>
                   </div>
-                  <div style={{ marginBottom: 12, color: "#334155" }}>
-                    {entry.items.length} subject row(s) detected. {entry.items[0]?.calculationMode === "Automatic"
-                      ? "Valid marks use the shared calculator; review the preview before importing."
-                      : "Imported values stay editable and are preserved as entered."}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12, color: "#334155" }}>
+                    <div>
+                      <strong>{entry.items.length} subject row(s)</strong>. {entry.items[0]?.calculationMode === "Automatic"
+                        ? "Valid marks use the shared calculator; review the preview before importing."
+                        : "Scores stay editable and are saved as drafts until publication is explicitly confirmed."}
+                    </div>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => handleAddImportSubjectRow(index)}>
+                      Add subject row
+                    </Button>
                   </div>
+                  {entry.items.length === 0 ? (
+                    <div role="status" style={{ padding: 12, marginBottom: 12, border: "1px dashed #94a3b8", borderRadius: 10, background: "#f8fafc", color: "#475569" }}>
+                      No subject scores were found in the worksheet. Add a subject row below, choose the official subject, and enter the mark. This pupil remains a draft until the class and marks are checked.
+                    </div>
+                  ) : null}
 
                   <details style={{ marginBottom: 12 }}>
                     <summary style={{ cursor: "pointer", fontWeight: 700 }}>Report-card details from workbook (editable)</summary>
@@ -2501,12 +2581,17 @@ export default function ResultsPage() {
                           return (
                             <tr key={rowKey} id={rowKey} style={{ background: isActiveSubject ? "#eff6ff" : item.subjectId ? "#f0fdf4" : "#fff7ed" }}>
                               <td style={cellStyle}>
-                                <strong>{item.subjectName}</strong>
+                                <strong>{item.subjectName || (item.manualEntry ? "Select a subject" : "Unnamed worksheet subject")}</strong>
                                 <div role="status" style={{ color: item.subjectId ? "#166534" : "#9a3412", fontSize: 12 }}>
                                   {item.subjectId ? "Matched" : "Needs subject mapping"}
                                 </div>
                                 {!item.subjectId ? (
                                   <Button type="button" size="sm" variant="secondary" onClick={() => setActiveSubjectRowKey(rowKey)}>Review mapping</Button>
+                                ) : null}
+                                {item.manualEntry ? (
+                                  <Button type="button" size="sm" variant="secondary" onClick={() => handleRemoveImportSubjectRow(index, itemIndex)}>
+                                    Remove added row
+                                  </Button>
                                 ) : null}
                               </td>
                               <td style={cellStyle}>
