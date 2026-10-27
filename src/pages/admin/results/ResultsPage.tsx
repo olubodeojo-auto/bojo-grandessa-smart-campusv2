@@ -83,6 +83,46 @@ type FilterReportType = "All" | "Midterm" | "End-of-Term";
 type ImportReportKindSelection = ResultImportReportKind | "Auto-detect";
 type ImportReportDetailField = keyof NonNullable<ResultImportPreviewEntry["reportDetails"]>;
 
+type PendingImportPupil = {
+  workbookKey: string;
+  ownerId: string;
+  ownerName: string;
+  sheetName: string;
+  entry: ResultImportPreviewEntry;
+};
+
+type PendingImportPupilStatus = { label: string; explanation: string };
+
+function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingImportPupilStatus {
+  if (entry.matchStatus === "manual-review") {
+    return { label: "Confirm pupil", explanation: "Confirm the registered pupil and class against the school list before importing marks." };
+  }
+  if (entry.matchStatus === "unmatched" || !entry.selectedStudentId) {
+    return { label: "Pupil match needed", explanation: "Select the correct registered pupil before importing. No marks have been imported for this entry." };
+  }
+  if (entry.reportKind === "Unclear") {
+    return { label: "Report type to confirm", explanation: "Confirm the correct report type before importing." };
+  }
+  if (!entry.term) {
+    return { label: "Term to confirm", explanation: "Confirm the term from the school's approved results sheet before importing." };
+  }
+  if (entry.items.length === 0) {
+    return { label: "No subject scores found", explanation: "Check the original worksheet. No subject-score rows were detected for this pupil." };
+  }
+  const unresolvedSubject = entry.items.find((item) => !item.subjectId);
+  if (unresolvedSubject) {
+    return { label: "Subject to confirm", explanation: `Confirm the subject for "${unresolvedSubject.subjectName}" before importing.` };
+  }
+  const scoreWarnings = getImportScoreWarnings(entry);
+  if (scoreWarnings.some((warning) => /mark is missing|subject marks are missing/i.test(warning))) {
+    return { label: "Missing subject marks", explanation: "One or more subject marks are blank. Open Reconcile this pupil, complete the blank mark cells, and save the draft before publishing." };
+  }
+  if (scoreWarnings.length > 0 || entry.items.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
+    return { label: "Check marks", explanation: "One or more marks need correction before this pupil's results can be imported." };
+  }
+  return { label: "Ready to review", explanation: "Check the subject marks, then complete this pupil's import." };
+}
+
 function importItemKey(entry: ResultImportPreviewEntry, itemIndex: number): string {
   return `${entry.studentKey}|${itemIndex}`;
 }
@@ -196,6 +236,14 @@ function workbookSelectionKey(workbook: Pick<ImportReviewWorkbook, "ownerId" | "
   return `${workbook.ownerId}::${workbook.workbookKey}`;
 }
 
+function statusBadgeStyle(status: string): React.CSSProperties {
+  const color = status === "Ready to review" ? ["#166534", "#dcfce7"]
+    : status === "Confirm pupil" || status === "Pupil match needed" || status === "Missing subject marks" || status === "Check marks"
+      ? ["#92400e", "#fef3c7"]
+      : ["#475569", "#f1f5f9"];
+  return { borderRadius: 999, background: color[1], color: color[0], fontSize: 12, fontWeight: 700, padding: "4px 9px" };
+}
+
 export default function ResultsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -224,6 +272,9 @@ export default function ResultsPage() {
   const [importWorkbookSheets, setImportWorkbookSheets] = useState<ResultWorkbookSheet[]>([]);
   const [selectedImportSheet, setSelectedImportSheet] = useState<string>("");
   const [savedImportWorkbooks, setSavedImportWorkbooks] = useState<ImportReviewWorkbook[]>([]);
+  const [pendingImportPupils, setPendingImportPupils] = useState<PendingImportPupil[]>([]);
+  const [loadingPendingImportPupils, setLoadingPendingImportPupils] = useState<boolean>(true);
+  const [pendingImportPupilsError, setPendingImportPupilsError] = useState<string>("");
   const [selectedSavedWorkbookKey, setSelectedSavedWorkbookKey] = useState<string>("");
   const [loadingSavedWorkbooks, setLoadingSavedWorkbooks] = useState<boolean>(true);
   const [savedWorkbookError, setSavedWorkbookError] = useState<string>("");
@@ -338,6 +389,63 @@ export default function ResultsPage() {
       cancelled = true;
     };
   }, [canManage, user]);
+
+  useEffect(() => {
+    if (!isAdmin || !user) {
+      setPendingImportPupils([]);
+      setPendingImportPupilsError("");
+      setLoadingPendingImportPupils(false);
+      return;
+    }
+    if (loading || loadingSavedWorkbooks) {
+      setLoadingPendingImportPupils(true);
+      return;
+    }
+    if (savedImportWorkbooks.length === 0) {
+      setPendingImportPupils([]);
+      setPendingImportPupilsError("");
+      setLoadingPendingImportPupils(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingPendingImportPupils(true);
+    setPendingImportPupilsError("");
+    void Promise.all(savedImportWorkbooks.map(async (workbook) => {
+      const entries = await getImportReviewDrafts(workbook.workbookKey, workbook.ownerId);
+      const pendingEntries = reconcileSavedImportStudentMatches(
+        entries.filter((entry) => !entry.workflowStatus && entry.included !== false),
+        students,
+      );
+      const separatorIndex = workbook.workbookKey.indexOf(":");
+      const sheetName = separatorIndex >= 0
+        ? workbook.workbookKey.slice(separatorIndex + 1)
+        : "Saved worksheet";
+      return pendingEntries.map((entry) => ({
+        workbookKey: workbook.workbookKey,
+        ownerId: workbook.ownerId,
+        ownerName: workbook.ownerName,
+        sheetName,
+        entry,
+      }));
+    }))
+      .then((workbookEntries) => {
+        if (cancelled) return;
+        setPendingImportPupils(workbookEntries.flat().sort((left, right) =>
+          left.entry.studentName.localeCompare(right.entry.studentName)
+          || left.entry.academicYear.localeCompare(right.entry.academicYear)
+          || (left.entry.term ?? "").localeCompare(right.entry.term ?? ""),
+        ));
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setPendingImportPupilsError(err instanceof Error ? err.message : "Unable to load outstanding pupil imports.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPendingImportPupils(false);
+      });
+    return () => { cancelled = true; };
+  }, [isAdmin, user, loading, loadingSavedWorkbooks, savedImportWorkbooks, students]);
 
   const studentsMap = useMemo(() => {
     const map = new Map<string, Student>();
@@ -1781,12 +1889,100 @@ export default function ResultsPage() {
           </div>
         ) : null}
 
+        {isAdmin ? (
+          <section className="card" aria-labelledby="imports-awaiting-reconciliation-results" style={{ marginBottom: 20, padding: 18, border: "1px solid #c7d2fe", background: "linear-gradient(180deg,#ffffff 0%,#f8faff 100%)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ flex: "1 1 360px", minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <h2 id="imports-awaiting-reconciliation-results" style={{ margin: 0 }}>Imports awaiting reconciliation</h2>
+                  <span style={{ borderRadius: 999, background: pendingImportPupils.length > 0 ? "#fef3c7" : "#dcfce7", color: pendingImportPupils.length > 0 ? "#92400e" : "#166534", padding: "4px 9px", fontSize: 12, fontWeight: 700 }}>
+                    {loadingPendingImportPupils ? "Checking…" : `${pendingImportPupils.length} pupil(s)`}
+                  </span>
+                </div>
+                <p style={{ color: "#475569", margin: "6px 0 0" }}>
+                  These are pupil entries saved from Excel workbooks but not yet reconciled and imported. Confirm each pupil, class, subject and mark here. Saving review progress does not publish results.
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Button type="button" variant="secondary" onClick={() => void handleRefreshSavedWorkbooks()} disabled={loadingSavedWorkbooks || loadingPendingImportPupils}>
+                  Refresh imports
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => navigate("/admin/reports")}>Open report card workspace</Button>
+              </div>
+            </div>
+
+            {pendingImportPupilsError ? (
+              <div role="alert" style={{ marginTop: 12, padding: 10, border: "1px solid #fecaca", borderRadius: 10, background: "#fef2f2", color: "#991b1b" }}>
+                {pendingImportPupilsError}
+              </div>
+            ) : null}
+            {loadingPendingImportPupils ? (
+              <p role="status" style={{ color: "#64748b", margin: "14px 0 0" }}>Loading outstanding pupil imports…</p>
+            ) : pendingImportPupils.length === 0 ? (
+              <p style={{ color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 10, padding: 12, margin: "14px 0 0" }}>
+                {pendingImportPupilsError ? "Outstanding imports could not be confirmed. Refresh to retry." : "No outstanding imports to reconcile."}
+              </p>
+            ) : (
+              <div style={{ display: "grid", gap: 10, marginTop: 14, maxHeight: 520, overflowY: "auto", paddingRight: 4 }}>
+                {pendingImportPupils.map((review) => {
+                  const entry = review.entry;
+                  const entryWithSource = entry as ResultImportPreviewEntry & { sourceStudentName?: string };
+                  const worksheetName = entryWithSource.sourceStudentName?.trim() || entry.studentName;
+                  const possiblePupil = students.find((candidate) => candidate.id === entry.matchedStudentId);
+                  const confirmedPupil = students.find((candidate) => candidate.id === entry.selectedStudentId);
+                  const displayName = entry.matchStatus === "matched" && confirmedPupil
+                    ? `${confirmedPupil.first_name} ${confirmedPupil.last_name}`.trim()
+                    : worksheetName;
+                  const progress = getPendingImportPupilStatus(entry);
+                  const reportTypeLabel = entry.reportKind === "Midterm / Continuous Assessment"
+                    ? "Midterm (CA)"
+                    : entry.reportKind === "End-of-Term / Year Report Card"
+                      ? "End-of-Term"
+                      : "Report type to confirm";
+                  const params = new URLSearchParams({
+                    resumeWorkbook: review.workbookKey,
+                    resumeOwner: review.ownerId,
+                    resumeEntry: entry.studentKey,
+                  });
+                  return (
+                    <article key={`${review.ownerId}::${review.workbookKey}::${entry.studentKey}`} style={{ display: "grid", gap: 7, border: "1px solid #e2e8f0", borderRadius: 10, padding: 12, background: "#fff", minWidth: 0 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10, flexWrap: "wrap" }}>
+                        <div style={{ minWidth: 0 }}>
+                          <h3 style={{ margin: 0, fontSize: 16, overflowWrap: "anywhere" }}>{displayName}</h3>
+                          <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13 }}>
+                            {entry.admissionNumber ? `Admission no.: ${entry.admissionNumber} · ` : ""}Worksheet class: {entry.className || "Needs confirmation"}
+                          </p>
+                          <p style={{ margin: "3px 0 0", color: "#64748b", fontSize: 13 }}>
+                            {entry.academicYear || "Session to confirm"} · {entry.term ? `${entry.term} Term` : "Term to confirm"} · {reportTypeLabel}
+                          </p>
+                          {worksheetName !== displayName ? (
+                            <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 12 }}>Name on worksheet: {worksheetName}</p>
+                          ) : null}
+                          {entry.matchStatus !== "matched" && possiblePupil ? (
+                            <p style={{ margin: "4px 0 0", color: "#92400e", fontSize: 13 }}>Possible registered match: {possiblePupil.first_name} {possiblePupil.last_name}. Confirm before importing.</p>
+                          ) : null}
+                        </div>
+                        <span style={statusBadgeStyle(progress.label)}>{progress.label}</span>
+                      </div>
+                      <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>{progress.explanation}</p>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ color: "#64748b", fontSize: 12 }}>Worksheet: {review.sheetName}{review.ownerName ? ` · Saved by ${review.ownerName}` : ""}</span>
+                        <Button type="button" size="sm" onClick={() => navigate(`/admin/results?${params.toString()}`)}>Reconcile this pupil</Button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        ) : null}
+
         <section className="card" aria-labelledby="saved-result-drafts-heading" style={{ marginBottom: 20, padding: 18 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
             <div>
               <h2 id="saved-result-drafts-heading" style={{ margin: 0 }}>Saved Result Drafts</h2>
               <p style={{ color: "#64748b", margin: "6px 0 0" }}>
-                Individual Draft result rows are grouped by pupil, session, term and assessment. The stored result row does not identify whether it originated from manual entry or an import; workbook review drafts are listed separately below.
+                These are actual subject-result rows already saved in the Results records, grouped by pupil, session, term and assessment. They can be resumed here and reviewed/published through the results workflow. They are different from the unreconciled workbook pupils shown above.
               </p>
             </div>
             <span>{savedResultDraftGroups.length} pupil/period group(s)</span>
@@ -1856,7 +2052,7 @@ export default function ResultsPage() {
             <div>
               <h2 id="saved-workbook-drafts-heading" style={{ margin: 0 }}>Saved Workbook Drafts</h2>
               <p style={{ color: "#64748b", margin: "6px 0 0" }}>
-                Saved Excel review payloads are separate from the individual result rows above.
+                These are saved Excel review payloads that let you reopen a full worksheet review. Pupil entries still waiting for name, class, subject or mark confirmation are listed above. A workbook draft is not the same as a saved subject-result row.
               </p>
             </div>
             <Button type="button" variant="secondary" onClick={() => void handleRefreshSavedWorkbooks()} disabled={loadingSavedWorkbooks}>
