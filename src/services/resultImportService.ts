@@ -330,6 +330,7 @@ export function selectCreatedImportStudent(
 export function isImportEntryReady(entry: ResultImportPreviewEntry): boolean {
   if (entry.workflowStatus) return false;
   return Boolean(entry.included !== false && entry.selectedStudentId && entry.warnings.length === 0
+    && entry.items.length > 0
     && entry.items.every((item) => Boolean(item.classId && item.subjectId))
     && getImportScoreWarnings(entry).length === 0);
 }
