@@ -1568,6 +1568,64 @@ describe("result workbook import preview", () => {
     expect(classConflict.warnings.join(" ")).toContain("Keep this entry in drafts");
   });
 
+  it("normalizes legacy Combined rows to confirmed Midterm CA without converting blank scores to zero", () => {
+    const rosterStudent: Student = {
+      ...student("student-basic-1", "Faheemdeen Temitope Balogun", "GDS-032", "Basic 1"),
+      first_name: "Faheemdeen Temitope",
+      middle_name: "Temitope",
+      last_name: "Balogun",
+      class_id: "class-basic-1",
+    };
+    const savedLegacyEntry = {
+      index: 0,
+      studentKey: "Sheet1-5-0-FAHEEM BALOGUN",
+      studentName: "Faheemdeen Temitope Balogun",
+      admissionNumber: "GDS-032",
+      academicYear: "2026/2027",
+      term: "First",
+      assessmentType: "CA",
+      reportKind: "Midterm / Continuous Assessment",
+      className: "Basic 1",
+      teacherName: "",
+      matchStatus: "matched",
+      matchedStudentId: "student-basic-1",
+      selectedStudentId: "student-basic-1",
+      included: true,
+      warnings: [],
+      notices: [],
+      items: [{
+        assessmentType: "Combined",
+        calculationMode: "Manual",
+        reportKind: "Midterm / Continuous Assessment",
+        subjectName: "Mathematics",
+        subjectId: "subject-math",
+        className: "Basic 1",
+        classId: "class-basic-1",
+        teacherName: "",
+        academicYear: "2026/2027",
+        term: "First",
+        continuousAssessment: null,
+        maximumScore: "40",
+        examination: null,
+        totalScore: "0",
+        grade: null,
+        remark: null,
+        notices: [],
+      }],
+    } as unknown as ResultImportPreviewEntry;
+
+    const [reconciled] = reconcileSavedImportStudentMatches([savedLegacyEntry], [rosterStudent]);
+
+    expect(reconciled.items[0]).toMatchObject({
+      assessmentType: "CA",
+      continuousAssessment: null,
+      maximumScore: 40,
+      examination: null,
+      totalScore: null,
+    });
+    expect(getImportScoreWarnings(reconciled)).toContain("Mathematics: CA mark is missing.");
+  });
+
   it("preserves a saved possible-match candidate across refresh without selecting it for import", () => {
     const candidate: Student = {
       ...student("student-olise", "Kikiolanimi Zina Olise", "GDS-0023", "Basic 3"),
