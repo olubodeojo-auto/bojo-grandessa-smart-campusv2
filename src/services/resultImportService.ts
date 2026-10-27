@@ -1202,6 +1202,76 @@ function reconcileMatchedImportEntry(
   };
 }
 
+function normalizeSavedScoreValue(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string" || !value.trim()) return null;
+  const parsed = parseScoreInput(value);
+  return parsed.valid ? parsed.value : null;
+}
+
+function isBlankScoreValue(value: unknown): boolean {
+  return value === null || value === undefined
+    || (typeof value === "string" && !value.trim());
+}
+
+function normalizeSavedImportEntry(entry: ResultImportPreviewEntry): ResultImportPreviewEntry {
+  const expectedAssessmentType: ResultAssessmentType | null = entry.reportKind === "Midterm / Continuous Assessment"
+    ? "CA"
+    : entry.reportKind === "End-of-Term / Year Report Card"
+      ? "Combined"
+      : null;
+
+  return {
+    ...entry,
+    items: entry.items.map((item) => {
+      const continuousAssessment = normalizeSavedScoreValue(item.continuousAssessment);
+      const examination = normalizeSavedScoreValue(item.examination);
+      let totalScore = normalizeSavedScoreValue(item.totalScore);
+      const hasExplicitTotalInput = Boolean(item.scoreInputText?.totalScore?.trim());
+      // Older workbook parsing saved a synthetic zero where every component was empty.
+      // Treat that exact shape as missing data, not as a pupil's score.
+      if (continuousAssessment === null && examination === null && totalScore === 0
+        && !hasExplicitTotalInput && !item.grade && !item.remark) {
+        totalScore = null;
+      }
+
+      const assessmentType = expectedAssessmentType ?? item.assessmentType;
+      const scoreInputText = { ...(item.scoreInputText ?? {}) };
+      for (const [field, rawValue] of [
+        ["continuousAssessment", item.continuousAssessment],
+        ["maximumScore", item.maximumScore],
+        ["examination", item.examination],
+        ["totalScore", item.totalScore],
+      ] as const) {
+        if (typeof rawValue === "string" && rawValue.trim()
+          && normalizeSavedScoreValue(rawValue) === null
+          && scoreInputText[field] === undefined) {
+          scoreInputText[field] = rawValue;
+        }
+      }
+
+      const rawMaximumScore = normalizeSavedScoreValue(item.maximumScore);
+      const maximumScoreWasBlank = isBlankScoreValue(item.maximumScore);
+      return {
+        ...item,
+        assessmentType,
+        reportKind: entry.reportKind,
+        continuousAssessment,
+        maximumScore: assessmentType === "CA"
+          ? maximumScoreWasBlank ? 40 : rawMaximumScore
+          : null,
+        examination: assessmentType === "CA" ? null : examination,
+        totalScore: assessmentType === "CA" ? null : totalScore,
+        grade: assessmentType === "CA" ? null : item.grade,
+        remark: assessmentType === "CA" ? null : item.remark,
+        scoreInputText: Object.values(scoreInputText).some((value) => value !== undefined)
+          ? scoreInputText
+          : item.scoreInputText,
+      };
+    }),
+  };
+}
+
 export function reconcileSavedImportStudentMatches(
   entries: ResultImportPreviewEntry[],
   students: Student[],
@@ -1220,30 +1290,10 @@ export function reconcileSavedImportStudentMatches(
   ];
   return entries.map((savedEntry) => {
     const sourceStudentName = getSourceStudentName(savedEntry);
-    // The chosen report type is authoritative for this saved pupil. Some older reviewed
-    // entries still contain Combined rows from the prior import state although the term
-    // has already been confirmed as Midterm/CA. Normalize the assessment type without
-    // inventing or moving marks: blank CA cells remain null and will block import.
-    const entry: ResultImportPreviewEntry = savedEntry.reportKind === "Unclear"
-      ? { ...savedEntry, sourceStudentName }
-      : {
-        ...savedEntry,
-        sourceStudentName,
-        assessmentType: savedEntry.reportKind === "Midterm / Continuous Assessment" ? "CA" : "Combined",
-        items: savedEntry.items.map((item) => {
-          const assessmentType = savedEntry.reportKind === "Midterm / Continuous Assessment" ? "CA" : "Combined";
-          return {
-            ...item,
-            reportKind: savedEntry.reportKind,
-            assessmentType,
-            maximumScore: assessmentType === "CA" ? item.maximumScore ?? 40 : null,
-            examination: assessmentType === "CA" ? null : item.examination,
-            totalScore: assessmentType === "CA" ? null : item.totalScore,
-            grade: assessmentType === "CA" ? null : item.grade,
-            remark: assessmentType === "CA" ? null : item.remark,
-          };
-        }),
-      };
+    // Normalize saved numeric strings and old assessment types, but never turn a blank
+    // source mark into zero. The confirmed report type controls the subject input fields.
+    const normalizedEntry = normalizeSavedImportEntry(savedEntry);
+    const entry: ResultImportPreviewEntry = { ...normalizedEntry, sourceStudentName };
     const retainedWarnings = entry.warnings.filter((warning) =>
       !mappingWarningPrefixes.some((prefix) => warning.startsWith(prefix))
       && !(entry.reportKind !== "Unclear" && warning.startsWith("Choose a report type before import"))
