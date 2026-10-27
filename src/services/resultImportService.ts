@@ -984,17 +984,13 @@ function hasNonBlankMark(value: unknown): boolean {
 export function getImportScoreWarnings(entry: ResultImportPreviewEntry): string[] {
   const warnings = entry.items.flatMap((item) => {
     const errors = item.invalidMarks?.map((field) => `${item.subjectName}: ${field} mark is not a valid number.`) ?? [];
-    if (item.assessmentType === "CA" && item.continuousAssessment === null
-      && !item.scoreInputText?.continuousAssessment?.trim()) {
+    if (item.assessmentType === "CA" && item.continuousAssessment === null) {
       errors.push(`${item.subjectName}: CA mark is missing.`);
     }
     if (item.assessmentType === "Combined"
       && item.continuousAssessment === null
       && item.examination === null
-      && item.totalScore === null
-      && !item.scoreInputText?.continuousAssessment?.trim()
-      && !item.scoreInputText?.examination?.trim()
-      && !item.scoreInputText?.totalScore?.trim()) {
+      && item.totalScore === null) {
       errors.push(`${item.subjectName}: subject marks are missing.`);
     }
     const scoreFieldLabels: Record<ResultImportScoreField, string> = {
