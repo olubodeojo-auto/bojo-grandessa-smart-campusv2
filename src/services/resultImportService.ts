@@ -1235,7 +1235,8 @@ function normalizeSavedImportEntry(entry: ResultImportPreviewEntry): ResultImpor
       const hasExplicitTotalInput = Boolean(item.scoreInputText?.totalScore?.trim());
       // Older workbook parsing saved a synthetic zero where every component was empty.
       // Treat that exact shape as missing data, not as a pupil's score.
-      if (continuousAssessment === null && examination === null && totalScore === 0
+      if (entry.reportKind === "Midterm / Continuous Assessment"
+        && continuousAssessment === null && examination === null && totalScore === 0
         && !hasExplicitTotalInput && !item.grade && !item.remark) {
         totalScore = null;
       }
