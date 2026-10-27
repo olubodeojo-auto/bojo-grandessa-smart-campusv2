@@ -2476,50 +2476,66 @@ export default function ResultsPage() {
                     ) : null}
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 12 }}>
-                    <label style={{ display: "grid", gap: 4 }}>
-                      Session
-                      <input value={entry.academicYear} onChange={(event) => handleImportPeriodChange(index, "academicYear", event.target.value)} />
-                    </label>
-                    <label style={{ display: "grid", gap: 4 }}>
-                      Term
-                      <select value={entry.term ?? ""} onChange={(event) => handleImportPeriodChange(index, "term", event.target.value)}>
-                        <option value="">Select term</option>
-                        <option value="First">First</option>
-                        <option value="Second">Second</option>
-                        <option value="Third">Third</option>
-                      </select>
-                    </label>
-                    <div><strong>Class:</strong> {entry.className || "Not provided"}</div>
-                    <label style={{ display: "grid", gap: 4 }}>
-                      Class teacher
-                      <input
-                        value={entry.teacherName}
-                        onChange={(event) => handleImportTeacherNameChange(index, event.target.value)}
-                        placeholder="Not assigned"
-                      />
-                    </label>
-                    <label style={{ display: "grid", gap: 4 }}>
-                      Report type
-                      <select
-                        value={entry.reportKind}
-                        onChange={(event) => handleImportReportKindChange(index, event.target.value as ResultImportReportKind)}
-                      >
-                        <option value="Midterm / Continuous Assessment">Midterm Report</option>
-                        <option value="End-of-Term / Year Report Card">End-of-Term Report</option>
-                      </select>
-                    </label>
-                    <label style={{ display: "grid", gap: 4 }}>
-                      Calculation mode
-                      <select
-                        value={entry.items[0]?.calculationMode ?? "Manual"}
-                        onChange={(event) => handleImportModeChange(index, event.target.value as "Manual" | "Automatic")}
-                      >
-                        <option value="Manual">Manual entry (recommended)</option>
-                        <option value="Automatic">Automatic calculation</option>
-                      </select>
-                    </label>
+                  <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 9, background: "#f8fafc", color: "#334155", fontSize: 13 }}>
+                    <strong>Results context:</strong>{" "}
+                    {entry.academicYear || "Session to confirm"} · {entry.term ? `${entry.term} Term` : "Term to confirm"} ·{" "}
+                    {entry.reportKind === "Midterm / Continuous Assessment"
+                      ? "Midterm (CA)"
+                      : entry.reportKind === "End-of-Term / Year Report Card"
+                        ? "End-of-Term"
+                        : "Report type to confirm"} ·{" "}
+                    {entry.items[0]?.calculationMode === "Automatic" ? "Automatic scoring" : "Manual scoring"}
+                    <div style={{ marginTop: 4, color: "#64748b" }}>
+                      These values are read from the worksheet. Open settings only when this pupil's sheet needs a correction.
+                    </div>
                   </div>
+                  <details style={{ marginBottom: 12 }}>
+                    <summary style={{ cursor: "pointer", fontWeight: 700 }}>Change period, report type, teacher or scoring settings (only if needed)</summary>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginTop: 10 }}>
+                      <label style={{ display: "grid", gap: 4 }}>
+                        Session
+                        <input value={entry.academicYear} onChange={(event) => handleImportPeriodChange(index, "academicYear", event.target.value)} />
+                      </label>
+                      <label style={{ display: "grid", gap: 4 }}>
+                        Term
+                        <select value={entry.term ?? ""} onChange={(event) => handleImportPeriodChange(index, "term", event.target.value)}>
+                          <option value="">Select term</option>
+                          <option value="First">First</option>
+                          <option value="Second">Second</option>
+                          <option value="Third">Third</option>
+                        </select>
+                      </label>
+                      <label style={{ display: "grid", gap: 4 }}>
+                        Class teacher
+                        <input
+                          value={entry.teacherName}
+                          onChange={(event) => handleImportTeacherNameChange(index, event.target.value)}
+                          placeholder="Not assigned"
+                        />
+                      </label>
+                      <label style={{ display: "grid", gap: 4 }}>
+                        Report type
+                        <select
+                          value={entry.reportKind}
+                          onChange={(event) => handleImportReportKindChange(index, event.target.value as ResultImportReportKind)}
+                        >
+                          <option value="Unclear">Choose report type</option>
+                          <option value="Midterm / Continuous Assessment">Midterm Report</option>
+                          <option value="End-of-Term / Year Report Card">End-of-Term Report</option>
+                        </select>
+                      </label>
+                      <label style={{ display: "grid", gap: 4 }}>
+                        Calculation mode
+                        <select
+                          value={entry.items[0]?.calculationMode ?? "Manual"}
+                          onChange={(event) => handleImportModeChange(index, event.target.value as "Manual" | "Automatic")}
+                        >
+                          <option value="Manual">Manual entry</option>
+                          <option value="Automatic">Automatic calculation</option>
+                        </select>
+                      </label>
+                    </div>
+                  </details>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12, color: "#334155" }}>
                     <div>
                       <strong>{entry.items.length} subject row(s)</strong>. {entry.items[0]?.calculationMode === "Automatic"
@@ -2669,7 +2685,7 @@ export default function ResultsPage() {
                     <table style={{ width: "100%", minWidth: 1050, borderCollapse: "collapse" }}>
                       <thead>
                         <tr>
-                          {["Workbook subject / mapping", "Class", "Subject record", "CA", ...(entry.assessmentType === "CA" ? ["Maximum"] : ["Exam", "Total", "Grade", "Remark"]), "Existing result"].map((heading) => (
+                          {["Workbook subject / mapping", "Subject record", "CA", ...(entry.assessmentType === "CA" ? ["Maximum"] : ["Exam", "Total", "Grade", "Remark"]), "Existing result"].map((heading) => (
                             <th key={heading} style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #cbd5e1", whiteSpace: "nowrap" }}>{heading}</th>
                           ))}
                         </tr>
@@ -2719,13 +2735,6 @@ export default function ResultsPage() {
                                     Remove added row
                                   </Button>
                                 ) : null}
-                              </td>
-                              <td style={cellStyle}>
-                                <select aria-label={`Class for ${item.subjectName}`} value={item.classId ?? ""} onChange={(event) => handleImportEntityChange(index, itemIndex, "classId", event.target.value)}>
-                                  <option value="">Select class</option>
-                                  {classes.map((schoolClass) => <option key={schoolClass.id} value={schoolClass.id}>{schoolClass.class_name}</option>)}
-                                </select>
-                                {!item.classId ? <span role="alert" style={fieldErrorStyle}>Match a class.</span> : null}
                               </td>
                               <td style={cellStyle}>
                                 <select aria-label={`Subject record for ${item.subjectName}`} value={item.subjectId ?? ""} onChange={(event) => handleImportEntityChange(index, itemIndex, "subjectId", event.target.value)}>

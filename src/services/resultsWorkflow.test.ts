@@ -3319,3 +3319,13 @@ describe("uncertain result save feedback", () => {
     expect(reportCardService).toContain("Refresh Reports and check the pupil's saved status before retrying.");
   });
 });
+
+
+describe("pupil review keeps the important context visible and advanced settings out of the way", () => {
+  it("shows the pupil period summary and keeps exception-only settings collapsed", () => {
+    expect(resultsPage).toContain("<strong>Results context:</strong>");
+    expect(resultsPage).toContain("Change period, report type, teacher or scoring settings (only if needed)");
+    expect(resultsPage).toContain('<option value="Unclear">Choose report type</option>');
+    expect(resultsPage).not.toContain('aria-label={`Class for ${item.subjectName}`}');
+  });
+});
