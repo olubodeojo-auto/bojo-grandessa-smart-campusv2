@@ -3106,7 +3106,8 @@ describe("results workflow migration contract", () => {
     expect(reportCardService).toContain("workflowStatus");
     expect(reportCardService).toContain('rpc("mark_result_import_review_draft_status_v2"');
     expect(resultsPage).not.toContain("markImportReviewDraftStatus({");
-    expect(resultsPage).toContain("save_imported_report_card_and_track_v1");
+    expect(resultsPage).toContain("await saveImportedReportCard({");
+    expect(reportCardService).toContain('rpc("save_imported_report_card_and_track_v1"');
     expect(atomicImportMigration).toContain("save_imported_report_card_and_track_v1");
     expect(atomicImportMigration).toContain("target_existing_result_ids");
     expect(atomicImportMigration).toContain("workflow_status");
