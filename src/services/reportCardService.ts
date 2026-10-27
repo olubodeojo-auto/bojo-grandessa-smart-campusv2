@@ -186,7 +186,10 @@ export type ImportReviewWorkbookSummary = ImportReviewWorkbook & {
   draftImportedSubjectRowCount: number;
   duplicatePupilCount: number;
   duplicatePupilNames: string[];
+  linkedPupilNames: string[];
   unresolvedPupilNames: string[];
+  manualReviewDetails: string[];
+  unmatchedPupilNames: string[];
   reportTypeReviewPupilNames: string[];
   missingScorePupilNames: string[];
   subjectReviewPupilNames: string[];
@@ -289,6 +292,15 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
     const unresolved = included.filter((entry) =>
       entry.matchStatus !== "matched" || !entry.selectedStudentId
     );
+    const linkedPupils = included.filter((entry) =>
+      entry.matchStatus === "matched" && Boolean(entry.selectedStudentId)
+    );
+    const manualReviews = included.filter((entry) =>
+      entry.matchStatus === "manual-review" && !entry.selectedStudentId
+    );
+    const unmatchedPupils = included.filter((entry) =>
+      entry.matchStatus === "unmatched" || (!entry.selectedStudentId && entry.matchStatus !== "manual-review")
+    );
     const reportTypeReview = included.filter((entry) => entry.reportKind === "Unclear");
     const missingScores = included.filter((entry) => entry.items.length === 0);
     const subjectReview = included.filter((entry) =>
@@ -296,6 +308,16 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
         /subject .*must be resolved|no valid subject rows detected|subject.*needs? review/i.test(warning)
       )
     );
+    const manualReviewDetails = manualReviews.map((entry) => {
+      const originalName = typeof (entry as ResultImportPreviewEntry & { sourceStudentName?: string }).sourceStudentName === "string"
+        ? (entry as ResultImportPreviewEntry & { sourceStudentName?: string }).sourceStudentName!
+        : entry.studentName;
+      const reviewReason = entry.warnings.find((warning) =>
+        warning.startsWith("Possible match:") || warning.startsWith("Admission number ")
+          || warning.startsWith("The name matches ") || warning.includes("workbook class differs")
+      );
+      return reviewReason ? `${originalName}: ${reviewReason}` : `${originalName}: confirm the pupil and class from the school register.`;
+    });
     const separatorIndex = workbook.workbookKey.indexOf(":");
     const sheetName = separatorIndex >= 0
       ? workbook.workbookKey.slice(separatorIndex + 1)
@@ -328,7 +350,10 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
       draftImportedSubjectRowCount: importedDrafts.reduce((total, entry) => total + subjectCount(entry), 0),
       duplicatePupilCount: duplicateNames.length,
       duplicatePupilNames: duplicateNames,
+      linkedPupilNames: uniqueSorted(linkedPupils.map((entry) => entry.studentName)),
       unresolvedPupilNames: uniqueSorted(unresolved.map((entry) => entry.studentName)),
+      manualReviewDetails: uniqueSorted(manualReviewDetails),
+      unmatchedPupilNames: uniqueSorted(unmatchedPupils.map((entry) => entry.studentName)),
       reportTypeReviewPupilNames: uniqueSorted(reportTypeReview.map((entry) => entry.studentName)),
       missingScorePupilNames: uniqueSorted(missingScores.map((entry) => entry.studentName)),
       subjectReviewPupilNames: uniqueSorted(subjectReview.map((entry) => entry.studentName)),
