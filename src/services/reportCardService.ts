@@ -336,7 +336,9 @@ export async function getImportReviewWorkbookSummaries(): Promise<ImportReviewWo
         ? "Midterm (CA)"
         : entry.reportKind === "End-of-Term / Year Report Card"
           ? "End-of-Term"
-          : entry.reportKind)),
+          : entry.reportKind === "Unclear"
+            ? "Report type to confirm"
+            : entry.reportKind)),
       classes,
       includedEntryCount: included.length,
       excludedEntryCount: excluded.length,
