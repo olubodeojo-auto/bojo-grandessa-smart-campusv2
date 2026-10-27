@@ -2530,7 +2530,8 @@ describe("result lifecycle permissions", () => {
     expect(resultForm).toContain('if (mode === "edit" && result?.status === "Published")');
     expect(batchEntry).toContain('row.matches.some((match) => match.status === "Published")');
     expect(batchEntry).toContain('disabled={existing.status === "Published"}');
-    expect(resultsPage).toContain('if (updateTarget?.status === "Published")');
+    expect(resultsPage).toContain('if (updateTarget && updateTarget.status !== "Draft")');
+    expect(resultsPage).toContain('candidate.status === "Draft" && (');
     expect(resultsPage).toContain('(isAdmin && canAdministratorEditResult(candidate))');
   });
 
