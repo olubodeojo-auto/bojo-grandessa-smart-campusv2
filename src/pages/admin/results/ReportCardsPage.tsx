@@ -11,7 +11,8 @@ import FormField, { inputStyle } from "../../../components/forms/FormField";
 import SectionCard from "../../../components/ui/SectionCard";
 import Button from "../../../components/ui/Button";
 import { type AcademicCalendarConfig } from "../../../config/grandessaCalendar";
-import { buildStudentReportCard, deleteReportCard, getImportReviewWorkbookSummaries, getSavedReportCards, saveReportCardDetails, type ImportReviewWorkbookSummary, type SavedReportCard } from "../../../services/reportCardService";
+import { buildStudentReportCard, deleteReportCard, getImportReviewDrafts, getImportReviewWorkbooks, getSavedReportCards, saveReportCardDetails, type SavedReportCard } from "../../../services/reportCardService";
+import { reconcileSavedImportStudentMatches, type ResultImportPreviewEntry } from "../../../services/resultImportService";
 import { getAcademicSessionSetups, saveAcademicSessionSetup } from "../../../services/academicSessionService";
 import { getClasses } from "../../../services/classService";
 import { deleteResult, getResultPublicationEvidence, getResults, publishResult, reviewResult } from "../../../services/resultService";
@@ -49,6 +50,45 @@ import {
 } from "../../../utils/reportCenter";
 
 const TERMS: ReportTerm[] = ["First", "Second", "Third"];
+
+type PendingImportPupil = {
+  workbookKey: string;
+  ownerId: string;
+  ownerName: string;
+  sheetName: string;
+  entry: ResultImportPreviewEntry;
+};
+
+type PendingImportPupilStatus = {
+  label: string;
+  explanation: string;
+};
+
+function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingImportPupilStatus {
+  if (entry.matchStatus === "manual-review") {
+    return { label: "Confirm pupil", explanation: "Confirm the registered pupil and class against the school list before importing marks." };
+  }
+  if (entry.matchStatus === "unmatched" || !entry.selectedStudentId) {
+    return { label: "Pupil match needed", explanation: "Select the correct registered pupil before importing. No marks have been imported for this entry." };
+  }
+  if (entry.reportKind === "Unclear") {
+    return { label: "Report type to confirm", explanation: "Confirm the correct report type before importing." };
+  }
+  if (!entry.term) {
+    return { label: "Term to confirm", explanation: "Confirm the term from the school's approved results sheet before importing." };
+  }
+  if (entry.items.length === 0) {
+    return { label: "No subject scores found", explanation: "Check the original worksheet. No subject-score rows were detected for this pupil." };
+  }
+  const unresolvedSubject = entry.items.find((item) => !item.subjectId);
+  if (unresolvedSubject) {
+    return { label: "Subject to confirm", explanation: `Confirm the subject for "${unresolvedSubject.subjectName}" before importing.` };
+  }
+  if (entry.items.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
+    return { label: "Check marks", explanation: "One or more marks need correction before this pupil's results can be imported." };
+  }
+  return { label: "Ready to review", explanation: "Check the subject marks, then complete this pupil's import." };
+}
 
 function statusBadgeStyle(status: string): React.CSSProperties {
   const color = status === "Published" ? ["#166534", "#dcfce7"]
@@ -157,7 +197,7 @@ export default function ReportCardsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [savedReports, setSavedReports] = useState<SavedReportCard[]>([]);
-  const [savedImportWorkbooks, setSavedImportWorkbooks] = useState<ImportReviewWorkbookSummary[]>([]);
+  const [pendingImportPupils, setPendingImportPupils] = useState<PendingImportPupil[]>([]);
   const [loadingImportWorkbooks, setLoadingImportWorkbooks] = useState(true);
   const [importWorkbooksError, setImportWorkbooksError] = useState("");
   const [results, setResults] = useState<Result[]>([]);
@@ -173,6 +213,7 @@ export default function ReportCardsPage() {
   const [publishVerificationErrors, setPublishVerificationErrors] = useState<Record<string, string>>({});
   const [unpublishVerificationErrors, setUnpublishVerificationErrors] = useState<Record<string, string>>({});
   const [reportSearch, setReportSearch] = useState("");
+  const [reportListView, setReportListView] = useState<"drafts" | "published">("drafts");
   const [academicYear, setAcademicYear] = useState<string>(searchParams.get("academicYear") ?? "");
   const [calendarConfig, setCalendarConfig] = useState<AcademicCalendarConfig | null>(null);
   const [academicSessions, setAcademicSessions] = useState<AcademicSession[]>([]);
@@ -215,13 +256,36 @@ export default function ReportCardsPage() {
     }
   }, []);
 
-  const refreshSavedImportWorkbooks = useCallback(async (): Promise<void> => {
+  const refreshPendingImportPupils = useCallback(async (): Promise<void> => {
     setLoadingImportWorkbooks(true);
     setImportWorkbooksError("");
     try {
-      setSavedImportWorkbooks(await getImportReviewWorkbookSummaries());
+      const [workbooks, roster] = await Promise.all([getImportReviewWorkbooks(), getStudents()]);
+      const workbookEntries = await Promise.all(workbooks.map(async (workbook) => {
+        const entries = await getImportReviewDrafts(workbook.workbookKey, workbook.ownerId);
+        const pendingEntries = reconcileSavedImportStudentMatches(
+          entries.filter((entry) => !entry.workflowStatus && entry.included !== false),
+          roster,
+        );
+        const separatorIndex = workbook.workbookKey.indexOf(":");
+        const sheetName = separatorIndex >= 0
+          ? workbook.workbookKey.slice(separatorIndex + 1)
+          : "Saved worksheet";
+        return pendingEntries.map((entry) => ({
+          workbookKey: workbook.workbookKey,
+          ownerId: workbook.ownerId,
+          ownerName: workbook.ownerName,
+          sheetName,
+          entry,
+        }));
+      }));
+      setPendingImportPupils(workbookEntries.flat().sort((left, right) =>
+        left.entry.studentName.localeCompare(right.entry.studentName)
+        || left.entry.academicYear.localeCompare(right.entry.academicYear)
+        || (left.entry.term ?? "").localeCompare(right.entry.term ?? ""),
+      ));
     } catch (err) {
-      setImportWorkbooksError(err instanceof Error ? err.message : "Unable to load saved spreadsheet reviews.");
+      setImportWorkbooksError(err instanceof Error ? err.message : "Unable to load outstanding pupil imports.");
     } finally {
       setLoadingImportWorkbooks(false);
     }
@@ -311,8 +375,8 @@ export default function ReportCardsPage() {
   }, [refreshSavedReportCards]);
 
   useEffect(() => {
-    void refreshSavedImportWorkbooks();
-  }, [refreshSavedImportWorkbooks]);
+    void refreshPendingImportPupils();
+  }, [refreshPendingImportPupils]);
 
   useEffect(() => {
     async function loadStudents(): Promise<void> {
@@ -423,6 +487,20 @@ export default function ReportCardsPage() {
     () => filteredReportPeriods.filter((period) => getReportCenterPeriodStatus(period) === "Published"),
     [filteredReportPeriods],
   );
+  const filteredPendingImportPupils = useMemo(() => pendingImportPupils.filter((review) => {
+    const originalName = (review.entry as ResultImportPreviewEntry & { sourceStudentName?: string }).sourceStudentName
+      ?? review.entry.studentName;
+    const searchName = reportSearch.trim().toLowerCase();
+    const student = students.find((candidate) => candidate.id === review.entry.selectedStudentId);
+    const registeredName = student ? `${student.first_name} ${student.last_name}`.trim() : "";
+    const className = review.entry.className ?? "";
+    return !searchName
+      || originalName.toLowerCase().includes(searchName)
+      || review.entry.studentName.toLowerCase().includes(searchName)
+      || registeredName.toLowerCase().includes(searchName)
+      || review.entry.admissionNumber.toLowerCase().includes(searchName)
+      || className.toLowerCase().includes(searchName);
+  }), [pendingImportPupils, reportSearch, students]);
 
   async function openReportPeriod(period: ReportCenterPeriod, editDetails = false): Promise<void> {
     const student = students.find((candidate) => candidate.id === period.studentId);
@@ -1201,243 +1279,132 @@ export default function ReportCardsPage() {
         </div>
       ) : null}
 
-      <details className="card" style={{ padding: 18 }}>
-        <summary style={{ cursor: "pointer", listStyle: "none", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ minWidth: 0 }}>
-            <strong style={{ display: "block", color: "#0f172a", fontSize: 16 }}>Spreadsheet imports (saved worksheets)</strong>
-            <span style={{ display: "block", color: "#64748b", fontSize: 13, marginTop: 4 }}>Separate from pupil result status. Open only when checking a saved upload.</span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-            <span style={{ color: "#475569", fontSize: 13, fontWeight: 700 }}>
-              {savedImportWorkbooks.length} workbook(s) · {savedImportWorkbooks.reduce((total, workbook) => total + workbook.includedEntryCount, 0)} pupil record(s) to review
-            </span>
-            <span style={{ color: "#1d4ed8", fontSize: 13, fontWeight: 700 }}>Open review queue ▾</span>
-          </div>
-        </summary>
-        <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
-          <div>
-            <h2 id="saved-import-reviews-heading" style={{ margin: 0, fontSize: 22 }}>Saved worksheet reviews</h2>
-            <p style={{ color: "#64748b", margin: "6px 0 0", maxWidth: 760 }}>
-              Open a saved worksheet when you need to reconcile pupil names, check marks or continue an import. Saving or reviewing work does not publish results or email parents.
-            </p>
-            <p style={{ color: "#334155", fontWeight: 700, margin: "8px 0 0" }}>
-              {savedImportWorkbooks.length} saved workbook(s) · {savedImportWorkbooks.reduce((total, workbook) => total + workbook.includedEntryCount, 0)} included pupil review(s) · {savedImportWorkbooks.reduce((total, workbook) => total + workbook.subjectRowCount, 0)} subject scores
-            </p>
-          </div>
-          <Button type="button" variant="secondary" onClick={() => void refreshSavedImportWorkbooks()} disabled={loadingImportWorkbooks}>
-            {loadingImportWorkbooks ? "Refreshing…" : "Refresh saved work"}
-          </Button>
-        </div>
-
-        {importWorkbooksError ? (
-          <div role="alert" style={{ padding: 10, border: "1px solid #fecaca", borderRadius: 10, background: "#fef2f2", color: "#991b1b" }}>
-            {importWorkbooksError}
-          </div>
-        ) : null}
-        {loadingImportWorkbooks ? (
-          <p role="status" style={{ color: "#64748b", margin: 0 }}>Checking for saved spreadsheet reviews…</p>
-        ) : null}
-        {!loadingImportWorkbooks && !importWorkbooksError && savedImportWorkbooks.length === 0 ? (
-          <p style={{ color: "#64748b", margin: 0 }}>There are no saved spreadsheet reviews available to resume. Existing result records and their publication status appear below.</p>
-        ) : null}
-        {savedImportWorkbooks.length > 0 ? (
-          <div style={{ display: "grid", gap: 10 }}>
-            {savedImportWorkbooks.map((workbook) => {
-              const periodParts = [...workbook.academicYears, ...workbook.terms, ...workbook.reportKinds];
-              const periodLabel = periodParts.length > 0
-                ? [...new Set(periodParts)].join(" · ")
-                : "Period needs review";
-              const updatedAt = new Date(workbook.updatedAt);
-              const lastSaved = Number.isNaN(updatedAt.getTime())
-                ? "Last saved date unavailable"
-                : `Last saved ${updatedAt.toLocaleString()}`;
-              const isConfigured = workbook.academicYears.every((year) =>
-                workbook.terms.every((termLabel) => {
-                  const session = academicSessions.find((item) => item.session_name === year);
-                  const termName = termLabel.replace(/ Term$/, "");
-                  return Boolean(session?.terms.some((item) => item.term_name === termName));
-                })
-              );
-              return (
-                <article key={`${workbook.ownerId}::${workbook.workbookKey}`} style={{ display: "grid", gap: 10, border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
-                    <div>
-                      <h3 style={{ margin: 0, fontSize: 17 }}>{periodLabel}</h3>
-                      <p style={{ margin: "5px 0 0", color: "#64748b", fontSize: 13 }}>
-                        Worksheet: {workbook.sheetName} · Saved by {workbook.ownerName} · {lastSaved}
-                      </p>
-                    </div>
-                    {workbook.includedEntryCount > 0 ? (
-                      <Button type="button" onClick={() => {
-                        const params = new URLSearchParams({
-                          resumeWorkbook: workbook.workbookKey,
-                          resumeOwner: workbook.ownerId,
-                        });
-                        navigate(`/admin/results?${params.toString()}`);
-                      }}>
-                        Open this sheet
-                      </Button>
-                    ) : null}
-                  </div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: "#334155", fontSize: 13 }}>
-                    {workbook.includedEntryCount > 0 ? (
-                      <>
-                        <span>{workbook.includedEntryCount} pupil record(s) to check</span>
-                        <span>·</span>
-                        <span>{workbook.subjectRowCount} subject score(s) to check</span>
-                        <span>·</span>
-                        <span style={{ color: workbook.unresolvedEntryCount > 0 ? "#92400e" : "#166534", fontWeight: 700 }}>
-                          {workbook.unresolvedEntryCount > 0 ? `${workbook.unresolvedEntryCount} pupil name/class match(es) need confirmation` : "Pupil matches resolved"}
-                        </span>
-                      </>
-                    ) : (
-                      <span style={{ color: workbook.importedEntryCount > 0 ? "#166534" : "#64748b", fontWeight: 700 }}>
-                        {workbook.importedEntryCount > 0 ? "All included pupil entries have already been imported" : "No included pupil entries are waiting to import"}
-                      </span>
-                    )}
-                    {workbook.excludedEntryCount > 0 ? <><span>·</span><span>{workbook.excludedEntryCount} excluded duplicate/ignored review(s)</span></> : null}
-                    {workbook.publishedEntryCount > 0 ? (
-                      <>
-                        <span>·</span>
-                        <span style={{ color: "#166534", fontWeight: 700 }}>Published: {workbook.publishedEntryCount} pupil(s), {workbook.publishedSubjectRowCount} result(s)</span>
-                      </>
-                    ) : null}
-                    {workbook.draftImportedEntryCount > 0 ? (
-                      <>
-                        <span>·</span>
-                        <span style={{ color: "#92400e", fontWeight: 700 }}>Imported as Draft: {workbook.draftImportedEntryCount} pupil(s), {workbook.draftImportedSubjectRowCount} result(s)</span>
-                      </>
-                    ) : null}
-                  </div>
-                  {workbook.includedEntryCount > 0 ? (
-                    <div role="note" style={{ display: "grid", gap: 7, padding: "12px 13px", borderRadius: 10, background: "#f8fafc", border: "1px solid #cbd5e1", color: "#334155", fontSize: 13 }}>
-                      <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>Here is what needs doing for this sheet</p>
-                      {workbook.linkedPupilNames.length > 0 ? (
-                        <p style={{ margin: 0 }}>
-                          <strong>Matched to the school register (use these full registered names):</strong> {workbook.linkedPupilNames.join(", ")}. These names are linked, but their marks have not been imported by this step.
-                        </p>
-                      ) : null}
-                      {workbook.reportTypeReviewPupilNames.length > 0 ? (
-                        <p style={{ margin: 0 }}>
-                          <strong>Choose the report type for:</strong> {workbook.reportTypeReviewPupilNames.join(", ")}. Select Midterm (CA) or End-of-Term based on the original school sheet.
-                        </p>
-                      ) : null}
-                      {workbook.manualReviewDetails.length > 0 ? (
-                        <div style={{ display: "grid", gap: 5 }}>
-                          <strong>Needs your confirmation — please check the original class list:</strong>
-                          <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: 5 }}>
-                            {workbook.manualReviewDetails.map((detail) => <li key={detail}>{detail}</li>)}
-                          </ul>
-                        </div>
-                      ) : null}
-                      {workbook.unmatchedPupilNames.length > 0 ? (
-                        <p style={{ margin: 0 }}>
-                          <strong>Not yet matched to a pupil record:</strong> {workbook.unmatchedPupilNames.join(", ")}. Do not guess or create another pupil record.
-                        </p>
-                      ) : null}
-                      {workbook.missingScorePupilNames.length > 0 ? (
-                        <p style={{ margin: 0 }}>
-                          <strong>No subject scores were detected for:</strong> {workbook.missingScorePupilNames.join(", ")}. Check the original worksheet.
-                        </p>
-                      ) : null}
-                      {workbook.subjectReviewPupilNames.length > 0 ? (
-                        <p style={{ margin: 0 }}>
-                          <strong>Subject name needs checking:</strong> {workbook.subjectReviewPupilNames.join(", ")}.
-                        </p>
-                      ) : null}
-                      <p style={{ margin: 0, paddingTop: 3 }}>Choose <strong>Open this sheet</strong> to check the listed items. The system will not import marks until the required checks are complete. Publishing is a separate step; no emails are sent.</p>
-                    </div>
-                  ) : null}
-                  {workbook.duplicatePupilCount > 0 ? (
-                    <p role="alert" style={{ margin: 0, padding: "10px 12px", borderRadius: 8, border: "1px solid #fde68a", background: "#fffbeb", color: "#92400e", fontSize: 13 }}>
-                      Possible duplicate across saved uploads: {workbook.duplicatePupilNames.join(", ")} {workbook.duplicatePupilCount === 1 ? "also has" : "also have"} an included draft for this same session, term and report type. Compare the versions and import only the school-approved one.
-                    </p>
-                  ) : null}
-                  {workbook.classes.length > 0 ? (
-                    <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>Classes: {workbook.classes.join(", ")}</p>
-                  ) : null}
-                  {!isConfigured ? (
-                    <p role="alert" style={{ margin: 0, padding: "9px 11px", borderRadius: 8, background: "#fff7ed", color: "#9a3412", fontSize: 13 }}>
-                      This workbook&apos;s academic session or term is not configured in the school calendar yet. Enter the school&apos;s official dates before importing or publishing; do not guess dates.
-                    </p>
-                  ) : null}
-                </article>
-              );
-            })}
-          </div>
-        ) : null}
-        </div>
-      </details>
-
       <SectionCard>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: 22 }}>Individual pupil results</h2>
-            <p style={{ color: "#64748b", margin: "6px 0 0" }}>Each card belongs to one pupil and one report period. Use the actions on that card to preview, edit or publish that pupil&apos;s results.</p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }} role="group" aria-label="Choose pupil report list">
+            <Button type="button" variant={reportListView === "drafts" ? "primary" : "secondary"} aria-pressed={reportListView === "drafts"} onClick={() => setReportListView("drafts")}>
+              Draft student list
+            </Button>
+            <Button type="button" variant={reportListView === "published" ? "primary" : "secondary"} aria-pressed={reportListView === "published"} onClick={() => setReportListView("published")}>
+              Published student list
+            </Button>
           </div>
-          <FormField label="Search pupil">
+
+          <FormField label="Find a pupil">
             <input
               style={{ ...inputStyle, fontSize: 16, padding: "14px 16px" }}
               value={reportSearch}
               onChange={(event) => setReportSearch(event.target.value)}
-              placeholder="Search pupil by name or admission number…"
+              placeholder="Type a pupil name or admission number"
               aria-label="Search pupil by name or admission number"
             />
           </FormField>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
-            <div style={{ border: "1px solid #fed7aa", background: "#fff7ed", borderRadius: 10, padding: "10px 12px" }}>
-              <div style={{ color: "#9a3412", fontSize: 12, fontWeight: 700 }}>Drafts &amp; needs attention</div>
-              <div style={{ color: "#7c2d12", fontSize: 25, fontWeight: 800 }}>{needsAttentionReportPeriods.length}</div>
-            </div>
-            <div style={{ border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: 10, padding: "10px 12px" }}>
-              <div style={{ color: "#166534", fontSize: 12, fontWeight: 700 }}>Published</div>
-              <div style={{ color: "#14532d", fontSize: 25, fontWeight: 800 }}>{publishedReportPeriods.length}</div>
-            </div>
-          </div>
-          {loadingPeriods ? (
-            <EmptyState title="Finding pupil reports" description="Loading individual pupil result periods." />
-          ) : filteredReportPeriods.length === 0 ? (
-            <EmptyState
-              title={reportSearch ? "No matching pupil reports" : "No pupil reports yet"}
-              description={reportSearch
-                ? "Try a different name, admission number or class."
-                : savedImportWorkbooks.length > 0
-                  ? "No result records have been imported yet. Open Spreadsheet imports above to continue a saved worksheet review."
-                  : "Pupil reports will appear here once subject results or saved report details exist."}
-            />
-          ) : (
-            <div style={{ display: "grid", gap: 22, minWidth: 0 }}>
-              <section aria-labelledby="report-drafts-heading" style={{ display: "grid", gap: 10, minWidth: 0 }}>
+
+          {reportListView === "drafts" ? (
+            <div style={{ display: "grid", gap: 20, minWidth: 0 }}>
+              <section aria-labelledby="imports-awaiting-reconciliation" style={{ display: "grid", gap: 10, minWidth: 0 }}>
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                    <h3 id="report-drafts-heading" style={{ margin: 0, fontSize: 18 }}>Drafts &amp; needs attention</h3>
-                    <span style={{ ...statusBadgeStyle("Draft"), fontSize: 13 }}>{needsAttentionReportPeriods.length} pupil report(s)</span>
-                  </div>
-                  <p style={{ color: "#64748b", fontSize: 13, margin: "4px 0 0" }}>These reports are not fully published. Open each pupil&apos;s card to check scores, preview or publish when all checks pass.</p>
+                  <h2 id="imports-awaiting-reconciliation" style={{ margin: 0, fontSize: 19 }}>Imports awaiting reconciliation</h2>
+                  <p style={{ color: "#64748b", margin: "5px 0 0", fontSize: 13 }}>Each row is one pupil still waiting to be checked or imported. Open that pupil directly to continue.</p>
                 </div>
-                {needsAttentionReportPeriods.length === 0 ? (
-                  <p style={{ color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 10, padding: 14, margin: 0 }}>No drafts or reports needing attention in this search.</p>
+                {importWorkbooksError ? (
+                  <div role="alert" style={{ padding: 10, border: "1px solid #fecaca", borderRadius: 10, background: "#fef2f2", color: "#991b1b" }}>{importWorkbooksError}</div>
+                ) : null}
+                {loadingImportWorkbooks ? (
+                  <p role="status" style={{ color: "#64748b", margin: 0 }}>Loading outstanding pupil imports…</p>
+                ) : filteredPendingImportPupils.length === 0 ? (
+                  <p style={{ color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 10, padding: 12, margin: 0 }}>
+                    {reportSearch ? "No outstanding import matches this search." : "No outstanding imports to reconcile."}
+                  </p>
                 ) : (
-                  <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
+                  <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
+                    {filteredPendingImportPupils.map((review) => {
+                      const entry = review.entry;
+                      const entryWithSource = entry as ResultImportPreviewEntry & { sourceStudentName?: string };
+                      const worksheetName = entryWithSource.sourceStudentName?.trim() || entry.studentName;
+                      const possiblePupil = students.find((candidate) => candidate.id === entry.matchedStudentId);
+                      const confirmedPupil = students.find((candidate) => candidate.id === entry.selectedStudentId);
+                      const displayName = entry.matchStatus === "matched" && confirmedPupil
+                        ? `${confirmedPupil.first_name} ${confirmedPupil.last_name}`.trim()
+                        : worksheetName;
+                      const progress = getPendingImportPupilStatus(entry);
+                      const reportTypeLabel = entry.reportKind === "Midterm / Continuous Assessment"
+                        ? "Midterm (CA)"
+                        : entry.reportKind === "End-of-Term / Year Report Card"
+                          ? "End-of-Term"
+                          : "Report type to confirm";
+                      const params = new URLSearchParams({
+                        resumeWorkbook: review.workbookKey,
+                        resumeOwner: review.ownerId,
+                        resumeEntry: entry.studentKey,
+                      });
+                      return (
+                        <article key={`${review.ownerId}::${review.workbookKey}::${entry.studentKey}`} style={{ display: "grid", gap: 8, border: "1px solid #e2e8f0", borderRadius: 10, padding: 13, minWidth: 0 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10, flexWrap: "wrap" }}>
+                            <div style={{ minWidth: 0 }}>
+                              <h3 style={{ margin: 0, fontSize: 17, overflowWrap: "anywhere" }}>{displayName}</h3>
+                              <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13 }}>
+                                {entry.admissionNumber ? `Admission no.: ${entry.admissionNumber} · ` : ""}Worksheet class: {entry.className || "Needs confirmation"}
+                              </p>
+                              <p style={{ margin: "3px 0 0", color: "#64748b", fontSize: 13 }}>
+                                {entry.academicYear || "Session to confirm"} · {entry.term ? `${entry.term} Term` : "Term to confirm"} · {reportTypeLabel}
+                              </p>
+                              {entry.matchStatus !== "matched" && possiblePupil ? (
+                                <p style={{ margin: "4px 0 0", color: "#92400e", fontSize: 13 }}>Possible registered match: {possiblePupil.first_name} {possiblePupil.last_name}. Confirm before importing.</p>
+                              ) : null}
+                              {worksheetName !== displayName ? (
+                                <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 12 }}>Name on worksheet: {worksheetName}</p>
+                              ) : null}
+                            </div>
+                            <span style={{ ...statusBadgeStyle(progress.label), flexShrink: 0 }}>{progress.label}</span>
+                          </div>
+                          <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>{progress.explanation}</p>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <Button type="button" onClick={() => navigate(`/admin/results?${params.toString()}`)}>Reconcile this pupil</Button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              <section aria-labelledby="draft-pupil-results" style={{ display: "grid", gap: 10, minWidth: 0 }}>
+                <div>
+                  <h2 id="draft-pupil-results" style={{ margin: 0, fontSize: 19 }}>Draft pupil results</h2>
+                  <p style={{ color: "#64748b", margin: "5px 0 0", fontSize: 13 }}>Results already imported but not yet published.</p>
+                </div>
+                {loadingPeriods ? (
+                  <p role="status" style={{ color: "#64748b", margin: 0 }}>Loading draft pupil results…</p>
+                ) : needsAttentionReportPeriods.length === 0 ? (
+                  <p style={{ color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 10, padding: 12, margin: 0 }}>
+                    {reportSearch ? "No draft pupil results match this search." : "No imported drafts need attention."}
+                  </p>
+                ) : (
+                  <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
                     {needsAttentionReportPeriods.map((period) => renderReportPeriodCard(period))}
                   </div>
                 )}
               </section>
-              <section aria-labelledby="report-published-heading" style={{ display: "grid", gap: 10, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                  <h3 id="report-published-heading" style={{ margin: 0, fontSize: 18 }}>Published</h3>
-                  <span style={{ ...statusBadgeStyle("Published"), fontSize: 13 }}>{publishedReportPeriods.length} pupil report(s)</span>
-                </div>
-                {publishedReportPeriods.length === 0 ? (
-                  <p style={{ color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 10, padding: 14, margin: 0 }}>No published reports in this search.</p>
-                ) : (
-                  <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
-                    {publishedReportPeriods.map((period) => renderReportPeriodCard(period))}
-                  </div>
-                )}
-              </section>
             </div>
+          ) : (
+            <section aria-labelledby="published-pupil-results" style={{ display: "grid", gap: 10, minWidth: 0 }}>
+              <div>
+                <h2 id="published-pupil-results" style={{ margin: 0, fontSize: 19 }}>Published student list</h2>
+                <p style={{ color: "#64748b", margin: "5px 0 0", fontSize: 13 }}>Only pupil results whose subject records are Published appear here.</p>
+              </div>
+              {loadingPeriods ? (
+                <p role="status" style={{ color: "#64748b", margin: 0 }}>Loading published pupil results…</p>
+              ) : publishedReportPeriods.length === 0 ? (
+                <p style={{ color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 10, padding: 12, margin: 0 }}>
+                  {reportSearch ? "No published pupil results match this search." : "No published pupil results yet."}
+                </p>
+              ) : (
+                <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
+                  {publishedReportPeriods.map((period) => renderReportPeriodCard(period))}
+                </div>
+              )}
+            </section>
           )}
         </div>
       </SectionCard>

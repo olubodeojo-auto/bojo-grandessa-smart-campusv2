@@ -1037,20 +1037,21 @@ describe("Report Center period discovery and readiness", () => {
     expect(reportCardsPage).toContain("Action needed before publishing: {formatPublicationBlocker(publishBlockReason)}");
   });
 
-  it("surfaces saved workbook reviews in Report Card Publishing and opens the selected draft directly", () => {
-    expect(reportCardsPage).toContain("Saved worksheet reviews");
-    expect(reportCardsPage).toContain("getImportReviewWorkbookSummaries");
-    expect(reportCardsPage).toContain("Open this sheet");
-    expect(reportCardsPage).toContain("Spreadsheet imports (saved worksheets)");
-    expect(reportCardsPage).toContain("Individual pupil results");
-    expect(reportCardsPage).toContain("Drafts &amp; needs attention");
-    expect(reportCardsPage).toContain("Published");
-    expect(reportCardsPage).toContain("resumeWorkbook: workbook.workbookKey");
-    expect(reportCardsPage).toContain("resumeOwner: workbook.ownerId");
-    expect(reportCardsPage).toContain("Pupil matches resolved");
-    expect(reportCardsPage).toContain("Saving or reviewing work does not publish results or email parents.");
+  it("shows two pupil lists and reconciles one saved import entry at a time", () => {
+    expect(reportCardsPage).toContain("Draft student list");
+    expect(reportCardsPage).toContain("Published student list");
+    expect(reportCardsPage).toContain("Imports awaiting reconciliation");
+    expect(reportCardsPage).toContain("Draft pupil results");
+    expect(reportCardsPage).toContain("Reconcile this pupil");
+    expect(reportCardsPage).toContain("getImportReviewWorkbooks()");
+    expect(reportCardsPage).toContain("getImportReviewDrafts(workbook.workbookKey, workbook.ownerId)");
+    expect(reportCardsPage).toContain("resumeWorkbook: review.workbookKey");
+    expect(reportCardsPage).toContain("resumeOwner: review.ownerId");
+    expect(reportCardsPage).toContain("resumeEntry: entry.studentKey");
     expect(resultsPage).toContain('searchParams.get("resumeWorkbook")');
-    expect(resultsPage).toContain("handleResumeSavedWorkbook(requestedWorkbookKey, requestedOwnerId)");
+    expect(resultsPage).toContain('searchParams.get("resumeEntry")');
+    expect(resultsPage).toContain("handleResumeSavedWorkbook(requestedWorkbookKey, requestedOwnerId, requestedEntryKey)");
+    expect(resultsPage).toContain("entryKeyOverride");
     expect(resultsPage).toContain("workbook.ownerId === requestedOwnerId");
     expect(resultsPage).toContain("autoResumeHandled");
     expect(resultsPage).not.toContain("{workbookIdentity.slice(0, 12)}");
@@ -2956,8 +2957,10 @@ describe("results workflow migration contract", () => {
     expect(workflowSecurityMigration).toContain("delete_result_import_review_draft_v2");
     expect(workflowSecurityMigration).toContain("d.created_by = owner_to_read");
     expect(reportCardService).toContain("target_owner_id: params.ownerId ?? null");
-    expect(reportCardsPage).toContain("getImportReviewWorkbookSummaries");
-    expect(reportCardsPage).toContain("resumeOwner: workbook.ownerId");
+    expect(reportCardsPage).toContain("getImportReviewWorkbooks()");
+    expect(reportCardsPage).toContain("getImportReviewDrafts(workbook.workbookKey, workbook.ownerId)");
+    expect(reportCardsPage).toContain("resumeOwner: review.ownerId");
+    expect(reportCardsPage).toContain("resumeEntry: entry.studentKey");
     expect(resultsPage).toContain('searchParams.get("resumeOwner")');
     expect(resultsPage).toContain("workbook.ownerId === requestedOwnerId");
   });
@@ -2976,13 +2979,12 @@ describe("results workflow migration contract", () => {
     expect(reportCardService).toContain("unmatchedPupilNames");
     expect(reportCardService).toContain("reportTypeReviewPupilNames");
     expect(reportCardService).toContain("missingScorePupilNames");
-    expect(reportCardsPage).toContain("Here is what needs doing for this sheet");
-    expect(reportCardsPage).toContain("Matched to the school register (use these full registered names):");
-    expect(reportCardsPage).toContain("Choose the report type for:");
-    expect(reportCardsPage).toContain("Needs your confirmation — please check the original class list:");
-    expect(reportCardsPage).toContain("Open this sheet");
-    expect(reportCardsPage).toContain("Published:");
-    expect(reportCardsPage).toContain("Imported as Draft:");
+    expect(reportCardsPage).toContain("Imports awaiting reconciliation");
+    expect(reportCardsPage).toContain("Confirm the registered pupil and class against the school list before importing marks.");
+    expect(reportCardsPage).toContain("Report type to confirm");
+    expect(reportCardsPage).toContain("No outstanding imports to reconcile.");
+    expect(reportCardsPage).toContain("Draft pupil results");
+    expect(reportCardsPage).toContain("Published student list");
     expect(resultsPage).toContain("completedEntries.length > 0");
     expect(resultsPage).toContain("All pupil entries in this workbook have already been imported");
     expect(resultsPage).toContain("!entry.workflowStatus");

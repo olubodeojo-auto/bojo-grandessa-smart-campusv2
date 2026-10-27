@@ -711,7 +711,7 @@ export default function ResultsPage() {
     }
   };
 
-  const handleResumeSavedWorkbook = async (workbookKeyOverride?: string, ownerIdOverride?: string): Promise<void> => {
+  const handleResumeSavedWorkbook = async (workbookKeyOverride?: string, ownerIdOverride?: string, entryKeyOverride?: string): Promise<void> => {
     const selected = workbookKeyOverride
       ? savedImportWorkbooks.find((workbook) =>
           workbook.workbookKey === workbookKeyOverride && (!ownerIdOverride || workbook.ownerId === ownerIdOverride))
@@ -745,7 +745,13 @@ export default function ResultsPage() {
         ? `${completedEntries.length} previously imported pupil review(s) were left out of this working view to prevent duplicate imports.`
         : "");
       const savedCursor = readReviewCursor(selected.workbookKey);
-      const activeEntry = restoredEntries.find((entry) => entry.studentKey === savedCursor?.entryKey);
+      const activeEntry = entryKeyOverride
+        ? restoredEntries.find((entry) => entry.studentKey === entryKeyOverride)
+        : restoredEntries.find((entry) => entry.studentKey === savedCursor?.entryKey) ?? restoredEntries[0];
+      if (entryKeyOverride && !activeEntry) {
+        setError("This pupil's import is no longer awaiting reconciliation. Return to the Draft student list and refresh.");
+        return;
+      }
       const unresolvedIndex = activeEntry?.items.findIndex((item) => !item.subjectId) ?? -1;
       const savedSubjectIndex = activeEntry && savedCursor?.subjectRowKey
         ? activeEntry.items.findIndex((_item, index) => getImportSubjectRowKey(activeEntry, index) === savedCursor.subjectRowKey)
@@ -788,7 +794,8 @@ export default function ResultsPage() {
     }
     if (!canManage || loading || loadingSavedWorkbooks || savedWorkbookError) return;
     const requestedOwnerId = searchParams.get("resumeOwner") ?? undefined;
-    const autoResumeKey = `${requestedOwnerId ?? ""}::${requestedWorkbookKey}`;
+    const requestedEntryKey = searchParams.get("resumeEntry") ?? undefined;
+    const autoResumeKey = `${requestedOwnerId ?? ""}::${requestedWorkbookKey}::${requestedEntryKey ?? ""}`;
     if (autoResumeHandled.current === autoResumeKey) return;
 
     const workbookExists = savedImportWorkbooks.some((workbook) =>
@@ -800,6 +807,7 @@ export default function ResultsPage() {
         const next = new URLSearchParams(current);
         next.delete("resumeWorkbook");
         next.delete("resumeOwner");
+        next.delete("resumeEntry");
         return next;
       }, { replace: true });
       return;
@@ -809,11 +817,12 @@ export default function ResultsPage() {
     const selectedWorkbook = savedImportWorkbooks.find((workbook) =>
       workbook.workbookKey === requestedWorkbookKey && (!requestedOwnerId || workbook.ownerId === requestedOwnerId));
     if (selectedWorkbook) setSelectedSavedWorkbookKey(workbookSelectionKey(selectedWorkbook));
-    void handleResumeSavedWorkbook(requestedWorkbookKey, requestedOwnerId).finally(() => {
+    void handleResumeSavedWorkbook(requestedWorkbookKey, requestedOwnerId, requestedEntryKey).finally(() => {
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
         next.delete("resumeWorkbook");
         next.delete("resumeOwner");
+        next.delete("resumeEntry");
         return next;
       }, { replace: true });
     });
