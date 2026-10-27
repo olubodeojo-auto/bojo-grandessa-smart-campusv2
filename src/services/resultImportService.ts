@@ -52,12 +52,14 @@ export type ResultImportItem = {
   remark: string | null;
   notices: string[];
   invalidMarks?: string[];
+  manualEntry?: boolean;
 };
 
 export type ResultImportPreviewEntry = {
   index: number;
   studentKey: string;
   studentName: string;
+  sourceStudentName?: string;
   admissionNumber: string;
   academicYear: string;
   term: Result["term"] | null;
@@ -1128,6 +1130,65 @@ export function resolveImportStudentMatch(
   return matchStudent(entry, students);
 }
 
+function getSourceStudentName(entry: ResultImportPreviewEntry): string {
+  if (entry.sourceStudentName?.trim()) return entry.sourceStudentName.trim();
+  // The saved entry key keeps the worksheet's original pupil label even after a reviewer
+  // has selected the canonical name from the school roster.
+  const keyName = entry.studentKey.match(/-\\d+-\\d+-(.+)$/)?.[1]?.trim();
+  return keyName || entry.studentName;
+}
+
+function getRegisteredStudentName(student: Student): string {
+  return [student.first_name, student.last_name]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\\s+/g, " ");
+}
+
+function getImportClassConflict(
+  entry: ResultImportPreviewEntry,
+  student: Student,
+): string | null {
+  const officialClass = student.class_name?.trim();
+  if (!officialClass) return null;
+  const officialKey = normalizeMatchValue(officialClass);
+  const worksheetClasses = [entry.className, ...entry.items.map((item) => item.className)]
+    .map((className) => className.trim())
+    .filter(Boolean);
+  const conflictingClass = worksheetClasses.find((className) =>
+    normalizeMatchValue(className) !== officialKey
+  );
+  return conflictingClass
+    ? `The registered pupil is in ${officialClass}, but the worksheet says ${conflictingClass}. Keep this entry in drafts until the class is confirmed.`
+    : null;
+}
+
+function reconcileMatchedImportEntry(
+  entry: ResultImportPreviewEntry,
+  student: Student,
+  sourceStudentName: string,
+  retainedWarnings: string[],
+): ResultImportPreviewEntry {
+  const officialClass = student.class_name?.trim() || entry.className;
+  return {
+    ...entry,
+    sourceStudentName,
+    studentName: getRegisteredStudentName(student),
+    admissionNumber: student.admission_number || entry.admissionNumber,
+    className: officialClass,
+    matchStatus: "matched",
+    matchedStudentId: student.id,
+    selectedStudentId: student.id,
+    warnings: retainedWarnings,
+    items: entry.items.map((item) => ({
+      ...item,
+      classId: student.class_id ?? item.classId,
+      className: officialClass || item.className,
+    })),
+  };
+}
+
 export function reconcileSavedImportStudentMatches(
   entries: ResultImportPreviewEntry[],
   students: Student[],
@@ -1140,47 +1201,100 @@ export function reconcileSavedImportStudentMatches(
     "Student identity or class needs manual confirmation",
     "The name matches ",
     "Admission number ",
+    "Class ",
+    "Possible match:",
+    "Several students",
   ];
   return entries.map((entry) => {
-    const selectedStudentStillExists = Boolean(entry.selectedStudentId)
-      && students.some((student) => student.id === entry.selectedStudentId);
-    if (selectedStudentStillExists) return entry;
+    const sourceStudentName = getSourceStudentName(entry);
+    const retainedWarnings = entry.warnings.filter((warning) =>
+      !mappingWarningPrefixes.some((prefix) => warning.startsWith(prefix))
+      && !(entry.reportKind !== "Unclear" && warning.startsWith("Choose a report type before import"))
+      && !warning.startsWith("No exact admission-number or unique name match found")
+    );
+    const selectedStudent = entry.selectedStudentId
+      ? students.find((student) => student.id === entry.selectedStudentId)
+      : undefined;
 
-    // Preserve an intentionally saved candidate for manual review. The candidate is
-    // not selected for import; it remains only a hint until a staff member confirms it.
+    if (selectedStudent) {
+      const classConflict = getImportClassConflict(entry, selectedStudent);
+      if (classConflict) {
+        return {
+          ...entry,
+          sourceStudentName,
+          studentName: sourceStudentName,
+          matchStatus: "manual-review",
+          matchedStudentId: selectedStudent.id,
+          selectedStudentId: undefined,
+          warnings: [...retainedWarnings, classConflict],
+        };
+      }
+      return reconcileMatchedImportEntry(entry, selectedStudent, sourceStudentName, retainedWarnings);
+    }
+
+    // Preserve an intentionally saved candidate for manual review. A possible match is
+    // a hint, not an approval, especially when the worksheet grade differs from the roster.
     const retainedManualReviewCandidate = entry.matchStatus === "manual-review"
       && Boolean(entry.matchedStudentId)
       && students.some((student) => student.id === entry.matchedStudentId)
       && entry.warnings.some((warning) => warning.startsWith("Possible match:"));
-    if (retainedManualReviewCandidate) return entry;
+    if (retainedManualReviewCandidate) {
+      return { ...entry, sourceStudentName, studentName: sourceStudentName };
+    }
 
-    const match = matchStudent(entry, students);
-    const retainedWarnings = entry.warnings.filter((warning) =>
-      !mappingWarningPrefixes.some((prefix) => warning.startsWith(prefix))
-    );
+    const match = matchStudent({ ...entry, studentName: sourceStudentName }, students);
 
     if (match.status === "matched" && match.matchedStudentId) {
-      return {
-        ...entry,
-        matchStatus: "matched",
-        matchedStudentId: match.matchedStudentId,
-        selectedStudentId: match.matchedStudentId,
-        warnings: retainedWarnings,
-      };
+      const matchedStudent = students.find((student) => student.id === match.matchedStudentId);
+      if (!matchedStudent) {
+        return {
+          ...entry,
+          sourceStudentName,
+          studentName: sourceStudentName,
+          matchStatus: "unmatched",
+          matchedStudentId: undefined,
+          selectedStudentId: undefined,
+          warnings: [...retainedWarnings, "The matched pupil is no longer in the active roster. Confirm the student before importing."],
+        };
+      }
+      const classConflict = getImportClassConflict(entry, matchedStudent);
+      if (classConflict) {
+        return {
+          ...entry,
+          sourceStudentName,
+          studentName: sourceStudentName,
+          matchStatus: "manual-review",
+          matchedStudentId: matchedStudent.id,
+          selectedStudentId: undefined,
+          warnings: [...retainedWarnings, classConflict],
+        };
+      }
+      return reconcileMatchedImportEntry(entry, matchedStudent, sourceStudentName, retainedWarnings);
     }
 
     if (match.status === "manual-review") {
+      const candidate = match.matchedStudentId
+        ? students.find((student) => student.id === match.matchedStudentId)
+        : undefined;
+      const classConflict = candidate ? getImportClassConflict(entry, candidate) : null;
       return {
         ...entry,
+        sourceStudentName,
+        studentName: sourceStudentName,
         matchStatus: "manual-review",
         matchedStudentId: match.matchedStudentId,
         selectedStudentId: undefined,
-        warnings: [...retainedWarnings, match.reviewReason ?? "Confirm this pupil's identity and class manually before importing."],
+        warnings: [
+          ...retainedWarnings,
+          classConflict ?? match.reviewReason ?? "Confirm this pupil's identity and class manually before importing.",
+        ],
       };
     }
 
     return {
       ...entry,
+      sourceStudentName,
+      studentName: sourceStudentName,
       matchStatus: "unmatched",
       matchedStudentId: undefined,
       selectedStudentId: undefined,
