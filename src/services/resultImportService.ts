@@ -1224,7 +1224,7 @@ function normalizeSavedImportEntry(entry: ResultImportPreviewEntry): ResultImpor
     items: entry.items.map((item) => {
       // Supabase JSON may contain numeric strings written by earlier import versions,
       // even though the current TypeScript model correctly declares number | null.
-      const rawItem = item as ResultImportItem & {
+      const rawItem = item as Omit<ResultImportItem, "continuousAssessment" | "maximumScore" | "examination" | "totalScore"> & {
         continuousAssessment: number | string | null;
         maximumScore: number | string | null;
         examination: number | string | null;
