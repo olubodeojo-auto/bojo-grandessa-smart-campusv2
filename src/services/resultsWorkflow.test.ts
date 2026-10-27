@@ -2293,6 +2293,13 @@ describe("result workbook import preview", () => {
     };
 
     expect(isImportEntryReady(unresolved)).toBe(false);
+    expect(isImportEntryReady({
+      ...unresolved,
+      selectedStudentId: "student-1",
+      matchStatus: "matched",
+      warnings: [],
+      items: [],
+    })).toBe(false);
     expect(getUnresolvedIncludedResultEntries([unresolved])).toEqual([unresolved]);
     expect(getImportableResultEntries([unresolved])).toEqual([]);
     expect(getUnresolvedIncludedResultEntries([{ ...unresolved, included: false, warnings: [] }])).toEqual([]);
