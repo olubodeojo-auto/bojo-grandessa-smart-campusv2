@@ -1058,7 +1058,7 @@ describe("Report Center period discovery and readiness", () => {
   });
 
   it("keeps result publication email-free and scopes parent notifications to fully published periods", () => {
-    expect(reportCardsPage).toContain("Saving or reviewing work does not publish results or email parents.");
+    expect(reportCardsPage).toContain("This does not send emails.");
     expect(reportCardsPage).not.toContain("sendCommunication(");
     expect(communicationsPage).toContain('value: "parents_published_results"');
     expect(communicationsPage).toContain("Published report period");
