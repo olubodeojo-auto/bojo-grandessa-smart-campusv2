@@ -2265,6 +2265,8 @@ export default function ResultsPage() {
           ) : (
             importEntries.map((entry, index) => {
               const studentId = entry.selectedStudentId ?? "";
+              const registeredStudent = studentsMap.get(studentId);
+              const matchedCandidate = studentsMap.get(entry.matchedStudentId ?? "");
               const reviewableEntries = importEntries.filter((candidate) => candidate.included !== false);
               const reviewPosition = reviewableEntries.findIndex((candidate) => candidate.studentKey === entry.studentKey);
               const reportDetails = entry.reportDetails ?? {
@@ -2391,6 +2393,36 @@ export default function ResultsPage() {
                             : "Unsaved changes"}
                     </span>
                   </div>
+                  <section aria-label="Pupil identity and safe editing" style={{ marginBottom: 14, padding: 12, border: "1px solid #cbd5e1", borderRadius: 10, background: "#f8fafc" }}>
+                    <div style={{ fontWeight: 700, marginBottom: 6 }}>Pupil record check</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 8, fontSize: 13 }}>
+                      <div>
+                        <div style={{ color: "#64748b" }}>Registered pupil</div>
+                        <div style={{ fontWeight: 600 }}>
+                          {registeredStudent
+                            ? [registeredStudent.first_name, registeredStudent.middle_name, registeredStudent.last_name].filter(Boolean).join(" ")
+                            : matchedCandidate
+                              ? `Possible match — ${[matchedCandidate.first_name, matchedCandidate.middle_name, matchedCandidate.last_name].filter(Boolean).join(" ")} (not confirmed)`
+                              : "Not yet matched to a school record"}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ color: "#64748b" }}>Original worksheet name</div>
+                        <div style={{ fontWeight: 600 }}>{entry.sourceStudentName || entry.studentName || "Name missing"}</div>
+                      </div>
+                      <div>
+                        <div style={{ color: "#64748b" }}>Admission number</div>
+                        <div style={{ fontWeight: 600 }}>{registeredStudent?.admission_number || entry.admissionNumber || "Not matched"}</div>
+                      </div>
+                      <div>
+                        <div style={{ color: "#64748b" }}>Official class</div>
+                        <div style={{ fontWeight: 600 }}>{registeredStudent?.class_name || entry.className || "Not confirmed"}</div>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 8, color: "#475569", fontSize: 13 }}>
+                      Only this pupil is being edited. Saving here keeps the entry in review; it does not publish results. Class numbers must match the school record, even when the class-name capitalisation differs.
+                    </div>
+                  </section>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
                     <Button type="button" size="sm" variant="secondary" onClick={() => {
                       const previous = reviewableEntries[reviewPosition - 1];
