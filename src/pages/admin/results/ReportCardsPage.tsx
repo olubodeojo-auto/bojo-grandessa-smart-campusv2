@@ -1112,7 +1112,7 @@ export default function ReportCardsPage() {
                         });
                         navigate(`/admin/results?${params.toString()}`);
                       }}>
-                        Continue review
+                        Open this sheet
                       </Button>
                     ) : null}
                   </div>
@@ -1147,31 +1147,42 @@ export default function ReportCardsPage() {
                     ) : null}
                   </div>
                   {workbook.includedEntryCount > 0 ? (
-                    <div role="note" style={{ display: "grid", gap: 6, padding: "11px 12px", borderRadius: 8, background: "#f8fafc", border: "1px solid #cbd5e1", color: "#334155", fontSize: 13 }}>
-                      <p style={{ margin: 0, fontWeight: 700 }}>What needs to happen next</p>
-                      {workbook.unresolvedPupilNames.length > 0 ? (
+                    <div role="note" style={{ display: "grid", gap: 7, padding: "12px 13px", borderRadius: 10, background: "#f8fafc", border: "1px solid #cbd5e1", color: "#334155", fontSize: 13 }}>
+                      <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>Here is what needs doing for this sheet</p>
+                      {workbook.linkedPupilNames.length > 0 ? (
                         <p style={{ margin: 0 }}>
-                          <strong>Confirm pupil matches:</strong> {workbook.unresolvedPupilNames.join(", ")}.
+                          <strong>1. Pupil name matched to school records:</strong> {workbook.linkedPupilNames.join(", ")}.
                         </p>
-                      ) : (
-                        <p style={{ margin: 0 }}>Pupil names are linked to school records.</p>
-                      )}
+                      ) : null}
                       {workbook.reportTypeReviewPupilNames.length > 0 ? (
                         <p style={{ margin: 0 }}>
-                          <strong>Choose Midterm (CA) or End-of-Term for:</strong> {workbook.reportTypeReviewPupilNames.join(", ")}.
+                          <strong>{workbook.linkedPupilNames.length > 0 ? "2" : "1"}. Choose the report type for:</strong> {workbook.reportTypeReviewPupilNames.join(", ")}. Select Midterm (CA) or End-of-Term based on the original school sheet.
+                        </p>
+                      ) : null}
+                      {workbook.manualReviewDetails.length > 0 ? (
+                        <div style={{ display: "grid", gap: 5 }}>
+                          <strong>Confirm these names/classes before importing:</strong>
+                          <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: 5 }}>
+                            {workbook.manualReviewDetails.map((detail) => <li key={detail}>{detail}</li>)}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {workbook.unmatchedPupilNames.length > 0 ? (
+                        <p style={{ margin: 0 }}>
+                          <strong>Find these pupils in the school register:</strong> {workbook.unmatchedPupilNames.join(", ")}. Do not guess or create another pupil record.
                         </p>
                       ) : null}
                       {workbook.missingScorePupilNames.length > 0 ? (
                         <p style={{ margin: 0 }}>
-                          <strong>No subject rows were found for:</strong> {workbook.missingScorePupilNames.join(", ")}. Check the original worksheet before importing.
+                          <strong>No subject scores found for:</strong> {workbook.missingScorePupilNames.join(", ")}. Check the original worksheet.
                         </p>
                       ) : null}
                       {workbook.subjectReviewPupilNames.length > 0 ? (
                         <p style={{ margin: 0 }}>
-                          <strong>Resolve subject names before importing:</strong> {workbook.subjectReviewPupilNames.join(", ")}.
+                          <strong>Subject-name check needed for:</strong> {workbook.subjectReviewPupilNames.join(", ")}.
                         </p>
                       ) : null}
-                      <p style={{ margin: 0 }}>Then check the marks and import the verified entries. Publishing is a separate step, and neither review nor publishing sends parent emails.</p>
+                      <p style={{ margin: 0, paddingTop: 3 }}>Choose <strong>Open this sheet</strong> to work through these few items. The marks will not be imported until the checks are complete, and publishing is a separate step. No emails are sent.</p>
                     </div>
                   ) : null}
                   {workbook.duplicatePupilCount > 0 ? (
