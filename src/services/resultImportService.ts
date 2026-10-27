@@ -1134,7 +1134,7 @@ function getSourceStudentName(entry: ResultImportPreviewEntry): string {
   if (entry.sourceStudentName?.trim()) return entry.sourceStudentName.trim();
   // The saved entry key keeps the worksheet's original pupil label even after a reviewer
   // has selected the canonical name from the school roster.
-  const keyName = entry.studentKey.match(/-\\d+-\\d+-(.+)$/)?.[1]?.trim();
+  const keyName = entry.studentKey.match(/-\d+-\d+-(.+)$/)?.[1]?.trim();
   return keyName || entry.studentName;
 }
 
@@ -1143,7 +1143,7 @@ function getRegisteredStudentName(student: Student): string {
     .map((part) => part.trim())
     .filter(Boolean)
     .join(" ")
-    .replace(/\\s+/g, " ");
+    .replace(/\s+/g, " ");
 }
 
 function getImportClassConflict(
