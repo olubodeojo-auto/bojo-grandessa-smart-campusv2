@@ -11,7 +11,7 @@ import FormField, { inputStyle } from "../../../components/forms/FormField";
 import SectionCard from "../../../components/ui/SectionCard";
 import Button from "../../../components/ui/Button";
 import { type AcademicCalendarConfig } from "../../../config/grandessaCalendar";
-import { buildStudentReportCard, deleteReportCard, getImportReviewDrafts, getImportReviewWorkbooks, getSavedReportCards, saveReportCardDetails, type SavedReportCard } from "../../../services/reportCardService";
+import { buildStudentReportCard, deleteReportCard, getImportReviewDrafts, getImportReviewWorkbooks, getSavedReportCards, markImportReviewDraftStatus, saveReportCardDetails, type SavedReportCard } from "../../../services/reportCardService";
 import { getImportScoreWarnings, reconcileSavedImportStudentMatches, type ResultImportPreviewEntry } from "../../../services/resultImportService";
 import { getAcademicSessionSetups, saveAcademicSessionSetup } from "../../../services/academicSessionService";
 import { getClasses } from "../../../services/classService";
@@ -575,6 +575,49 @@ export default function ReportCardsPage() {
       : "";
   }
 
+  async function markPublishedImportEntry(
+    period: ReportCenterPeriod,
+    refreshedResults: Result[],
+  ): Promise<boolean> {
+    const publishedResultIdsInPeriod = new Set(
+      refreshedResults
+        .filter((result) => result.student_id === period.studentId
+          && result.class_id === period.classId
+          && result.academic_year === period.academicYear
+          && result.term === period.term
+          && result.status === "Published")
+        .map((result) => result.id),
+    );
+    const workbooks = await getImportReviewWorkbooks();
+    for (const workbook of workbooks) {
+      const entries = await getImportReviewDrafts(workbook.workbookKey, workbook.ownerId);
+      const entry = entries.find((candidate) =>
+        candidate.workflowStatus === "imported_draft"
+        && candidate.resultImportStudentId === period.studentId
+        && candidate.resultImportClassId === period.classId
+        && candidate.academicYear === period.academicYear
+        && candidate.term === period.term
+        && (candidate.reportKind === "Midterm / Continuous Assessment"
+          ? period.reportType === "Midterm"
+          : candidate.reportKind === "End-of-Term / Year Report Card" && period.reportType === "End-of-Term")
+        && Boolean(candidate.importedResultIds?.length)
+        && candidate.importedResultIds!.every((id) => publishedResultIdsInPeriod.has(id)),
+      );
+      if (!entry?.importedResultIds?.length) continue;
+      await markImportReviewDraftStatus({
+        workbookKey: workbook.workbookKey,
+        entryKey: entry.studentKey,
+        ownerId: workbook.ownerId,
+        studentId: period.studentId,
+        classId: period.classId,
+        workflowStatus: "published",
+        resultIds: entry.importedResultIds,
+      });
+      return true;
+    }
+    return false;
+  }
+
   async function publishReportPeriod(period: ReportCenterPeriod): Promise<void> {
     const releasePublishLock = acquireReportPublishLock(publishInFlightPeriods.current, period.key);
     if (!releasePublishLock) return;
@@ -629,7 +672,19 @@ export default function ReportCardsPage() {
 
       const publishedCount = outcome.publishedResultIds.length;
       if (publishedCount === pendingResults.length) {
+        let importQueueMessage = "";
+        try {
+          const importEntryUpdated = await markPublishedImportEntry(period, outcome.refreshedResults);
+          if (importEntryUpdated) await refreshPendingImportPupils();
+        } catch (statusError) {
+          importQueueMessage = statusError instanceof Error
+            ? statusError.message
+            : "Unable to refresh the saved import status.";
+        }
         setSuccess(`Verified: published ${publishedCount} subject result(s) for ${student.first_name} ${student.last_name}.`);
+        if (importQueueMessage) {
+          setError(`The report is published, but its saved import queue status could not be updated. Do not import this pupil again. ${importQueueMessage}`);
+        }
         return;
       }
 
