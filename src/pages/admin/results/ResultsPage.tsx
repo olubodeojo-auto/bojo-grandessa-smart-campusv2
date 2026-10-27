@@ -2322,13 +2322,18 @@ export default function ResultsPage() {
                       <div style={{ color: "#475569", fontSize: 13 }}>
                         Admission: {studentsMap.get(entry.selectedStudentId ?? "")?.admission_number || entry.admissionNumber || "Not matched"} · Class: {entry.className || "Not matched"}
                       </div>
+                      {entry.sourceStudentName ? (
+                        <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>Original worksheet name: {entry.sourceStudentName}</div>
+                      ) : null}
                       <div role="status" style={{ color: importResultStates[entry.studentKey]?.state === "failed" ? "#b91c1c" : "#475569", fontSize: 13, marginTop: 3 }}>
                         {importResultStates[entry.studentKey]?.state === "saved" ? "Saved"
                           : importResultStates[entry.studentKey]?.state === "failed" ? "Import failed"
                             : draftSaveStates[entry.studentKey]?.state === "saved" ? "Saved"
-                            : entry.selectedStudentId && entry.items.some((item) => !item.subjectId) ? "Needs subject mapping"
-                              : !entry.selectedStudentId ? "Needs matching"
-                                : isImportEntryReady(entry) ? "Ready to import" : "Needs matching"}
+                              : entry.selectedStudentId && entry.items.some((item) => !item.subjectId) ? "Needs subject mapping"
+                                : !entry.selectedStudentId ? "Needs matching"
+                                  : getImportScoreWarnings(entry).some((warning) => /mark is missing|subject marks are missing/i.test(warning)) ? "Missing subject marks"
+                                    : getImportScoreWarnings(entry).length > 0 ? "Check marks"
+                                      : isImportEntryReady(entry) ? "Ready to import" : "Needs review"}
                       </div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
