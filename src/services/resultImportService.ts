@@ -1219,10 +1219,19 @@ function normalizeSavedImportEntry(entry: ResultImportPreviewEntry): ResultImpor
 
   return {
     ...entry,
+    assessmentType: expectedAssessmentType ?? entry.assessmentType,
     items: entry.items.map((item) => {
-      const continuousAssessment = normalizeSavedScoreValue(item.continuousAssessment);
-      const examination = normalizeSavedScoreValue(item.examination);
-      let totalScore = normalizeSavedScoreValue(item.totalScore);
+      // Supabase JSON may contain numeric strings written by earlier import versions,
+      // even though the current TypeScript model correctly declares number | null.
+      const rawItem = item as ResultImportItem & {
+        continuousAssessment: number | string | null;
+        maximumScore: number | string | null;
+        examination: number | string | null;
+        totalScore: number | string | null;
+      };
+      const continuousAssessment = normalizeSavedScoreValue(rawItem.continuousAssessment);
+      const examination = normalizeSavedScoreValue(rawItem.examination);
+      let totalScore = normalizeSavedScoreValue(rawItem.totalScore);
       const hasExplicitTotalInput = Boolean(item.scoreInputText?.totalScore?.trim());
       // Older workbook parsing saved a synthetic zero where every component was empty.
       // Treat that exact shape as missing data, not as a pupil's score.
@@ -1234,10 +1243,10 @@ function normalizeSavedImportEntry(entry: ResultImportPreviewEntry): ResultImpor
       const assessmentType = expectedAssessmentType ?? item.assessmentType;
       const scoreInputText = { ...(item.scoreInputText ?? {}) };
       for (const [field, rawValue] of [
-        ["continuousAssessment", item.continuousAssessment],
-        ["maximumScore", item.maximumScore],
-        ["examination", item.examination],
-        ["totalScore", item.totalScore],
+        ["continuousAssessment", rawItem.continuousAssessment],
+        ["maximumScore", rawItem.maximumScore],
+        ["examination", rawItem.examination],
+        ["totalScore", rawItem.totalScore],
       ] as const) {
         if (typeof rawValue === "string" && rawValue.trim()
           && normalizeSavedScoreValue(rawValue) === null
@@ -1246,8 +1255,8 @@ function normalizeSavedImportEntry(entry: ResultImportPreviewEntry): ResultImpor
         }
       }
 
-      const rawMaximumScore = normalizeSavedScoreValue(item.maximumScore);
-      const maximumScoreWasBlank = isBlankScoreValue(item.maximumScore);
+      const rawMaximumScore = normalizeSavedScoreValue(rawItem.maximumScore);
+      const maximumScoreWasBlank = isBlankScoreValue(rawItem.maximumScore);
       return {
         ...item,
         assessmentType,
