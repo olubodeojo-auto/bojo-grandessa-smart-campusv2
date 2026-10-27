@@ -1513,9 +1513,59 @@ describe("result workbook import preview", () => {
       [entry, { ...entry, studentKey: "pupil-2", className: "Basic 2" }],
       [rosterStudent],
     );
-    expect(safeMatch).toMatchObject({ matchStatus: "matched", selectedStudentId: "student-1" });
+    expect(safeMatch).toMatchObject({
+      matchStatus: "matched",
+      selectedStudentId: "student-1",
+      studentName: "Jason Ifeoluwanimi Oyewumi",
+      sourceStudentName: "OYEWUMI JASON",
+      className: "Basic 4",
+    });
     expect(classConflict).toMatchObject({ matchStatus: "manual-review", matchedStudentId: "student-1" });
     expect(classConflict.selectedStudentId).toBeUndefined();
+    expect(classConflict.warnings.join(" ")).toContain("Keep this entry in drafts");
+  });
+
+  it("normalizes case-only class differences to the roster class but preserves real class conflicts", () => {
+    const rosterStudent: Student = {
+      ...student("student-gerrard", "Gerrard Ayokunumi Rasak", "GDS-0003", "Basic 3"),
+      first_name: "Gerrard Ayokunumi",
+      last_name: "Rasak",
+      class_id: "class-basic-3",
+    };
+    const uppercaseEntry: ResultImportPreviewEntry = {
+      index: 0,
+      studentKey: "Sheet1-5-42-GERRARD RASAK",
+      studentName: "GERRARD RASAK",
+      admissionNumber: "",
+      academicYear: "2026/2027",
+      term: "First",
+      assessmentType: "CA",
+      reportKind: "Midterm / Continuous Assessment",
+      className: "BASIC 3",
+      teacherName: "",
+      matchStatus: "matched",
+      matchedStudentId: "student-gerrard",
+      selectedStudentId: "student-gerrard",
+      included: true,
+      warnings: [],
+      notices: [],
+      items: [],
+    };
+    const [normalized] = reconcileSavedImportStudentMatches([uppercaseEntry], [rosterStudent]);
+    expect(normalized).toMatchObject({
+      studentName: "Gerrard Ayokunumi Rasak",
+      sourceStudentName: "GERRARD RASAK",
+      className: "Basic 3",
+      selectedStudentId: "student-gerrard",
+    });
+
+    const [classConflict] = reconcileSavedImportStudentMatches([
+      { ...uppercaseEntry, className: "Basic 1" },
+    ], [rosterStudent]);
+    expect(classConflict.matchStatus).toBe("manual-review");
+    expect(classConflict.selectedStudentId).toBeUndefined();
+    expect(classConflict.warnings.join(" ")).toContain("worksheet says Basic 1");
+    expect(classConflict.warnings.join(" ")).toContain("Keep this entry in drafts");
   });
 
   it("preserves a saved possible-match candidate across refresh without selecting it for import", () => {
