@@ -1039,7 +1039,7 @@ describe("Report Center period discovery and readiness", () => {
   it("surfaces saved workbook reviews in Report Card Publishing and opens the selected draft directly", () => {
     expect(reportCardsPage).toContain("Saved work waiting for review");
     expect(reportCardsPage).toContain("getImportReviewWorkbookSummaries");
-    expect(reportCardsPage).toContain("Continue review");
+    expect(reportCardsPage).toContain("Open this sheet");
     expect(reportCardsPage).toContain("resumeWorkbook: workbook.workbookKey");
     expect(reportCardsPage).toContain("resumeOwner: workbook.ownerId");
     expect(reportCardsPage).toContain("Pupil matches resolved");
