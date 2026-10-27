@@ -1119,12 +1119,12 @@ export default function ReportCardsPage() {
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: "#334155", fontSize: 13 }}>
                     {workbook.includedEntryCount > 0 ? (
                       <>
-                        <span>{workbook.includedEntryCount} pupil review(s) waiting to import</span>
+                        <span>{workbook.includedEntryCount} pupil record(s) to check</span>
                         <span>·</span>
-                        <span>{workbook.subjectRowCount} score(s) waiting to import</span>
+                        <span>{workbook.subjectRowCount} subject score(s) to check</span>
                         <span>·</span>
                         <span style={{ color: workbook.unresolvedEntryCount > 0 ? "#92400e" : "#166534", fontWeight: 700 }}>
-                          {workbook.unresolvedEntryCount > 0 ? `${workbook.unresolvedEntryCount} pupil match(es) need review` : "Pupil matches resolved"}
+                          {workbook.unresolvedEntryCount > 0 ? `${workbook.unresolvedEntryCount} pupil name/class match(es) need confirmation` : "Pupil matches resolved"}
                         </span>
                       </>
                     ) : (
@@ -1151,17 +1151,17 @@ export default function ReportCardsPage() {
                       <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>Here is what needs doing for this sheet</p>
                       {workbook.linkedPupilNames.length > 0 ? (
                         <p style={{ margin: 0 }}>
-                          <strong>1. Pupil name matched to school records:</strong> {workbook.linkedPupilNames.join(", ")}.
+                          <strong>Matched to the school register (use these full registered names):</strong> {workbook.linkedPupilNames.join(", ")}. These names are linked, but their marks have not been imported by this step.
                         </p>
                       ) : null}
                       {workbook.reportTypeReviewPupilNames.length > 0 ? (
                         <p style={{ margin: 0 }}>
-                          <strong>{workbook.linkedPupilNames.length > 0 ? "2" : "1"}. Choose the report type for:</strong> {workbook.reportTypeReviewPupilNames.join(", ")}. Select Midterm (CA) or End-of-Term based on the original school sheet.
+                          <strong>Choose the report type for:</strong> {workbook.reportTypeReviewPupilNames.join(", ")}. Select Midterm (CA) or End-of-Term based on the original school sheet.
                         </p>
                       ) : null}
                       {workbook.manualReviewDetails.length > 0 ? (
                         <div style={{ display: "grid", gap: 5 }}>
-                          <strong>Confirm these names/classes before importing:</strong>
+                          <strong>Needs your confirmation — please check the original class list:</strong>
                           <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: 5 }}>
                             {workbook.manualReviewDetails.map((detail) => <li key={detail}>{detail}</li>)}
                           </ul>
@@ -1169,20 +1169,20 @@ export default function ReportCardsPage() {
                       ) : null}
                       {workbook.unmatchedPupilNames.length > 0 ? (
                         <p style={{ margin: 0 }}>
-                          <strong>Find these pupils in the school register:</strong> {workbook.unmatchedPupilNames.join(", ")}. Do not guess or create another pupil record.
+                          <strong>Not yet matched to a pupil record:</strong> {workbook.unmatchedPupilNames.join(", ")}. Do not guess or create another pupil record.
                         </p>
                       ) : null}
                       {workbook.missingScorePupilNames.length > 0 ? (
                         <p style={{ margin: 0 }}>
-                          <strong>No subject scores found for:</strong> {workbook.missingScorePupilNames.join(", ")}. Check the original worksheet.
+                          <strong>No subject scores were detected for:</strong> {workbook.missingScorePupilNames.join(", ")}. Check the original worksheet.
                         </p>
                       ) : null}
                       {workbook.subjectReviewPupilNames.length > 0 ? (
                         <p style={{ margin: 0 }}>
-                          <strong>Subject-name check needed for:</strong> {workbook.subjectReviewPupilNames.join(", ")}.
+                          <strong>Subject name needs checking:</strong> {workbook.subjectReviewPupilNames.join(", ")}.
                         </p>
                       ) : null}
-                      <p style={{ margin: 0, paddingTop: 3 }}>Choose <strong>Open this sheet</strong> to work through these few items. The marks will not be imported until the checks are complete, and publishing is a separate step. No emails are sent.</p>
+                      <p style={{ margin: 0, paddingTop: 3 }}>Choose <strong>Open this sheet</strong> to check the listed items. The system will not import marks until the required checks are complete. Publishing is a separate step; no emails are sent.</p>
                     </div>
                   ) : null}
                   {workbook.duplicatePupilCount > 0 ? (
