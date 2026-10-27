@@ -3021,6 +3021,10 @@ describe("results workflow migration contract", () => {
     expect(importWorkflowStatusMigration).toContain("'workflowStatus', target_workflow_status");
     expect(importWorkflowStatusMigration).toContain("matching_status_count <> result_count");
     expect(reportCardService).toContain("workflowStatus");
+    expect(reportCardService).toContain('rpc("mark_result_import_review_draft_status_v2"');
+    expect(resultsPage).toContain("markImportReviewDraftStatus");
+    expect(resultsPage).toContain("Add subject row");
+    expect(resultsPage).toContain("No subject scores were found in the worksheet.");
     expect(reportCardService).toContain("publishedSubjectRowCount");
     expect(reportCardService).toContain("draftImportedSubjectRowCount");
     expect(reportCardService).toContain("linkedPupilNames");
