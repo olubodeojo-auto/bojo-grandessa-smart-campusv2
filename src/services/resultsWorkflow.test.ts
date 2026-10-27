@@ -3311,3 +3311,11 @@ describe("safe result import retries and remembered subject labels", () => {
     expect(importStatusHardeningMigration).toContain("The saved subject rows have missing or invalid marks");
   });
 });
+
+
+describe("uncertain result save feedback", () => {
+  it("tells staff to verify the saved pupil status before retrying an uncertain save", () => {
+    expect(reportCardService).toContain("The result save could not be confirmed for this pupil.");
+    expect(reportCardService).toContain("Refresh Reports and check the pupil's saved status before retrying.");
+  });
+});

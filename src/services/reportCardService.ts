@@ -128,7 +128,7 @@ export async function saveImportedReportCard(params: {
     target_existing_result_ids: params.tracking.existingResultIds,
   });
   if (error) {
-    throw new Error(`The result save failed for this pupil. Your saved review remains available; no result changes from this save were committed: ${error.message}`);
+    throw new Error(`The result save could not be confirmed for this pupil. Refresh Reports and check the pupil's saved status before retrying. Your saved review remains available. Details: ${error.message}`);
   }
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("The server did not return a verified result status. Refresh Reports before retrying this pupil.");
