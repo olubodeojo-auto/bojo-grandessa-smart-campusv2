@@ -3049,7 +3049,8 @@ describe("result lifecycle permissions", () => {
     expect(groupedResults).toContain('minWidth: 1050');
     expect(batchEntry).toContain('aria-label="Batch subject results; scroll horizontally to see all columns"');
     expect(batchEntry).toContain('minWidth: 900');
-    expect(resultsPage).toContain('aria-label={`Subject mappings for ${entry.studentName}; scroll horizontally to access every column`}');
+    expect(resultsPage).toContain('label={`Subject mappings for ${entry.studentName}`}');
+    expect(resultsPage).toContain('aria-label={`${label}; scroll horizontally to access every column`}');
     expect(resultsPage).toContain('overflowX: "hidden"');
     expect(reportCardDocument).toContain('role="region"');
     expect(reportCardStyles).toContain('min-width: 620px');
