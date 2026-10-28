@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Navigate, Routes, Route, useLocation } from "react-router-dom";
 
 import Home from "./pages/Home";
 import About from "./pages/About";
@@ -19,8 +19,7 @@ import SampleReportCardPage from "./pages/admin-preview/SampleReportCardPage";
 
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import StudentsPage from "./pages/admin/students/StudentsPage";
-import ResultsPage from "./pages/admin/results/ResultsPage";
-import ReportCardsPage from "./pages/admin/results/ReportCardsPage";
+import ResultsWorkspacePage from "./pages/admin/results/ResultsWorkspacePage";
 import GalleryPage from "./pages/admin/gallery/GalleryPage";
 import AnnouncementsPage from "./pages/admin/announcements/AnnouncementsPage";
 import ClassesPage from "./pages/admin/classes/ClassesPage";
@@ -45,6 +44,11 @@ import {
   resultsRoles,
   staffManagementRoles,
 } from "./config/routeRoles";
+
+function RedirectLegacyResultsRoute() {
+  const location = useLocation();
+  return <Navigate to={`/admin/results${location.search}`} replace />;
+}
 
 export default function App() {
   return (
@@ -78,9 +82,9 @@ export default function App() {
 
         <Route path="parent-accounts" element={<ProtectedRoute allowedRoles={administratorRoles}><ParentAccountsPage /></ProtectedRoute>} />
 
-        <Route path="results" element={<ProtectedRoute allowedRoles={resultsRoles}><ReportCardsPage /></ProtectedRoute>} />
+        <Route path="results" element={<ProtectedRoute allowedRoles={resultsRoles}><ResultsWorkspacePage /></ProtectedRoute>} />
 
-        <Route path="result-records" element={<ProtectedRoute allowedRoles={resultsRoles}><ResultsPage /></ProtectedRoute>} />
+        <Route path="result-records" element={<ProtectedRoute allowedRoles={resultsRoles}><RedirectLegacyResultsRoute /></ProtectedRoute>} />
 
         <Route path="classes" element={<ProtectedRoute allowedRoles={classManagementRoles}><ClassesPage /></ProtectedRoute>} />
 
@@ -92,7 +96,7 @@ export default function App() {
 
         <Route path="staff-directory" element={<ProtectedRoute allowedRoles={staffManagementRoles}><StaffDirectoryPage /></ProtectedRoute>} />
 
-        <Route path="reports" element={<ProtectedRoute allowedRoles={reportRoles}><ReportCardsPage /></ProtectedRoute>} />
+        <Route path="reports" element={<ProtectedRoute allowedRoles={reportRoles}><RedirectLegacyResultsRoute /></ProtectedRoute>} />
 
         <Route path="gallery" element={<ProtectedRoute allowedRoles={administratorRoles}><GalleryPage /></ProtectedRoute>} />
 

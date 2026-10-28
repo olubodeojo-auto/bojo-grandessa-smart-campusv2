@@ -110,7 +110,7 @@ export type SavedImportReviewVersion = {
 };
 
 export type CollapsedImportReviewVersion<T extends SavedImportReviewVersion = SavedImportReviewVersion> =
-  T & { duplicateCount: number; duplicateWorkbookCount: number };
+  T & { duplicateCount: number; duplicateWorkbookCount: number; olderVersions: T[] };
 
 function normalizePendingImportValue(value: string | undefined): string {
   return (value ?? "")
@@ -174,6 +174,7 @@ export function collapseDuplicatePendingImportPupils<T extends SavedImportReview
       ...latest,
       duplicateCount: versions.length,
       duplicateWorkbookCount: new Set(versions.map((version) => version.ownerId + "::" + version.workbookKey)).size,
+      olderVersions: ordered.slice(1),
     });
   }
 

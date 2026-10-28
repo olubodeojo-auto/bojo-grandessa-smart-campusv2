@@ -10,15 +10,14 @@ export default function AdministratorPreviewDashboard() {
   const adminModules = [
     { title: "Dashboard", subtitle: "Overview", path: "/admin" },
     { title: "Students", subtitle: "Manage student records", path: "/admin/students" },
-    { title: "Publish Arena", subtitle: "Review and publish reports", path: "/admin/results" },
-    { title: "Reports", subtitle: "Report templates and sample reports", path: "/admin/reports" },
+    { title: "Results", subtitle: "Enter, review and publish results", path: "/admin/results" },
     { title: "Gallery", subtitle: "Manage school gallery", path: "/admin/gallery" },
     { title: "Announcements", subtitle: "Manage announcements", path: "/admin/announcements" },
   ] as const;
 
   const quickActions = [
     { label: "Students", path: "/admin/students" },
-    { label: "Publish Arena", path: "/admin/results" },
+    { label: "Results", path: "/admin/results" },
     { label: "Gallery", path: "/admin/gallery" },
     { label: "Announcements", path: "/admin/announcements" },
   ];

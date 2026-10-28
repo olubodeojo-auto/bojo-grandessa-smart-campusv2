@@ -39,6 +39,8 @@ type ResultBatchEntryProps = {
   userId?: string;
   resumeResult?: Result | null;
   onSaved: () => Promise<void>;
+  canPublish?: boolean;
+  onSaveAndPublish?: (params: { studentId: string; classId: string; academicYear: string; term: BatchTerm; reportType: BatchReportType }) => Promise<void>;
   onEditExisting: (result: Result) => void;
 };
 
@@ -68,6 +70,8 @@ export default function ResultBatchEntry({
   userId,
   resumeResult,
   onSaved,
+  canPublish = false,
+  onSaveAndPublish,
   onEditExisting,
 }: ResultBatchEntryProps) {
   const [draft, setDraft] = useState<BatchDraft>(() => ({
@@ -306,7 +310,7 @@ export default function ResultBatchEntry({
     return { ca, exam, maximum, total, grade, remark, errors, hasValue, matches };
   }
 
-  async function saveDrafts(): Promise<void> {
+  async function saveDrafts(publishAfterSave = false): Promise<void> {
     setMessage("");
     setError("");
     if (!selectedStudent || !classId || !draft.academicYear.trim() || !draft.term) {
@@ -392,8 +396,21 @@ export default function ResultBatchEntry({
         entries[scopeKey] = savedEntries;
         return { ...current, entries };
       });
-      setMessage(`Saved ${savedCount} ${savedCount === 1 ? "subject draft" : "subject drafts"} for ${selectedStudent.first_name} ${selectedStudent.last_name}.`);
       await onSaved();
+      window.dispatchEvent(new Event("grandessa:results-updated"));
+      if (publishAfterSave && canPublish && onSaveAndPublish) {
+        try {
+          await onSaveAndPublish({
+            studentId: selectedStudent.id, classId, academicYear: draft.academicYear.trim(),
+            term: draft.term as BatchTerm, reportType: draft.reportType,
+          });
+          setMessage(`Saved and published ${selectedStudent.first_name} ${selectedStudent.last_name}'s ${draft.reportType === "Midterm" ? "midterm" : "end-of-term"} results. No parent messages were sent.`);
+        } catch (publishError) {
+          setError(`Saved ${savedCount} subject result(s), but publication did not complete: ${publishError instanceof Error ? publishError.message : "Unable to publish this pupil's results."}`);
+        }
+      } else {
+        setMessage(`Saved ${savedCount} ${savedCount === 1 ? "subject draft" : "subject drafts"} for ${selectedStudent.first_name} ${selectedStudent.last_name}.`);
+      }
     } catch (saveError) {
       const partialNote = savedCount > 0 ? ` ${savedCount} subject row(s) saved before the failure; retry only after refreshing the results.` : "";
       setError(`${saveError instanceof Error ? saveError.message : "Unable to save result drafts."}${partialNote}`);
@@ -484,7 +501,7 @@ export default function ResultBatchEntry({
           role="region"
           aria-label="Batch subject results; scroll horizontally to see all columns"
           tabIndex={0}
-          style={{ minWidth: 0, overflowX: "auto" }}
+          style={{ minWidth: 0, overflowX: "scroll", overflowY: "hidden", scrollbarGutter: "stable", overscrollBehaviorX: "contain", paddingBottom: 8 }}
         >
           <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
             <thead>
@@ -616,8 +633,13 @@ export default function ResultBatchEntry({
       )}
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
-        <Button type="button" onClick={() => void saveDrafts()} disabled={saving || !draftLoaded || !selectedStudent}>
-          {saving ? "Saving draft…" : "Save Draft"}
+        {canPublish && onSaveAndPublish ? (
+          <Button type="button" onClick={() => void saveDrafts(true)} disabled={saving || !draftLoaded || !selectedStudent} style={{ background: "#047857", borderColor: "#047857", fontWeight: 900 }}>
+            {saving ? "SAVING & PUBLISHING…" : "SAVE & PUBLISH"}
+          </Button>
+        ) : null}
+        <Button type="button" variant="secondary" onClick={() => void saveDrafts(false)} disabled={saving || !draftLoaded || !selectedStudent}>
+          {saving ? "Saving…" : "Save Draft"}
         </Button>
       </div>
     </section>

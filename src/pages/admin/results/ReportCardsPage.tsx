@@ -196,7 +196,7 @@ function BrandingField({
   );
 }
 
-export default function ReportCardsPage() {
+export default function ReportCardsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { roles } = useAuth();
@@ -208,6 +208,7 @@ export default function ReportCardsPage() {
   const [loadingImportWorkbooks, setLoadingImportWorkbooks] = useState(true);
   const [importWorkbooksError, setImportWorkbooksError] = useState("");
   const [results, setResults] = useState<Result[]>([]);
+  const [importedResultIds, setImportedResultIds] = useState<Set<string>>(new Set());
   const [publicationEvidence, setPublicationEvidence] = useState<Map<string, ResultPublicationEvidence>>(() => new Map());
   const [publicationEvidenceError, setPublicationEvidenceError] = useState("");
   const [loadingPeriods, setLoadingPeriods] = useState(true);
@@ -271,6 +272,8 @@ export default function ReportCardsPage() {
       const [workbooks, roster] = await Promise.all([getImportReviewWorkbooks(), getStudents()]);
       const workbookEntries = await Promise.all(workbooks.map(async (workbook) => {
         const entries = await getImportReviewDrafts(workbook.workbookKey, workbook.ownerId);
+        const completedResultIds = entries.filter((entry) => Boolean(entry.workflowStatus))
+          .flatMap((entry) => entry.importedResultIds ?? []);
         const pendingEntries = reconcileSavedImportStudentMatches(
           entries.filter((entry) => !entry.workflowStatus && entry.included !== false),
           roster,
@@ -279,15 +282,19 @@ export default function ReportCardsPage() {
         const sheetName = separatorIndex >= 0
           ? workbook.workbookKey.slice(separatorIndex + 1)
           : "Saved worksheet";
-        return pendingEntries.map((entry) => ({
-          workbookKey: workbook.workbookKey,
-          ownerId: workbook.ownerId,
-          ownerName: workbook.ownerName,
-          sheetName,
-          entry,
-        }));
+        return {
+          completedResultIds,
+          pendingEntries: pendingEntries.map((entry) => ({
+            workbookKey: workbook.workbookKey,
+            ownerId: workbook.ownerId,
+            ownerName: workbook.ownerName,
+            sheetName,
+            entry,
+          })),
+        };
       }));
-      setPendingImportPupils(workbookEntries.flat().sort((left, right) =>
+      setImportedResultIds(new Set(workbookEntries.flatMap((item) => item.completedResultIds)));
+      setPendingImportPupils(workbookEntries.flatMap((item) => item.pendingEntries).sort((left, right) =>
         left.entry.studentName.localeCompare(right.entry.studentName)
         || left.entry.academicYear.localeCompare(right.entry.academicYear)
         || (left.entry.term ?? "").localeCompare(right.entry.term ?? ""),
@@ -453,6 +460,28 @@ export default function ReportCardsPage() {
 
   useEffect(() => {
     let active = true;
+    const refreshWorkspace = (): void => {
+      void Promise.all([getResults(), getSavedReportCards()])
+        .then(([loadedResults, loadedReports]) => {
+          if (!active) return;
+          setResults(loadedResults);
+          setSavedReports(loadedReports);
+          setError("");
+        })
+        .catch((err: unknown) => {
+          if (active) setError(err instanceof Error ? err.message : "Unable to refresh saved results.");
+        });
+      void refreshPendingImportPupils();
+    };
+    window.addEventListener("grandessa:results-updated", refreshWorkspace);
+    return () => {
+      active = false;
+      window.removeEventListener("grandessa:results-updated", refreshWorkspace);
+    };
+  }, [refreshPendingImportPupils]);
+
+  useEffect(() => {
+    let active = true;
     const candidates = results.filter((result) => result.status === "Returned" && !result.published_at);
     if (!isAdministrator || candidates.length === 0) {
       setPublicationEvidence(new Map());
@@ -590,7 +619,7 @@ export default function ReportCardsPage() {
       classId: period.classId,
       search: student ? `${student.first_name} ${student.last_name}`.trim() : "",
     });
-    navigate(`/admin/result-records?${params.toString()}`);
+    navigate(`/admin/results?${params.toString()}`);
   }
 
   function getPublicationEvidenceErrorForPeriod(period: ReportCenterPeriod): string {
@@ -1310,6 +1339,9 @@ export default function ReportCardsPage() {
                   ?? period.results.find((result) => result.class_name)?.class_name
                   ?? "Class unavailable";
                 const statusLabel = getReportCenterPeriodStatus(period);
+                const sourceLabel = period.results.length > 0 && period.results.every((result) => importedResultIds.has(result.id))
+                  ? "Imported"
+                  : period.results.some((result) => importedResultIds.has(result.id)) ? "Mixed" : "Manual";
                 const completeness = getReportCenterCompleteness(period, results);
                 const periodEvidenceError = getPublicationEvidenceErrorForPeriod(period);
                 const publishBlockReason = periodEvidenceError
@@ -1338,6 +1370,7 @@ export default function ReportCardsPage() {
                         <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
                           <h2 id={`report-period-${period.key}`} style={{ margin: 0, fontSize: 19 }}>{pupilName}</h2>
                           <span style={statusBadgeStyle(statusLabel)}>{statusLabel}</span>
+                          <span style={{ borderRadius: 999, padding: "3px 8px", background: "#f1f5f9", color: "#475569", fontSize: 11, fontWeight: 800 }}>{sourceLabel}</span>
                         </div>
                         <p style={{ color: "#64748b", fontSize: 13, margin: "5px 0 0" }}>
                           Admission no.: {pupil?.admission_number || "Unavailable"} · Class: {className}
@@ -1436,6 +1469,7 @@ export default function ReportCardsPage() {
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
+      {!embedded ? (
       <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div style={{ minWidth: 0, flex: "1 1 340px" }}>
           <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>Publish Arena</h1>
@@ -1443,10 +1477,11 @@ export default function ReportCardsPage() {
             One workspace to review imports, clear blockers, publish ready reports, and confirm what is already published.
           </p>
         </div>
-        <Button type="button" variant="secondary" onClick={() => navigate("/admin/result-records")}>
+        <Button type="button" variant="secondary" onClick={() => navigate("/admin/results")}>
           Manage subject marks
         </Button>
       </div>
+      ) : null}
 
       {error ? (
         <div role="alert" style={{ padding: 12, border: "1px solid #fecaca", background: "#fef2f2", borderRadius: 12, color: "#991b1b" }}>
@@ -1545,6 +1580,7 @@ export default function ReportCardsPage() {
 
           {reportListView === "drafts" ? (
             <div style={{ display: "grid", gap: 20, minWidth: 0 }}>
+              {!embedded ? (
               <section aria-labelledby="imports-awaiting-reconciliation" style={{ display: "grid", gap: 10, minWidth: 0 }}>
                 <div>
                   <h2 id="imports-awaiting-reconciliation" style={{ margin: 0, fontSize: 19 }}>Imports awaiting reconciliation</h2>
@@ -1603,7 +1639,7 @@ export default function ReportCardsPage() {
                           </div>
                           <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>{progress.explanation}</p>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <Button type="button" onClick={() => navigate(`/admin/result-records?${params.toString()}`)}>Reconcile this pupil</Button>
+                            <Button type="button" onClick={() => navigate(`/admin/results?${params.toString()}`)}>Reconcile this pupil</Button>
                           </div>
                         </article>
                       );
@@ -1611,6 +1647,9 @@ export default function ReportCardsPage() {
                   </div>
                 )}
               </section>
+
+
+              ) : null}
 
               <section aria-labelledby="draft-pupil-results" style={{ display: "grid", gap: 10, minWidth: 0 }}>
                 <div>

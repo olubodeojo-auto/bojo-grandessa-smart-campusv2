@@ -10,10 +10,11 @@ import Button from "../../../components/ui/Button";
 import EmptyState from "../../../components/ui/EmptyState";
 import { useAuth } from "../../../hooks/useAuth";
 import StudentForm from "../students/StudentForm";
-import { deleteResult, getMyResultAssignments, getResults, reviewResult, submitResult } from "../../../services/resultService";
+import { deleteResult, getMyResultAssignments, getResults, publishResult, reviewResult, submitResult } from "../../../services/resultService";
 import {
   deleteImportReviewDraft,
   getImportReviewDrafts,
+  markImportReviewDraftStatus,
   getImportReviewSchoolId,
   getImportReviewWorkbooks,
   getImportSubjectMappings,
@@ -77,6 +78,7 @@ import type { ResultRow } from "./ResultTable";
 import { grandessaGradingScale } from "../../../config/grandessaGrading";
 import { groupSavedResultDrafts } from "../../../utils/resultDraftRecovery";
 import { formatScoreInput, parseScoreInput } from "../../../utils/scoreInput";
+import { getReportCenterPublishBlockReason, publishReportResultsAndVerify } from "../../../utils/reportCenter";
 
 type FilterTerm = "All" | "First" | "Second" | "Third";
 type FilterStatus = "All" | Result["status"];
@@ -92,7 +94,16 @@ type PendingImportPupil = {
   savedAt: string;
   duplicateCount: number;
   duplicateWorkbookCount: number;
+  olderVersions?: Array<{ workbookKey: string; ownerId: string; savedAt: string; entry: ResultImportPreviewEntry }>;
   entry: ResultImportPreviewEntry;
+};
+
+type PublishSavedPeriodParams = {
+  studentId: string;
+  classId: string;
+  academicYear: string;
+  term: Result["term"];
+  reportType: "Midterm" | "End-of-Term";
 };
 
 type PendingImportPupilStatus = { label: string; explanation: string };
@@ -251,7 +262,7 @@ function statusBadgeStyle(status: string): React.CSSProperties {
   return { borderRadius: 999, background: color[1], color: color[0], fontSize: 12, fontWeight: 700, padding: "4px 9px" };
 }
 
-export default function ResultsPage() {
+export default function ResultsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { roles, user } = useAuth();
@@ -263,6 +274,7 @@ export default function ResultsPage() {
 
   const [loading, setLoading] = useState<boolean>(true);
   const [results, setResults] = useState<Result[]>([]);
+  const [importedResultIds, setImportedResultIds] = useState<Set<string>>(new Set());
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -358,6 +370,7 @@ export default function ResultsPage() {
       setClasses(classesData);
       setSubjects(subjectsData);
       setTeacherAssignments(assignments);
+      window.dispatchEvent(new Event("grandessa:results-updated"));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to load results module.";
       setError(message);
@@ -420,29 +433,31 @@ export default function ResultsPage() {
     setPendingImportPupilsError("");
     void Promise.all(savedImportWorkbooks.map(async (workbook) => {
       const entries = await getImportReviewDrafts(workbook.workbookKey, workbook.ownerId);
-      const reviewEntries = reconcileSavedImportStudentMatches(
-        entries,
-        students,
-        classes,
-      );
+      const completedResultIds = entries.filter((entry) => Boolean(entry.workflowStatus))
+        .flatMap((entry) => entry.importedResultIds ?? []);
+      const reviewEntries = reconcileSavedImportStudentMatches(entries, students, classes);
       const separatorIndex = workbook.workbookKey.indexOf(":");
       const sheetName = separatorIndex >= 0
         ? workbook.workbookKey.slice(separatorIndex + 1)
         : "Saved worksheet";
-      return reviewEntries.map((entry) => ({
-        workbookKey: workbook.workbookKey,
-        ownerId: workbook.ownerId,
-        ownerName: workbook.ownerName,
-        sheetName,
-        savedAt: entry.savedAt || workbook.updatedAt,
-        duplicateCount: 1,
-        duplicateWorkbookCount: 1,
-        entry,
-      }));
+      return {
+        completedResultIds,
+        reviewEntries: reviewEntries.map((entry) => ({
+          workbookKey: workbook.workbookKey,
+          ownerId: workbook.ownerId,
+          ownerName: workbook.ownerName,
+          sheetName,
+          savedAt: entry.savedAt || workbook.updatedAt,
+          duplicateCount: 1,
+          duplicateWorkbookCount: 1,
+          entry,
+        })),
+      };
     }))
       .then((workbookEntries) => {
         if (cancelled) return;
-        setPendingImportPupils(collapseDuplicatePendingImportPupils(workbookEntries.flat()));
+        setImportedResultIds(new Set(workbookEntries.flatMap((item) => item.completedResultIds)));
+        setPendingImportPupils(collapseDuplicatePendingImportPupils(workbookEntries.flatMap((item) => item.reviewEntries)));
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -1210,6 +1225,42 @@ export default function ResultsPage() {
     });
   }, [activeSubjectRowKey]);
 
+  async function handleDeleteSingleImportVersion(
+    review: PendingImportPupil,
+    older: { workbookKey: string; ownerId: string; savedAt: string; entry: ResultImportPreviewEntry },
+  ): Promise<void> {
+    const date = new Date(older.savedAt);
+    const dateLabel = Number.isNaN(date.getTime()) ? "date unavailable" : date.toLocaleString();
+    if (!window.confirm(
+      `Delete the older saved import review for ${review.entry.studentName}?\n\nSaved: ${dateLabel}\nSession: ${older.entry.academicYear}\nTerm: ${older.entry.term ?? "Unconfirmed"}\n\nThis deletes only this review snapshot. Subject marks and published results will not be deleted.`,
+    )) return;
+    try {
+      await deleteImportReviewDraft(older.workbookKey, older.entry.studentKey, older.ownerId);
+      await handleRefreshSavedWorkbooks();
+      setImportSummary(`Removed the older review saved ${dateLabel} for ${review.entry.studentName}. The latest version remains.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete this older review version.");
+    }
+  }
+
+  async function handleDeleteOlderImportVersions(review: PendingImportPupil): Promise<void> {
+    const olderVersions = review.olderVersions ?? [];
+    if (!olderVersions.length) return;
+    const latestDate = new Date(review.savedAt);
+    const latestLabel = Number.isNaN(latestDate.getTime()) ? "the latest saved version" : latestDate.toLocaleString();
+    if (!window.confirm(`Keep the latest review saved ${latestLabel} for ${review.entry.studentName} and delete ${olderVersions.length} older workbook review copy/copies?\n\nOnly saved review snapshots will be removed. Subject marks and published results will not be deleted.`)) return;
+    setLoadingPendingImportPupils(true);
+    const failures: string[] = [];
+    for (const older of olderVersions) {
+      try { await deleteImportReviewDraft(older.workbookKey, older.entry.studentKey, older.ownerId); }
+      catch (err) { failures.push(err instanceof Error ? err.message : "Unable to delete an older review version."); }
+    }
+    await handleRefreshSavedWorkbooks();
+    setLoadingPendingImportPupils(false);
+    if (failures.length) setError(`Some older review copies could not be removed: ${failures.join(" ")}`);
+    else setImportSummary(`Removed ${olderVersions.length} older review copies and kept the latest review for ${review.entry.studentName}.`);
+  };
+
   const handleCloseImport = async (): Promise<void> => {
     if (isAddingImportStudent) {
       setIsAddingImportStudent(false);
@@ -1596,7 +1647,44 @@ export default function ResultsPage() {
     })));
   };
 
-  const handleConfirmImport = async (): Promise<void> => {
+  const publishSavedResultPeriod = async (
+    params: PublishSavedPeriodParams,
+    requireConfirmation = true,
+  ): Promise<void> => {
+    if (!isAdmin) throw new Error("Only an administrator can publish results.");
+    if (requireConfirmation && !window.confirm(
+      `Publish ${params.reportType === "Midterm" ? "midterm" : "end-of-term"} results for this pupil?\n\nClass: ${classes.find((item) => item.id === params.classId)?.class_name ?? "Class unavailable"}\nSession: ${params.academicYear}\nTerm: ${params.term} Term\n\nThe saved subject marks will be checked and their Published status verified. No parent messages are sent.`,
+    )) throw new Error("Publication was cancelled. The saved marks remain available in Results.");
+    const refreshedResults = await getResults();
+    const isMidterm = params.reportType === "Midterm";
+    const periodResults = refreshedResults.filter((result) =>
+      result.student_id === params.studentId && result.class_id === params.classId
+      && result.academic_year === params.academicYear && result.term === params.term
+      && (isMidterm ? result.assessment_type === "CA"
+        : result.assessment_type === "Combined" || result.assessment_type === "Examination"),
+    );
+    if (periodResults.length === 0) throw new Error("No saved subject results were found for this pupil and period. Refresh Results before publishing.");
+    const pendingResults = periodResults.filter((result) => result.status !== "Published");
+    if (pendingResults.length > 0) {
+      const reason = getReportCenterPublishBlockReason({
+        key: [params.studentId, params.classId, params.academicYear, params.term, params.reportType].join("|"),
+        studentId: params.studentId, classId: params.classId, academicYear: params.academicYear,
+        term: params.term, reportType: params.reportType, results: periodResults,
+      }, refreshedResults, isAdmin);
+      if (reason) throw new Error(reason);
+      const outcome = await publishReportResultsAndVerify(pendingResults, publishResult, getResults);
+      if (!outcome.refreshedResults) throw new Error("The publish result could not be verified. Refresh the saved status before trying again.");
+      setResults(outcome.refreshedResults);
+      if (outcome.failures.length > 0 || outcome.publishedResultIds.length !== pendingResults.length) {
+        const names = new Map(pendingResults.map((result) => [result.id, result.subject_name?.trim() || result.id]));
+        const details = outcome.failures.map((failure) => `${names.get(failure.resultId) ?? failure.resultId}: ${failure.message}`).join(" ");
+        throw new Error(`Published and verified ${outcome.publishedResultIds.length} of ${pendingResults.length} subject results. ${details}`);
+      }
+    } else setResults(refreshedResults);
+    window.dispatchEvent(new Event("grandessa:results-updated"));
+  };
+
+  const handleConfirmImport = async (publishAfterSave = false): Promise<void> => {
     const selectedEntries = readyImportEntries;
     if (selectedEntries.length === 0) {
       const includedEntries = importEntries.filter((entry) => entry.included !== false);
@@ -1616,6 +1704,11 @@ export default function ResultsPage() {
       setError("Choose a worksheet that matches the requested session and term before importing.");
       return;
     }
+    if (publishAfterSave && !isAdmin) {
+      setError("Only an administrator can publish results.");
+      return;
+    }
+    if (publishAfterSave && !window.confirm(`Save and publish the ${selectedEntries.length} ready pupil result set(s)?\n\nEach pupil's subject marks will be checked and publication verified. Any pupil that fails a genuine check will remain unpublished and be listed for review. No parent messages are sent.`)) return;
 
     setImportSubmitting(true);
     setError("");
@@ -1740,12 +1833,37 @@ export default function ResultsPage() {
           },
         });
 
+        let wasPublished = saveOutcome.workflowStatus === "published";
+        let publicationError = "";
+        if (publishAfterSave && !wasPublished) {
+          try {
+            await publishSavedResultPeriod({
+              studentId: student.id, classId: reportClassId, academicYear: entry.academicYear,
+              term: entry.term,
+              reportType: entry.reportKind === "Midterm / Continuous Assessment" ? "Midterm" : "End-of-Term",
+            }, false);
+            wasPublished = true;
+            try {
+              await markImportReviewDraftStatus({
+                workbookKey, entryKey: entry.studentKey, ownerId, studentId: student.id,
+                classId: reportClassId, workflowStatus: "published", resultIds: saveOutcome.resultIds,
+              });
+            } catch (trackingError) {
+              publicationError = "Published and verified, but import tracking could not be updated. Do not import this pupil again. "
+                + (trackingError instanceof Error ? trackingError.message : "Unknown import-tracking error.");
+            }
+          } catch (publishError) {
+            publicationError = publishError instanceof Error ? publishError.message : "Publication failed; the saved marks remain available in Results.";
+          }
+        }
         return {
           name: formatName(student.first_name, student.last_name),
           created: entryCreates.length,
           updated: entryUpdates.length,
           reused,
-          workflowStatus: saveOutcome.workflowStatus,
+          workflowStatus: wasPublished ? "published" as const : saveOutcome.workflowStatus,
+          published: wasPublished,
+          publicationError,
         };
       });
 
@@ -1766,19 +1884,32 @@ export default function ResultsPage() {
         `${entry.studentName}: ${value.workflowStatus === "published" ? "already published" : "saved as draft"}`,
       );
       await loadData();
+      const publicationWarnings = outcomes.saved.filter(({ value }) => Boolean(value.publicationError))
+        .map(({ value }) => `${value.name}: ${value.publicationError}`);
+      const publishedNames = outcomes.saved.filter(({ value }) => value.published).map(({ value }) => value.name);
+      const savedAsDraftNames = outcomes.saved.filter(({ value }) => !value.published).map(({ value }) => value.name);
       setError([
         failedNames.length > 0 ? `Import failed for ${failedNames.join("; ")}` : "",
+        publicationWarnings.length > 0 ? `Not published or tracking needs attention: ${publicationWarnings.join("; ")}` : "",
       ].filter(Boolean).join(". "));
       setImportSummary([
         successfulNames.length > 0 ? `Saved: ${successfulNames.join(", ")}.` : "",
-        failedNames.length > 0 ? `Failed: ${failedNames.join("; ")}.` : "",
+        publishedNames.length > 0 ? `Published and verified: ${publishedNames.join(", ")}.` : "",
+        (publishAfterSave && savedAsDraftNames.length > 0) ? `Saved but still unpublished: ${savedAsDraftNames.join(", ")}.` : "",
+        failedNames.length > 0 ? `Failed to save: ${failedNames.join("; ")}.` : "",
         `Created ${createdRows} result row(s), updated ${updatedRows}, reused ${reusedRows} exact matches.`,
-        verifiedStatuses.length > 0 ? `Database-verified status: ${verifiedStatuses.join("; ")}.` : "",
+        verifiedStatuses.length > 0 ? `Saved status: ${verifiedStatuses.join("; ")}.` : "",
       ].filter(Boolean).join(" "));
-      const allSelectedPupilsSaved = outcomes.failed.length === 0
-        && outcomes.saved.length === selectedEntries.length;
+      const allSelectedPupilsSaved = outcomes.failed.length === 0 && outcomes.saved.length === selectedEntries.length;
       if (allSelectedPupilsSaved) {
-        navigate("/admin/results");
+        setIsImportOpen(false);
+        setImportEntries([]);
+        setImportFileName("");
+        setActiveImportEntryKey(null);
+        setActiveSubjectRowKey(null);
+        setIsFinalImportPreview(false);
+        window.dispatchEvent(new Event("grandessa:results-updated"));
+        if (!embedded) navigate("/admin/results");
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to import results.";
@@ -1816,41 +1947,38 @@ export default function ResultsPage() {
           }}
         >
           <div>
-            <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 32 }}>Subject Result Records</h1>
+            <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>{embedded ? "Enter or import results" : "Results"}</h1>
             <p style={{ marginTop: 8, color: "#666", fontFamily: "Poppins" }}>
-              Enter, review, and correct individual subject marks here. Publish Arena brings imports, drafts, publication, and completion status together.
+              {embedded ? "Use manual entry or import Excel. Publish buttons and report status are above on this same page." : "Enter, review, import and publish pupil results in one workspace."}
             </p>
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <ResultsNotificationBell
-              results={results}
-              isAdministrator={isAdmin}
-              isTeacher={isTeacher && !isAdmin}
-              onOpen={(notice: ResultNotice) => {
-                setStatus(notice.status);
-                setClassId(notice.classId);
-                setSession(notice.academicYear);
-                setTerm(notice.term);
-                setReportType(notice.assessmentType === "CA" ? "Midterm" : "End-of-Term");
-              }}
-            />
-            <Button type="button" variant="secondary" onClick={() => void loadData()} disabled={loading}>
-              Refresh
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => navigate("/admin/results")}>Publish Arena</Button>
-            <label style={{ display: "grid", gap: 4, color: "#334155", fontSize: 12, fontWeight: 700 }}>
-              Workbook report type
-              <select
-                value={importReportKind}
-                onChange={(event) => setImportReportKind(event.target.value as ImportReportKindSelection)}
-                style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff" }}
-              >
-                <option value="Auto-detect">Auto-detect from workbook</option>
-                <option value="Midterm / Continuous Assessment">Midterm / Continuous Assessment</option>
-                <option value="End-of-Term / Year Report Card">End-of-Term / Year Report Card</option>
-              </select>
-            </label>
+            {!embedded ? (
+              <>
+                <ResultsNotificationBell
+                  results={results}
+                  isAdministrator={isAdmin}
+                  isTeacher={isTeacher && !isAdmin}
+                  onOpen={(notice: ResultNotice) => {
+                    setStatus(notice.status);
+                    setClassId(notice.classId);
+                    setSession(notice.academicYear);
+                    setTerm(notice.term);
+                    setReportType(notice.assessmentType === "CA" ? "Midterm" : "End-of-Term");
+                  }}
+                />
+                <Button type="button" variant="secondary" onClick={() => void loadData()} disabled={loading}>Refresh</Button>
+                <label style={{ display: "grid", gap: 4, color: "#334155", fontSize: 12, fontWeight: 700 }}>
+                  Import type
+                  <select value={importReportKind} onChange={(event) => setImportReportKind(event.target.value as ImportReportKindSelection)} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff" }}>
+                    <option value="Auto-detect">Auto-detect</option>
+                    <option value="Midterm / Continuous Assessment">Midterm / Continuous Assessment</option>
+                    <option value="End-of-Term / Year Report Card">End-of-Term / Year Report Card</option>
+                  </select>
+                </label>
+              </>
+            ) : null}
             <label style={{ display: "inline-flex" }}>
               <input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => void handleImportFile(event)} hidden />
               <span style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", borderRadius: 12, background: "#e2e8f0", color: "#0f172a", fontWeight: 700, cursor: "pointer" }}>
@@ -1900,9 +2028,11 @@ export default function ResultsPage() {
         {importSummary ? (
           <div style={{ marginBottom: 16, padding: 14, borderRadius: 12, border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#166534", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 360px", minWidth: 0 }}>{importSummary}</div>
-            <Button type="button" onClick={() => navigate("/admin/results")} style={{ minHeight: 48, padding: "12px 18px", background: "#1d4ed8", borderColor: "#1d4ed8", fontWeight: 900 }}>
-              OPEN PUBLISH ARENA →
-            </Button>
+            {!embedded ? (
+              <Button type="button" onClick={() => navigate("/admin/results")} style={{ minHeight: 48, padding: "12px 18px", background: "#1d4ed8", borderColor: "#1d4ed8", fontWeight: 900 }}>
+                OPEN RESULTS / PUBLISH ARENA →
+              </Button>
+            ) : null}
           </div>
         ) : null}
 
@@ -1924,7 +2054,7 @@ export default function ResultsPage() {
                 <Button type="button" variant="secondary" onClick={() => void handleRefreshSavedWorkbooks()} disabled={loadingSavedWorkbooks || loadingPendingImportPupils}>
                   Refresh imports
                 </Button>
-                <Button type="button" variant="secondary" onClick={() => navigate("/admin/results")}>Return to Publish Arena</Button>
+                {!embedded ? <Button type="button" variant="secondary" onClick={() => navigate("/admin/results")}>Return to Results</Button> : null}
               </div>
             </div>
 
@@ -1995,14 +2125,43 @@ export default function ResultsPage() {
                         <span style={statusBadgeStyle(progress.label)}>{progress.label}</span>
                       </div>
                       <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>{progress.explanation}</p>
+                       <p style={{ margin: 0, color: "#64748b", fontSize: 12 }}>
+                         Latest review saved: {Number.isNaN(new Date(review.savedAt).getTime()) ? "date unavailable" : new Date(review.savedAt).toLocaleString()} · Imported from Excel
+                       </p>
                        {review.duplicateCount > 1 ? (
-                         <p style={{ margin: 0, color: "#92400e", fontSize: 13 }}>
-                           {review.duplicateCount} saved versions across {review.duplicateWorkbookCount} workbook upload(s) refer to this same pupil and period. This opens the latest saved version; older versions are retained and will not appear as separate pupil tasks.
-                         </p>
+                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                           <p style={{ margin: 0, color: "#92400e", fontSize: 12 }}>{review.duplicateCount} saved versions across {review.duplicateWorkbookCount} uploads.</p>
+                           <Button type="button" size="sm" variant="secondary" onClick={() => void handleDeleteOlderImportVersions(review)}>Delete {review.olderVersions?.length ?? 0} older version(s)</Button>
+                         </div>
                        ) : null}
+                      {review.olderVersions?.length ? (
+                        <details style={{ marginTop: 5, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 8, background: "#f8fafc" }}>
+                          <summary style={{ cursor: "pointer", color: "#334155", fontSize: 12, fontWeight: 700 }}>
+                            View older versions and saved dates ({review.olderVersions.length})
+                          </summary>
+                          <div style={{ display: "grid", gap: 7, marginTop: 8 }}>
+                            {review.olderVersions.map((older, olderIndex) => {
+                              const olderDate = new Date(older.savedAt);
+                              const olderDateLabel = Number.isNaN(olderDate.getTime()) ? "date unavailable" : olderDate.toLocaleString();
+                              const separator = older.workbookKey.indexOf(":");
+                              const olderSheet = separator >= 0 ? older.workbookKey.slice(separator + 1) : "Saved worksheet";
+                              return (
+                                <div key={`${older.ownerId}::${older.workbookKey}::${older.entry.studentKey}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", borderTop: "1px solid #e2e8f0", paddingTop: 7 }}>
+                                  <span style={{ color: "#475569", fontSize: 12 }}>
+                                    Older copy {olderIndex + 1} · {olderDateLabel} · {olderSheet}
+                                  </span>
+                                  <Button type="button" size="sm" variant="secondary" onClick={() => void handleDeleteSingleImportVersion(review, older)}>
+                                    Delete this version
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </details>
+                      ) : null}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ color: "#64748b", fontSize: 12 }}>Worksheet: {review.sheetName}{review.ownerName ? ` · Saved by ${review.ownerName}` : ""}</span>
-                        <Button type="button" size="sm" onClick={() => navigate(`/admin/result-records?${params.toString()}`)}>Open saved review</Button>
+                        <Button type="button" size="sm" onClick={() => navigate(`/admin/results?${params.toString()}`)}>Open saved review</Button>
                       </div>
                     </article>
                   );
@@ -2017,7 +2176,7 @@ export default function ResultsPage() {
             <div>
               <h2 id="saved-result-drafts-heading" style={{ margin: 0 }}>Saved Result Drafts</h2>
               <p style={{ color: "#64748b", margin: "6px 0 0" }}>
-                Individual Draft result rows are grouped by pupil, session, term and assessment. The stored result row does not identify whether it originated from manual entry or an import; workbook review drafts are listed separately below. These are actual subject-result rows already saved in the Results records and can be resumed here through the results workflow. They are different from the unreconciled workbook pupils shown above.
+                Saved subject drafts are grouped by pupil and period. Each group is labelled Imported, Manual, or Mixed. Actual publish actions are available in the pupil report list above.
               </p>
             </div>
             <span>{savedResultDraftGroups.length} pupil/period group(s)</span>
@@ -2045,6 +2204,9 @@ export default function ResultsPage() {
                       {" · "}{group.results.length} subject draft(s)
                       <span style={{ display: "block", color: "#64748b", fontSize: 13, fontWeight: 400, marginTop: 3 }}>
                         {className} · {group.academicYear} · {group.term} Term · {assessmentName}
+                      </span>
+                      <span style={{ display: "inline-block", marginTop: 5, borderRadius: 999, padding: "2px 8px", background: "#f1f5f9", color: "#334155", fontSize: 11, fontWeight: 700 }}>
+                        {group.results.every((row) => importedResultIds.has(row.id)) ? "Imported" : group.results.some((row) => importedResultIds.has(row.id)) ? "Mixed" : "Manual"}
                       </span>
                     </summary>
                     <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
@@ -2082,6 +2244,7 @@ export default function ResultsPage() {
           )}
         </section>
 
+        {!embedded ? (
         <section className="card" aria-labelledby="saved-workbook-drafts-heading" style={{ marginBottom: 20, padding: 18 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
             <div>
@@ -2135,6 +2298,9 @@ export default function ResultsPage() {
             </div>
           )}
         </section>
+
+
+        ) : null}
 
         <ResultFilters
           search={search}
@@ -2268,6 +2434,8 @@ export default function ResultsPage() {
             userId={user?.id}
             resumeResult={resumeBatchResult}
             onSaved={loadData}
+            canPublish={isAdmin}
+            onSaveAndPublish={publishSavedResultPeriod}
             onEditExisting={(result) => {
               setIsBatchOpen(false);
               setFormMode("edit");
@@ -2280,7 +2448,7 @@ export default function ResultsPage() {
 
       <AppModal
         open={isImportOpen}
-        title={isAddingImportStudent ? "Add Student" : isFinalImportPreview ? "Final check — save drafts" : "Review pupil results"}
+        title={isAddingImportStudent ? "Add Student" : isFinalImportPreview ? "Final check — save or publish" : "Review pupil results"}
         size="xl"
         dialogStyle={{
           height: "calc(100dvh - 32px)",
@@ -2318,8 +2486,13 @@ export default function ResultsPage() {
             {isFinalImportPreview ? (
               <>
                 <Button type="button" size="sm" variant="secondary" onClick={() => setIsFinalImportPreview(false)}>Back to pupil review</Button>
-                <Button type="button" size="sm" onClick={() => void handleConfirmImport()} disabled={importSubmitting || importableBlocks === 0 || importPeriodConflict}>
-                  {importSubmitting ? "Saving drafts…" : `Save as Draft (${importableBlocks})`}
+                {isAdmin ? (
+                  <Button type="button" size="sm" onClick={() => void handleConfirmImport(true)} disabled={importSubmitting || importableBlocks === 0 || importPeriodConflict} style={{ background: "#047857", borderColor: "#047857", fontWeight: 900 }}>
+                    {importSubmitting ? "SAVING & PUBLISHING…" : `SAVE & PUBLISH (${importableBlocks})`}
+                  </Button>
+                ) : null}
+                <Button type="button" size="sm" variant="secondary" onClick={() => void handleConfirmImport(false)} disabled={importSubmitting || importableBlocks === 0 || importPeriodConflict}>
+                  {importSubmitting ? "Saving…" : `Save results (${importableBlocks})`}
                 </Button>
               </>
             ) : (
@@ -2458,7 +2631,7 @@ export default function ResultsPage() {
               return (
                 <section style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 18, background: "#fff" }}>
                   <p role="status" style={{ marginTop: 0, padding: 12, borderRadius: 10, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1e3a8a" }}>
-                    <strong>{readyImportEntries.length} pupil result set(s) ready to save.</strong> After a successful save, Publish Arena opens automatically so you can publish each pupil report from one place. Midterm CA does not require exam marks, totals, grades, or remarks. No parent messages are sent here. Existing published marks are reused only when they match exactly.
+                    <strong>{readyImportEntries.length} pupil result set(s) ready.</strong> Choose <strong>SAVE &amp; PUBLISH</strong> to save these marks and publish each pupil report immediately, or Save results to keep them unpublished. Midterm CA needs only the CA mark and its maximum. No parent messages are sent. Existing published marks are reused only when they match exactly.
                   </p>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <div>
@@ -2917,7 +3090,7 @@ export default function ResultsPage() {
                     role="region"
                     aria-label={`Subject mappings for ${entry.studentName}; scroll horizontally to see all columns`}
                     tabIndex={0}
-                    style={{ minWidth: 0, maxWidth: "100%", overflowX: "auto" }}
+                    style={{ minWidth: 0, maxWidth: "100%", overflowX: "scroll", overflowY: "hidden", scrollbarGutter: "stable", overscrollBehaviorX: "contain", paddingBottom: 8 }}
                   >
                     <table style={{ width: "100%", minWidth: 1050, borderCollapse: "collapse" }}>
                       <thead>

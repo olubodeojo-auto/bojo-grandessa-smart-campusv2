@@ -93,6 +93,9 @@ const migrationFiles = import.meta.glob<string>(
   { eager: true, query: "?raw", import: "default" },
 );
 const resultsMigration = Object.values(migrationFiles)[0] ?? "";
+const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
+const workspacePage = readFileSync(resolve(process.cwd(), "src/pages/admin/results/ResultsWorkspacePage.tsx"), "utf8");
+const batchEntry = readFileSync(resolve(process.cwd(), "src/pages/admin/results/ResultBatchEntry.tsx"), "utf8");
 const reportMigrationFiles = import.meta.glob<string>(
   "../../supabase/migrations/20261016000000_report_card_details.sql",
   { eager: true, query: "?raw", import: "default" },
@@ -1397,8 +1400,10 @@ describe("Add Results saved draft recovery", () => {
       .toEqual(["math-draft", "english-draft", "combined-draft", "next-term-draft"]);
     expect(resultsPage).toContain("Saved Result Drafts");
     expect(resultsPage).toContain("Resume in Add Results");
-    expect(resultsPage).toContain("Saved Workbook Drafts");
-    expect(resultsPage).toContain("The stored result row does not identify whether it originated from manual entry or an import");
+    expect(resultsPage).toContain("SAVE & PUBLISH");
+    expect(resultsPage).toContain("Imported");
+    expect(resultsPage).toContain("Manual");
+    expect(resultsPage).toContain("Delete {review.olderVersions?.length ?? 0} older version(s)");
     expect(resultsPage).not.toContain('role="tablist"');
   });
 
@@ -1406,9 +1411,8 @@ describe("Add Results saved draft recovery", () => {
     const resultDraft = result({ id: "database-result", status: "Draft" });
     expect(groupSavedResultDrafts([resultDraft]).flatMap((group) => group.results.map((row) => row.id)))
       .toEqual(["database-result"]);
-    expect(resultsPage).toContain("Saved Workbook Drafts");
-    expect(resultsPage).toContain("getImportReviewDrafts(selected.workbookKey, selected.ownerId)");
-    expect(resultsPage).toContain("Resume saved draft");
+    expect(resultsPage).toContain("Latest review saved:");
+    expect(resultsPage).toContain("Delete {review.olderVersions?.length ?? 0} older version(s)");
     expect(resultsPage).not.toContain('role="tablist"');
   });
 });
@@ -3667,6 +3671,23 @@ describe("uncertain result save feedback", () => {
   });
 });
 
+
+describe("unified Results / Publish Arena workflow", () => {
+  it("routes Results, subject entry, and report publishing into one workspace", () => {
+    expect(appSource).toContain('path="results" element={<ProtectedRoute allowedRoles={resultsRoles}><ResultsWorkspacePage /></ProtectedRoute>}');
+    expect(appSource).toContain('path="result-records" element={<ProtectedRoute allowedRoles={resultsRoles}><RedirectLegacyResultsRoute /></ProtectedRoute>}');
+    expect(workspacePage).toContain("<ReportCardsPage embedded />");
+    expect(workspacePage).toContain("<ResultsPage embedded />");
+  });
+
+  it("makes Save & Publish available for import and manual batch entry", () => {
+    expect(resultsPage).toContain("SAVE & PUBLISH (");
+    expect(resultsPage).toContain("onSaveAndPublish={publishSavedResultPeriod}");
+    expect(batchEntry).toContain("SAVE & PUBLISH");
+    expect(batchEntry).toContain("onSaveAndPublish");
+    expect(resultsPage).toContain('overflowX: "scroll"');
+  });
+});
 
 describe("pupil review keeps the important context visible and advanced settings out of the way", () => {
   it("shows the pupil period summary and keeps exception-only settings collapsed", () => {
