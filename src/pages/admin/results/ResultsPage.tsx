@@ -79,7 +79,7 @@ import type { ResultRow } from "./ResultTable";
 import { grandessaGradingScale } from "../../../config/grandessaGrading";
 import { groupSavedResultDrafts } from "../../../utils/resultDraftRecovery";
 import { formatScoreInput, parseScoreInput } from "../../../utils/scoreInput";
-import { getReportCenterPublishBlockReason, publishReportResultsAndVerify } from "../../../utils/reportCenter";
+import { getReportCenterPublishBlockReason, getReportCenterResultsWithRecordedMarks, publishReportResultsAndVerify } from "../../../utils/reportCenter";
 
 type FilterTerm = "All" | "First" | "Second" | "Third";
 type FilterStatus = "All" | Result["status"];
@@ -1783,12 +1783,16 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
         : result.assessment_type === "Combined" || result.assessment_type === "Examination"),
     );
     if (periodResults.length === 0) throw new Error("No saved subject results were found for this pupil and period. Refresh Results before publishing.");
-    const pendingResults = periodResults.filter((result) => result.status !== "Published");
+    const publishablePeriodResults = getReportCenterResultsWithRecordedMarks(periodResults);
+    if (publishablePeriodResults.length === 0) {
+      throw new Error("No complete subject marks are available to publish yet. Incomplete subject rows remain drafts; enter their marks later and publish the complete rows when ready.");
+    }
+    const pendingResults = publishablePeriodResults.filter((result) => result.status !== "Published");
     if (pendingResults.length > 0) {
       const reason = getReportCenterPublishBlockReason({
         key: [params.studentId, params.classId, params.academicYear, params.term, params.reportType].join("|"),
         studentId: params.studentId, classId: params.classId, academicYear: params.academicYear,
-        term: params.term, reportType: params.reportType, results: periodResults,
+        term: params.term, reportType: params.reportType, results: publishablePeriodResults,
       }, refreshedResults, isAdmin);
       if (reason) throw new Error(reason);
       const outcome = await publishReportResultsAndVerify(pendingResults, publishResult, getResults);
