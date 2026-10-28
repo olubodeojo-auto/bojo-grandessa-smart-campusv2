@@ -316,6 +316,16 @@ function resultSubjectKey(result: Result): string | null {
   return result.subject_id?.trim() || result.subject_name?.trim().toLowerCase() || null;
 }
 
+function isOptionalCrsSubject(subjectName: string, subjectId: string): boolean {
+  // Grandessa has confirmed that pupils who do not take CRS must not be blocked
+  // from publication solely because their report has no CRS row.
+  const normalizedName = subjectName.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normalizedId = subjectId.trim().toLowerCase();
+  return normalizedName === "crs"
+    || normalizedName.startsWith("christianreligiousstudies")
+    || normalizedId === "crs";
+}
+
 export function getReportCenterCompleteness(
   period: ReportCenterPeriod,
   allResults: Result[] = period.results,
@@ -348,7 +358,9 @@ export function getReportCenterCompleteness(
     )[0]?.[1] ?? new Map<string, string>();
   const periodSubjects = new Set(subjectIds);
   const missingSubjects = [...expectedSubjects.entries()]
-    .filter(([subjectId]) => !periodSubjects.has(subjectId))
+    .filter(([subjectId, subjectName]) =>
+      !periodSubjects.has(subjectId) && !isOptionalCrsSubject(subjectName, subjectId),
+    )
     .map(([, subjectName]) => subjectName);
   if (missingSubjects.length > 0) {
     return {
