@@ -1175,6 +1175,46 @@ function getImportRosterNameCandidates(student: Student): string[] {
   ].filter((candidate) => candidate.trim().length > 0);
 }
 
+function getNameTokens(value: string): string[] {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .match(/[a-z0-9]+/g) ?? [];
+}
+
+/**
+ * Accept school workbook short forms when the roster match is unambiguous.
+ * Tokens must match in order; unrelated or ambiguous names are not guessed.
+ */
+function matchesShortFormName(sourceName: string, rosterName: string): boolean {
+  const sourceTokens = getNameTokens(sourceName);
+  const rosterTokens = getNameTokens(rosterName);
+  if (sourceTokens.length === 0 || sourceTokens.length > rosterTokens.length) return false;
+
+  let rosterIndex = 0;
+  for (let sourceIndex = 0; sourceIndex < sourceTokens.length; sourceIndex += 1) {
+    const sourceToken = sourceTokens[sourceIndex];
+    let matchAt = -1;
+    for (let index = rosterIndex; index < rosterTokens.length; index += 1) {
+      const rosterToken = rosterTokens[index];
+      const isExact = rosterToken === sourceToken;
+      const isPrefix = sourceToken.length >= 2 && rosterToken.startsWith(sourceToken);
+      const isInitial = sourceToken.length === 1
+        && sourceTokens.length >= 2
+        && (sourceIndex === 0 || sourceIndex === sourceTokens.length - 1)
+        && rosterToken.startsWith(sourceToken);
+      if (isExact || isPrefix || isInitial) {
+        matchAt = index;
+        break;
+      }
+    }
+    if (matchAt < 0) return false;
+    rosterIndex = matchAt + 1;
+  }
+  return true;
+}
+
 function matchStudent(
   entry: ResultImportPreviewEntry,
   students: Student[]
@@ -1222,7 +1262,10 @@ function matchStudent(
   }
 
   const byName = students.filter((student) =>
-    getImportRosterNameCandidates(student).some((candidateName) => normalizeMatchValue(candidateName) === normalizedName)
+    getImportRosterNameCandidates(student).some((candidateName) =>
+      normalizeMatchValue(candidateName) === normalizedName
+      || matchesShortFormName(entry.studentName, candidateName),
+    )
   );
 
   const normalizedClass = normalizeMatchValue(entry.className);

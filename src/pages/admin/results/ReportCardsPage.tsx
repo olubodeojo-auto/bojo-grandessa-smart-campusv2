@@ -212,6 +212,7 @@ export default function ReportCardsPage() {
   const [publicationEvidenceError, setPublicationEvidenceError] = useState("");
   const [loadingPeriods, setLoadingPeriods] = useState(true);
   const [publishingKey, setPublishingKey] = useState("");
+  const [bulkPublishing, setBulkPublishing] = useState(false);
   const publishInFlightPeriods = useRef(new Set<string>());
   const [unpublishingKey, setUnpublishingKey] = useState("");
   const unpublishInFlightPeriods = useRef(new Set<string>());
@@ -626,35 +627,50 @@ export default function ReportCardsPage() {
     return false;
   }
 
-  async function publishReportPeriod(period: ReportCenterPeriod): Promise<void> {
+  async function publishReportPeriod(
+    period: ReportCenterPeriod,
+    requireConfirmation = true,
+    refreshImportQueue = true,
+  ): Promise<{ ok: boolean; message: string; cancelled?: boolean; warning?: string }> {
     const releasePublishLock = acquireReportPublishLock(publishInFlightPeriods.current, period.key);
-    if (!releasePublishLock) return;
+    if (!releasePublishLock) return { ok: false, message: "This report is already being processed." };
     try {
-      if (!isAdministrator) return;
+      if (!isAdministrator) return { ok: false, message: "Only an authorised administrator can publish reports." };
       const publishBlockReason = getPublicationEvidenceErrorForPeriod(period)
         || getReportCenterPublishBlockReason(period, results, isAdministrator, publicationEvidence);
       if (publishBlockReason) {
-        setError(`Publishing unavailable: ${publishBlockReason}`);
-        return;
+        const message = "Publishing unavailable: " + publishBlockReason;
+        if (requireConfirmation) setError(message);
+        return { ok: false, message };
       }
       const student = students.find((candidate) => candidate.id === period.studentId);
       if (!student) {
-        setError("The pupil for this report period is no longer available.");
-        return;
+        const message = "The pupil for this report period is no longer available.";
+        if (requireConfirmation) setError(message);
+        return { ok: false, message };
       }
+      const pupilName = (student.first_name + " " + student.last_name).trim();
       const pendingResults = period.results.filter((result) => result.status !== "Published");
-      if (pendingResults.length === 0) return;
+      if (pendingResults.length === 0) return { ok: true, message: pupilName + " was already published." };
       const className = classes.find((candidate) => candidate.id === period.classId)?.class_name
         ?? period.results.find((result) => result.class_name)?.class_name
         ?? "Class unavailable";
-      const confirmed = window.confirm(
-        `Publish subject results for ${student.first_name} ${student.last_name}?\n\nClass: ${className}\nSession: ${period.academicYear}\nTerm: ${period.term}\nSubject results to publish: ${pendingResults.length}\n\nOnly this pupil's subject results will be published after the existing checks pass. This does not send emails.`,
-      );
-      if (!confirmed) return;
+      if (requireConfirmation) {
+        const confirmed = window.confirm(
+          "Publish subject results for " + pupilName + "?\n\nClass: " + className
+          + "\nSession: " + period.academicYear
+          + "\nTerm: " + period.term
+          + "\nSubject results to publish: " + pendingResults.length
+          + "\n\nOnly this pupil's subject results will be published after the existing checks pass. This does not send emails.",
+        );
+        if (!confirmed) return { ok: false, message: "Publication was cancelled.", cancelled: true };
+      }
 
       setPublishingKey(period.key);
-      setError("");
-      setSuccess("");
+      if (requireConfirmation) {
+        setError("");
+        setSuccess("");
+      }
       setPublishVerificationErrors((current) => {
         const next = { ...current };
         delete next[period.key];
@@ -665,16 +681,14 @@ export default function ReportCardsPage() {
         delete next[period.key];
         return next;
       });
-      const outcome = await publishReportResultsAndVerify(
-        pendingResults,
-        publishResult,
-        getResults,
-      );
+      const outcome = await publishReportResultsAndVerify(pendingResults, publishResult, getResults);
       if (!outcome.refreshedResults) {
-        const message = `The publish outcome for ${student.first_name} ${student.last_name} could not be verified: ${outcome.verificationError ?? "Unable to reload saved statuses."}`;
+        const message = "The publish outcome for " + pupilName + " could not be verified: "
+          + (outcome.verificationError ?? "Unable to reload saved statuses.")
+          + " Refresh the saved status before retrying.";
         setPublishVerificationErrors((current) => ({ ...current, [period.key]: message }));
-        setError(`${message} Refresh the saved status before retrying.`);
-        return;
+        if (requireConfirmation) setError(message);
+        return { ok: false, message };
       }
       setResults(outcome.refreshedResults);
 
@@ -683,17 +697,18 @@ export default function ReportCardsPage() {
         let importQueueMessage = "";
         try {
           const importEntryUpdated = await markPublishedImportEntry(period, outcome.refreshedResults);
-          if (importEntryUpdated) await refreshPendingImportPupils();
+          if (importEntryUpdated && refreshImportQueue) await refreshPendingImportPupils();
         } catch (statusError) {
           importQueueMessage = statusError instanceof Error
             ? statusError.message
             : "Unable to refresh the saved import status.";
         }
-        setSuccess(`Verified: published ${publishedCount} subject result(s) for ${student.first_name} ${student.last_name}.`);
-        if (importQueueMessage) {
-          setError(`The report is published, but its saved import queue status could not be updated. Do not import this pupil again. ${importQueueMessage}`);
+        const message = "Verified: published " + publishedCount + " subject result(s) for " + pupilName + ".";
+        if (requireConfirmation) setSuccess(message);
+        if (importQueueMessage && requireConfirmation) {
+          setError("The report is published, but its saved import queue status could not be updated. Do not import this pupil again. " + importQueueMessage);
         }
-        return;
+        return { ok: true, message, warning: importQueueMessage || undefined };
       }
 
       const resultNames = new Map(pendingResults.map((result) => [
@@ -701,12 +716,83 @@ export default function ReportCardsPage() {
         result.subject_name?.trim() || result.id,
       ]));
       const failureDetails = outcome.failures
-        .map((failure) => `${resultNames.get(failure.resultId) ?? failure.resultId}: ${failure.message}`)
+        .map((failure) => (resultNames.get(failure.resultId) ?? failure.resultId) + ": " + failure.message)
         .join(" ");
-      setError(`Verified ${publishedCount} of ${pendingResults.length} subject result(s) as Published for ${student.first_name} ${student.last_name}; ${pendingResults.length - publishedCount} remain unpublished. ${failureDetails}`);
+      const message = "Verified " + publishedCount + " of " + pendingResults.length
+        + " subject result(s) as Published for " + pupilName + "; "
+        + (pendingResults.length - publishedCount) + " remain unpublished. " + failureDetails;
+      if (requireConfirmation) setError(message);
+      return { ok: false, message };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to publish this report period.";
+      if (requireConfirmation) setError(message);
+      return { ok: false, message };
     } finally {
       setPublishingKey((current) => current === period.key ? "" : current);
       releasePublishLock();
+    }
+  }
+
+  async function publishAllReadyReports(): Promise<void> {
+    if (!isAdministrator || bulkPublishing) return;
+    const batch = [...publishableReportPeriods];
+    if (batch.length === 0) {
+      setError("No report currently passes every publishing check.");
+      return;
+    }
+    const subjectCount = batch.reduce(
+      (total, period) => total + period.results.filter((result) => result.status !== "Published").length,
+      0,
+    );
+    const confirmed = window.confirm(
+      "Publish all " + batch.length + " ready pupil report(s)?\n\n"
+      + "Subject results to publish: " + subjectCount + "\n\n"
+      + "The system will check and verify each pupil's saved Published status. Reports that fail a check will remain unpublished and be listed afterward. This does not send emails.",
+    );
+    if (!confirmed) return;
+
+    setBulkPublishing(true);
+    setError("");
+    setSuccess("");
+    const successfulPupils: string[] = [];
+    const failedPupils: string[] = [];
+    const queueWarnings: string[] = [];
+    try {
+      for (const period of batch) {
+        const student = students.find((candidate) => candidate.id === period.studentId);
+        const pupilName = student
+          ? (student.first_name + " " + student.last_name).trim()
+          : "Pupil " + period.studentId;
+        const outcome = await publishReportPeriod(period, false, false);
+        if (outcome.ok) {
+          successfulPupils.push(pupilName);
+          if (outcome.warning) queueWarnings.push(pupilName + ": " + outcome.warning);
+        } else {
+          failedPupils.push(pupilName + ": " + outcome.message);
+        }
+      }
+
+      try {
+        setResults(await getResults());
+      } catch (refreshError) {
+        failedPupils.push("Final status refresh: " + (refreshError instanceof Error ? refreshError.message : "Unable to reload results."));
+      }
+      await refreshPendingImportPupils();
+
+      setSuccess(
+        "Bulk publishing completed: verified " + successfulPupils.length + " of " + batch.length
+        + " pupil report(s) in Published status. " + subjectCount + " subject result(s) were targeted. No emails were sent.",
+      );
+      const problems: string[] = [];
+      if (failedPupils.length > 0) {
+        problems.push("Not published or not verified (" + failedPupils.length + "): " + failedPupils.join("; "));
+      }
+      if (queueWarnings.length > 0) {
+        problems.push("Publication succeeded, but import tracking needs attention: " + queueWarnings.join("; "));
+      }
+      if (problems.length > 0) setError(problems.join("\n"));
+    } finally {
+      setBulkPublishing(false);
     }
   }
 
@@ -1223,7 +1309,7 @@ export default function ReportCardsPage() {
                   period,
                   results,
                   isAdministrator,
-                  Boolean(publishingKey),
+                  Boolean(publishingKey) || bulkPublishing,
                   publishVerificationErrors[period.key],
                   publicationEvidence,
                   periodEvidenceError,
@@ -1372,9 +1458,19 @@ export default function ReportCardsPage() {
                 : "No report currently passes every publishing check. Each draft explains what needs fixing."}
             </p>
           </div>
-          <Button type="button" onClick={() => setReportListView("drafts")} style={{ minHeight: 50, padding: "14px 20px", background: "#047857", borderColor: "#047857", fontWeight: 900, fontSize: 15, boxShadow: "0 0 0 3px #d1fae5, 0 8px 18px rgba(4,120,87,0.24)" }}>
-            SHOW DRAFTS TO PUBLISH →
-          </Button>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <Button
+              type="button"
+              onClick={() => void publishAllReadyReports()}
+              disabled={loadingPeriods || publishableReportPeriods.length === 0 || bulkPublishing || Boolean(publishingKey)}
+              style={{ minHeight: 58, padding: "16px 24px", background: "#047857", borderColor: "#047857", fontWeight: 950, fontSize: 17, boxShadow: "0 0 0 4px #d1fae5, 0 10px 24px rgba(4,120,87,0.30)" }}
+            >
+              {bulkPublishing ? "PUBLISHING READY REPORTS…" : "PUBLISH ALL READY REPORTS →"}
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setReportListView("drafts")} style={{ minHeight: 48, padding: "12px 16px" }}>
+              SHOW DRAFTS
+            </Button>
+          </div>
         </section>
       ) : null}
 

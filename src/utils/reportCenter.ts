@@ -316,19 +316,9 @@ function resultSubjectKey(result: Result): string | null {
   return result.subject_id?.trim() || result.subject_name?.trim().toLowerCase() || null;
 }
 
-function isOptionalCrsSubject(subjectName: string, subjectId: string): boolean {
-  // Grandessa has confirmed that pupils who do not take CRS must not be blocked
-  // from publication solely because their report has no CRS row.
-  const normalizedName = subjectName.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-  const normalizedId = subjectId.trim().toLowerCase();
-  return normalizedName === "crs"
-    || normalizedName.startsWith("christianreligiousstudies")
-    || normalizedId === "crs";
-}
-
 export function getReportCenterCompleteness(
   period: ReportCenterPeriod,
-  allResults: Result[] = period.results,
+  _allResults: Result[] = period.results,
 ): { complete: boolean; reason: string } {
   if (period.results.length === 0) {
     return { complete: false, reason: "No subject-result rows are available for this report period." };
@@ -339,35 +329,9 @@ export function getReportCenterCompleteness(
     return { complete: false, reason: "A subject is missing or has duplicate result rows." };
   }
 
-  const subjectSets = new Map<string, Map<string, string>>();
-  for (const result of allResults) {
-    if (result.class_id !== period.classId || result.academic_year !== period.academicYear) continue;
-    const subjectId = resultSubjectKey(result);
-    if (!subjectId) continue;
-    const reportType = result.assessment_type === "CA" ? "Midterm" : "End-of-Term";
-    const groupKey = [result.student_id, result.term, reportType].join("|");
-    const group = subjectSets.get(groupKey) ?? new Map<string, string>();
-    group.set(subjectId, result.subject_name?.trim() || subjectId);
-    subjectSets.set(groupKey, group);
-  }
-  const currentGroupKey = [period.studentId, period.term, period.reportType].join("|");
-  const expectedSubjects = [...subjectSets.entries()]
-    .sort(([leftKey, left], [rightKey, right]) =>
-      right.size - left.size
-      || Number(rightKey === currentGroupKey) - Number(leftKey === currentGroupKey),
-    )[0]?.[1] ?? new Map<string, string>();
-  const periodSubjects = new Set(subjectIds);
-  const missingSubjects = [...expectedSubjects.entries()]
-    .filter(([subjectId, subjectName]) =>
-      !periodSubjects.has(subjectId) && !isOptionalCrsSubject(subjectName, subjectId),
-    )
-    .map(([, subjectName]) => subjectName);
-  if (missingSubjects.length > 0) {
-    return {
-      complete: false,
-      reason: `Missing subject results observed for this class and session: ${missingSubjects.join(", ")}.`,
-    };
-  }
+  // School policy: a pupil may be published with only the subject rows actually recorded.
+  // Class-wide expected-subject differences are not a publication blocker; the school can
+  // add or correct subjects after release. Existing result rows still pass the mark checks below.
 
   for (const result of period.results) {
     const assessmentType = result.assessment_type;

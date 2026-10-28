@@ -710,7 +710,7 @@ describe("Report Center period discovery and readiness", () => {
   });
 
 
-  it("allows an intentional missing CRS row while still blocking other missing subjects", () => {
+  it("allows missing non-offered or late-added subjects, including CRS, without blocking publication", () => {
     const referenceRows = [
       result({
         id: "reference-crs",
@@ -787,10 +787,8 @@ describe("Report Center period discovery and readiness", () => {
         status: "Published",
       }),
     ];
-    expect(getReportCenterCompleteness(targetPeriod, referenceWithMath)).toMatchObject({
-      complete: false,
-      reason: "Missing subject results observed for this class and session: Mathematics.",
-    });
+    expect(getReportCenterCompleteness(targetPeriod, referenceWithMath)).toMatchObject({ complete: true });
+    expect(canPublishReportCenterPeriod(targetPeriod, referenceWithMath, true)).toBe(true);
   });
 
   it("makes complete End-of-Term rows publishable only while existing statuses are reviewable", () => {
@@ -992,7 +990,7 @@ describe("Report Center period discovery and readiness", () => {
     expect(groupedResults).toContain("<Trash2 size={16} /> Delete");
   });
 
-  it("allows all 12 complete eligible Omolekan-style result rows and blocks a one-subject Midterm against observed class subjects", () => {
+  it("allows complete recorded marks to publish without forcing every pupil to have the same subject list", () => {
     const endOfTermRows = Array.from({ length: 12 }, (_, index) => result({
       id: `end-${index}`,
       student_id: "omolekan",
@@ -1034,9 +1032,9 @@ describe("Report Center period discovery and readiness", () => {
     expect(getReportCenterCompleteness(omolekanPeriod!, allResults).complete).toBe(true);
     expect(canPublishReportCenterPeriod(omolekanPeriod!, allResults, true)).toBe(true);
     expect(canPublishReportCenterPeriod(omolekanPeriod!, allResults, false)).toBe(false);
-    expect(getReportCenterPublishBlockReason(trixiePeriod!, allResults, true))
-      .toBe("Missing subject results observed for this class and session: Subject 1, Subject 2, Subject 3, Subject 4, Subject 5, Subject 6, Subject 7, Subject 8, Subject 9, Subject 10, Subject 11, Subject 12.");
-    expect(canPublishReportCenterPeriod(trixiePeriod!, allResults, true)).toBe(false);
+    expect(getReportCenterCompleteness(trixiePeriod!, allResults).complete).toBe(true);
+    expect(getReportCenterPublishBlockReason(trixiePeriod!, allResults, true)).toBe("");
+    expect(canPublishReportCenterPeriod(trixiePeriod!, allResults, true)).toBe(true);
   });
 
   it("allows a complete 12-subject Returned period after every subject has an assessment correction", () => {
@@ -1137,6 +1135,7 @@ describe("Report Center period discovery and readiness", () => {
     expect(reportCardsPage).toContain("{showPublishAction ? (");
     expect(reportCardsPage).toContain("disabled={publishAction.disabled}");
     expect(reportCardsPage).toContain("getReportCenterPublishActionState(");
+    expect(reportCardsPage).toContain("bulkPublishing");
     expect(reportCardsPage).toContain("Action needed before publishing: {formatPublicationBlocker(publishBlockReason)}");
   });
 
@@ -1576,6 +1575,41 @@ describe("result workbook import preview", () => {
     expect(nameOnlyEntry?.matchStatus).toBe("matched");
     expect(nameOnlyEntry?.matchedStudentId).toBe("student-1");
     expect(nameOnlyEntry?.selectedStudentId).toBe("student-1");
+  });
+
+  it("automatically matches a unique shortened pupil name against the registered roster", () => {
+    const rosterStudent: Student = {
+      ...student("student-short-form", "Abdulmumeen Onasanya", "GDS-0021", "Basic 5"),
+      first_name: "Abdulmumeen",
+      last_name: "Onasanya",
+      class_id: "class-basic-5",
+    };
+    const entry: ResultImportPreviewEntry = {
+      index: 0,
+      studentKey: "pupil-short-form",
+      studentName: "ABDULMUM ONAS",
+      admissionNumber: "",
+      academicYear: "2026/2027",
+      term: "First",
+      assessmentType: "CA",
+      reportKind: "Midterm / Continuous Assessment",
+      className: "Basic 5",
+      teacherName: "",
+      matchStatus: "unmatched",
+      included: true,
+      warnings: ["No exact admission-number or unique name match found; select the correct student manually."],
+      notices: [],
+      items: [],
+    };
+
+    expect(resolveImportStudentMatch(entry, [rosterStudent])).toMatchObject({
+      status: "matched",
+      matchedStudentId: "student-short-form",
+    });
+    expect(resolveImportStudentMatch(entry, [
+      rosterStudent,
+      student("student-short-form-duplicate", "Abdulmumin Onassis", "GDS-0099", "Basic 5"),
+    ]).status).toBe("manual-review");
   });
 
   it("matches surname-first pupil names safely and keeps class conflicts in manual review", () => {
@@ -3280,6 +3314,9 @@ describe("results workflow migration contract", () => {
     expect(reportCardsPage).toContain("getReportCenterPublishBlockReason(period, results, isAdministrator, publicationEvidence)");
     expect(reportCardsPage).toContain("getReportCenterPublishActionState(");
     expect(reportCardsPage).toContain("PUBLISH THIS REPORT");
+    expect(reportCardsPage).toContain("PUBLISH ALL READY REPORTS");
+    expect(reportCardsPage).toContain("async function publishAllReadyReports()");
+    expect(reportCardsPage).toContain("publishReportPeriod(period, false, false)");
     expect(reportCardsPage).toContain("Unpublish results");
     expect(reportCardsPage).toContain('period.results.every((result) => result.status === "Published")');
     expect(reportCardsPage).toContain("canDeleteDraftReportPeriod(period, isAdministrator)");
