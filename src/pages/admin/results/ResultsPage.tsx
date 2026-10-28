@@ -2124,6 +2124,26 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                         <span style={statusBadgeStyle(progress.label)}>{progress.label}</span>
                       </div>
                       <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>{progress.explanation}</p>
+                      {entry.matchStatus !== "matched" || possiblePupil ? (
+                        <details style={{ border: "1px solid #fde68a", borderRadius: 8, padding: "8px 10px", background: "#fffbeb" }}>
+                          <summary style={{ cursor: "pointer", color: "#92400e", fontSize: 13, fontWeight: 700 }}>Why this pupil needs review</summary>
+                          <div style={{ display: "grid", gap: 5, marginTop: 8, fontSize: 13, color: "#78350f", overflowWrap: "anywhere" }}>
+                            <div><strong>Name on worksheet:</strong> {worksheetName || "Not detected"}</div>
+                            <div><strong>Registered pupil:</strong> {possiblePupil ? [possiblePupil.first_name, possiblePupil.middle_name, possiblePupil.last_name].filter(Boolean).join(" ") : confirmedPupil ? [confirmedPupil.first_name, confirmedPupil.middle_name, confirmedPupil.last_name].filter(Boolean).join(" ") : "No pupil has been confirmed yet"}</div>
+                            <div><strong>Worksheet class:</strong> {entry.className || "Not detected"}</div>
+                            <div><strong>Registered class:</strong> {officialClass?.class_name || rosterCandidate?.class_name || "Not confirmed"}</div>
+                            {entry.warnings.length > 0 ? (
+                              <div><strong>Reason recorded by the import check:</strong>
+                                <ul style={{ margin: "4px 0 0", paddingLeft: 20 }}>
+                                  {entry.warnings.map((warning, warningIndex) => <li key={`${warning}-${warningIndex}`}>{warning}</li>)}
+                                </ul>
+                              </div>
+                            ) : (
+                              <div>The system could not confirm the pupil from the worksheet name alone. Check the school register and admission number before importing.</div>
+                            )}
+                          </div>
+                        </details>
+                      ) : null}
                        <p style={{ margin: 0, color: "#64748b", fontSize: 12 }}>
                          Latest review saved: {Number.isNaN(new Date(review.savedAt).getTime()) ? "date unavailable" : new Date(review.savedAt).toLocaleString()} · Imported from Excel
                        </p>
@@ -3107,9 +3127,9 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     Search subject choices
                     <input value={subjectSearch} onChange={(event) => setSubjectSearch(event.target.value)} placeholder="Search subjects" />
                   </label>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", margin: "8px 0" }}>
-                    <span style={{ color: "#475569", fontSize: 12 }}>Subject grid — use the arrows or the horizontal scrollbar to reach every column.</span>
-                    <div role="group" aria-label="Scroll subject grid left or right" style={{ display: "flex", gap: 6 }}>
+                  <div style={{ display: "grid", justifyItems: "start", gap: 8, margin: "8px 0 10px", minWidth: 0, width: "100%" }}>
+                    <span style={{ color: "#334155", fontSize: 12, fontWeight: 600 }}>Subject grid: scroll horizontally to reach the Existing result column and its controls.</span>
+                    <div role="group" aria-label="Scroll subject grid left or right" style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%" }}>
                       <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById(`subject-mappings-${index}`)?.scrollBy({ left: -520, behavior: "smooth" })}>← Scroll left</Button>
                       <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById(`subject-mappings-${index}`)?.scrollBy({ left: 520, behavior: "smooth" })}>Scroll right →</Button>
                     </div>
@@ -3119,7 +3139,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     role="region"
                     aria-label={`Subject mappings for ${entry.studentName}; scroll horizontally to see all columns`}
                     tabIndex={0}
-                    style={{ minWidth: 0, maxWidth: "100%", overflowX: "scroll", overflowY: "hidden", scrollbarGutter: "stable", overscrollBehaviorX: "contain", paddingBottom: 8 }}
+                    style={{ display: "block", boxSizing: "border-box", minWidth: 0, width: "100%", maxWidth: "100%", overflowX: "scroll", overflowY: "hidden", scrollbarGutter: "stable", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch", padding: "0 0 12px", borderBottom: "2px solid #cbd5e1" }}
                   >
                     <table style={{ width: "100%", minWidth: 1050, borderCollapse: "collapse" }}>
                       <thead>
