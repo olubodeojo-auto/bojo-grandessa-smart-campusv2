@@ -996,7 +996,9 @@ describe("Report Center period discovery and readiness", () => {
   it("labels the publishing workspace Publish Arena and keeps the Results module distinct", () => {
     expect(reportCardsPage).toContain(">Publish Arena</h1>");
     expect(resultsPage).toContain('embedded ? "Enter or import results" : "Results"');
-    expect(workspacePage).toContain(">Results</h1>");
+    expect(workspacePage).toContain("<ReportCardsPage embedded />");
+    expect(workspacePage).toContain("<ResultsPage embedded />");
+    expect(workspacePage).not.toContain(">Results</h1>");
     expect(resultsPage).toContain(">Results Module</h2>");
   });
 
@@ -3527,7 +3529,9 @@ describe("results workflow migration contract", () => {
     expect(resultsPage).toContain("subjectRowKey: activeSubjectRowKey");
     expect(resultsPage).toContain("const [activeImportEntryKey, setActiveImportEntryKey] = useState<string | null>(null)");
     expect(resultsPage).toContain("Review summary before saving");
-    expect(resultsPage).toContain("Save progress");
+    expect(resultsPage).toContain("Save review");
+    expect(resultsPage).toContain("SAVE & PUBLISH THIS PUPIL");
+    expect(resultsPage).toContain("Save this pupil's results");
     expect(resultsPage).toContain("Ignore pupil");
     expect(resultsPage).toContain("Find student in records");
   });
