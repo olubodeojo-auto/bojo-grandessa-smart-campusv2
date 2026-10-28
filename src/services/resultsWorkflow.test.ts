@@ -61,6 +61,7 @@ import {
   getReportCenterPeriodStatus,
   getReportCenterPublishActionState,
   getReportCenterPublishBlockReason,
+  getReportCenterResultsWithRecordedMarks,
   getReportPeriodResults,
   publishReportResultsAndVerify,
   unpublishReportResultsAndVerify,
@@ -709,7 +710,7 @@ describe("Report Center period discovery and readiness", () => {
     expect(getReportCenterPeriodStatus(period)).toBe("Draft");
     expect(getReportCenterCompleteness(period)).toMatchObject({
       complete: false,
-      reason: "One or more Midterm subject maximum scores are missing.",
+      reason: "No complete subject-result rows are available for publication. Add at least one subject with complete marks.",
     });
     expect(canPublishReportCenterPeriod(period)).toBe(false);
   });
@@ -794,6 +795,60 @@ describe("Report Center period discovery and readiness", () => {
     ];
     expect(getReportCenterCompleteness(targetPeriod, referenceWithMath)).toMatchObject({ complete: true });
     expect(canPublishReportCenterPeriod(targetPeriod, referenceWithMath, true)).toBe(true);
+  });
+
+  it("publishes complete CA rows while missing subject marks remain draft", () => {
+    const completeEnglish = result({
+      id: "target-english-complete",
+      student_id: "target-pupil",
+      class_id: "basic-5",
+      class_name: "Basic 5",
+      subject_id: "subject-english",
+      subject_name: "English Language",
+      academic_year: "2026/2027",
+      term: "First",
+      assessment_type: "CA",
+      continuous_assessment: 32,
+      maximum_score: 40,
+      examination: null,
+      total_score: null,
+      status: "Draft",
+    });
+    const missingWriting = result({
+      id: "target-writing-missing",
+      student_id: "target-pupil",
+      class_id: "basic-5",
+      class_name: "Basic 5",
+      subject_id: "subject-writing",
+      subject_name: "Writing",
+      academic_year: "2026/2027",
+      term: "First",
+      assessment_type: "CA",
+      continuous_assessment: null,
+      maximum_score: 40,
+      examination: null,
+      total_score: null,
+      status: "Draft",
+    });
+    const [period] = discoverReportCenterPeriods([completeEnglish, missingWriting], [])
+      .filter((item) => item.studentId === "target-pupil");
+
+    expect(getReportCenterResultsWithRecordedMarks(period.results).map((item) => item.id))
+      .toEqual(["target-english-complete"]);
+    expect(getReportCenterCompleteness(period)).toMatchObject({ complete: true });
+    expect(getReportCenterPublishBlockReason(period, period.results, true)).toBe("");
+    expect(canPublishReportCenterPeriod(period, period.results, true)).toBe(true);
+
+    const invalidEnglish = { ...completeEnglish, continuous_assessment: 45 };
+    const [invalidPeriod] = discoverReportCenterPeriods([invalidEnglish, missingWriting], [])
+      .filter((item) => item.studentId === "target-pupil");
+    expect(getReportCenterResultsWithRecordedMarks(invalidPeriod.results).map((item) => item.id))
+      .toEqual(["target-english-complete"]);
+    expect(getReportCenterCompleteness(invalidPeriod)).toMatchObject({
+      complete: false,
+      reason: "CA score must not exceed its positive maximum score.",
+    });
+    expect(canPublishReportCenterPeriod(invalidPeriod, invalidPeriod.results, true)).toBe(false);
   });
 
   it("makes complete End-of-Term rows publishable only while existing statuses are reviewable", () => {
