@@ -127,8 +127,11 @@ function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingIm
   if (entry.reportKind === "Unclear") {
     return { label: "Report type to confirm", explanation: "Choose Midterm (CA) or End-of-Term before importing." };
   }
+  if (!entry.academicYear.trim()) {
+    return { label: "Session to confirm", explanation: "Open session and report settings, then choose the correct academic session." };
+  }
   if (!entry.term) {
-    return { label: "Term to confirm", explanation: "Choose the correct school term before importing." };
+    return { label: "Term to confirm", explanation: "Open session and report settings, then choose the correct school term." };
   }
   if (entry.items.length === 0) {
     return { label: "No subject rows", explanation: "No subject rows were found. Add the required subjects and marks, or set this pupil aside. Other pupils can still proceed." };
@@ -3140,7 +3143,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                       These values are read from the worksheet. Open settings only when this pupil's sheet needs a correction.
                     </div>
                   </div>
-                  <details style={{ marginBottom: 12 }}>
+                  <details id={`import-settings-${entry.studentKey}`} style={{ marginBottom: 12 }}>
                     <summary style={{ cursor: "pointer", fontWeight: 700 }}>Change period, report type, teacher or scoring settings (only if needed)</summary>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginTop: 10 }}>
                       <label style={{ display: "grid", gap: 4 }}>
@@ -3203,7 +3206,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     </div>
                   ) : null}
 
-                  <details style={{ marginBottom: 12 }}>
+                  <details id={`import-report-details-${entry.studentKey}`} style={{ marginBottom: 12 }}>
                     <summary style={{ cursor: "pointer", fontWeight: 700 }}>Report-card details from workbook (editable)</summary>
                     {reportDetails.age ? (
                       <div style={{ marginTop: 10, color: "#475569" }}>
@@ -3324,21 +3327,65 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                   <div role="status" style={{ margin: "4px 0 12px", padding: 12, borderRadius: 10, border: isImportEntryReady(entry) ? "1px solid #86efac" : "1px solid #cbd5e1", background: isImportEntryReady(entry) ? "#f0fdf4" : "#f8fafc", color: isImportEntryReady(entry) ? "#166534" : "#334155", overflowWrap: "anywhere" }}>
                     <strong>{isImportEntryReady(entry) ? "Ready to save" : pupilStatus.label}</strong>
                     <div style={{ marginTop: 4 }}>{pupilStatus.explanation}</div>
-                    {hasNoCompleteSubjectMarks ? (
-                      <div style={{ marginTop: 8 }}>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => handleImportInclusionChange(index, false)}
-                        >
-                          Set aside until subjects and marks are entered
-                        </Button>
+                    {(hasNoCompleteSubjectMarks || pupilStatus.label.startsWith("Class mismatch")) ? (
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                        {hasNoCompleteSubjectMarks ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleImportInclusionChange(index, false)}
+                          >
+                            Set aside until subjects and marks are entered
+                          </Button>
+                        ) : null}
+                        {pupilStatus.label.startsWith("Class mismatch") ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleImportInclusionChange(index, false)}
+                          >
+                            Set aside until class is confirmed
+                          </Button>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
+                  {pupilStatus.label === "Session to confirm" || pupilStatus.label === "Term to confirm" || pupilStatus.label === "Report type to confirm" ? (
+                    <div style={{ marginBottom: 8 }}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          const settings = document.getElementById(`import-settings-${entry.studentKey}`);
+                          settings?.setAttribute("open", "");
+                          settings?.scrollIntoView({ behavior: "smooth", block: "center" });
+                        }}
+                      >
+                        Open session and report settings
+                      </Button>
+                    </div>
+                  ) : null}
+                  {getImportReportDateErrors(entry).length > 0 ? (
+                    <div style={{ marginBottom: 8 }}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          const reportDetails = document.getElementById(`import-report-details-${entry.studentKey}`);
+                          reportDetails?.setAttribute("open", "");
+                          reportDetails?.scrollIntoView({ behavior: "smooth", block: "center" });
+                        }}
+                      >
+                        Open report-card date fields
+                      </Button>
+                    </div>
+                  ) : null}
                   {getImportReportDateErrors(entry).map((dateError) => (
-                    <div key={dateError} role="alert" style={{ color: "#b91c1c", fontSize: 13, marginBottom: 8 }}>
+                    <div key={dateError} role="alert" style={{ color: "#b91c1c", fontSize: 13, marginBottom: 8, overflowWrap: "anywhere" }}>
                       {dateError}
                     </div>
                   ))}
