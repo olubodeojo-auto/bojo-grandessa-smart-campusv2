@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { FilePlus2, Upload } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import AppModal from "../../../components/modals/AppModal";
@@ -26,6 +26,8 @@ import {
   collapseDuplicatePendingImportPupils,
   getImportReportDateErrors,
   getImportScoreWarnings,
+  getImportItemsForSave,
+  isImportItemSkippableForMissingMarks,
   areImportedResultValuesEquivalent,
   normalizeImportSubjectKey,
   getImportEntryKey,
@@ -118,7 +120,7 @@ function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingIm
     return { label: "Pupil match needed", explanation: "Select the correct registered pupil before importing. No marks have been imported for this entry." };
   }
   if (entry.reportKind === "Unclear") {
-    return { label: "Report type to confirm", explanation: "Confirm the correct report type before importing." };
+    return { label: "Report type to confirm", explanation: "Confirm the report type before importing." };
   }
   if (!entry.term) {
     return { label: "Term to confirm", explanation: "Confirm the term from the school's approved results sheet before importing." };
@@ -126,16 +128,31 @@ function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingIm
   if (entry.items.length === 0) {
     return { label: "No subject scores found", explanation: "Check the original worksheet. No subject-score rows were detected for this pupil." };
   }
-  const unresolvedSubject = entry.items.find((item) => !item.subjectId);
+
+  const itemsToSave = getImportItemsForSave(entry);
+  const unresolvedSubject = itemsToSave.find((item) => !item.subjectId);
   if (unresolvedSubject) {
     return { label: "Subject to confirm", explanation: `Confirm the subject for "${unresolvedSubject.subjectName}" before importing.` };
   }
-  const scoreWarnings = getImportScoreWarnings(entry);
-  if (scoreWarnings.some((warning) => /mark is missing|subject marks are missing/i.test(warning))) {
-    return { label: "Missing subject marks", explanation: "One or more subject marks are blank. Open Reconcile this pupil, complete the blank mark cells, and save the draft before publishing." };
+  if (itemsToSave.length === 0) {
+    return { label: "No complete marks to import", explanation: "Every subject row is missing at least one required mark. Enter at least one complete subject result before this pupil can be published." };
   }
-  if (scoreWarnings.length > 0 || entry.items.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
-    return { label: "Check marks", explanation: "One or more marks need correction before this pupil's results can be imported." };
+
+  const scoreWarnings = getImportScoreWarnings({ ...entry, items: itemsToSave });
+  if (scoreWarnings.length > 0 || itemsToSave.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
+    return { label: "Check marks", explanation: "A subject row contains an invalid or out-of-range mark. Correct that value before importing this pupil." };
+  }
+
+  const skippedItems = [
+    ...(entry.skippedItems ?? []),
+    ...entry.items.filter(isImportItemSkippableForMissingMarks),
+  ];
+  if (skippedItems.length > 0) {
+    const names = [...new Set(skippedItems.map((item) => item.subjectName).filter(Boolean))].join(", ");
+    return {
+      label: "Ready — incomplete subjects skipped",
+      explanation: `The complete subject results can be saved and published now. ${names || "The incomplete subject rows"} will be left out and can be entered later.`,
+    };
   }
   return { label: "Ready to review", explanation: "Check the subject marks, then complete this pupil's import." };
 }
@@ -246,6 +263,94 @@ function Detail({ label, value }: { label: string; value: string }) {
       <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>{label}</div>
       <div style={{ fontWeight: 700, color: "#1f2937" }}>{value}</div>
     </div>
+  );
+}
+
+function SynchronizedHorizontalScroll({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  const topScrollRef = useRef<HTMLDivElement | null>(null);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const [contentWidth, setContentWidth] = useState(1050);
+
+  useEffect(() => {
+    const container = tableScrollRef.current;
+    const table = container?.querySelector("table");
+    if (!container || !table) return;
+
+    const measureWidth = (): void => {
+      const width = Math.max(table.scrollWidth, table.getBoundingClientRect().width, container.clientWidth);
+      setContentWidth((current) => current === width ? current : width);
+    };
+    measureWidth();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measureWidth);
+    observer?.observe(table);
+    observer?.observe(container);
+    window.addEventListener("resize", measureWidth);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measureWidth);
+    };
+  }, []);
+
+  return (
+    <>
+      <div
+        ref={topScrollRef}
+        role="region"
+        aria-label={`${label} horizontal scrollbar`}
+        tabIndex={0}
+        onScroll={(event) => {
+          const tableContainer = tableScrollRef.current;
+          if (tableContainer && tableContainer.scrollLeft !== event.currentTarget.scrollLeft) {
+            tableContainer.scrollLeft = event.currentTarget.scrollLeft;
+          }
+        }}
+        style={{
+          boxSizing: "border-box",
+          minWidth: 0,
+          width: "100%",
+          maxWidth: "100%",
+          height: 24,
+          marginBottom: 5,
+          overflowX: "auto",
+          overflowY: "hidden",
+          overscrollBehaviorX: "contain",
+          WebkitOverflowScrolling: "touch",
+          background: "#f8fafc",
+          borderBottom: "1px solid #cbd5e1",
+        }}
+      >
+        <div aria-hidden="true" style={{ width: contentWidth, height: 1 }} />
+      </div>
+      <div
+        ref={tableScrollRef}
+        id={id}
+        role="region"
+        aria-label={`${label}; scroll horizontally to access every column`}
+        tabIndex={0}
+        onScroll={(event) => {
+          const topContainer = topScrollRef.current;
+          if (topContainer && topContainer.scrollLeft !== event.currentTarget.scrollLeft) {
+            topContainer.scrollLeft = event.currentTarget.scrollLeft;
+          }
+        }}
+        style={{
+          display: "block",
+          boxSizing: "border-box",
+          minWidth: 0,
+          width: "100%",
+          maxWidth: "100%",
+          overflowX: "auto",
+          overflowY: "hidden",
+          scrollbarGutter: "stable",
+          overscrollBehaviorX: "contain",
+          WebkitOverflowScrolling: "touch",
+          paddingBottom: 10,
+          borderBottom: "2px solid #cbd5e1",
+        }}
+      >
+        {children}
+      </div>
+    </>
   );
 }
 
@@ -1731,7 +1836,13 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
         const reusedExistingResultIds: string[] = [];
         let reused = 0;
 
+        const itemsToSave = getImportItemsForSave(entry);
+        if (itemsToSave.length === 0) {
+          throw new Error("No complete subject marks are available to save for this pupil. Enter at least one complete subject row.");
+        }
+        const skippedMissingMarkItems = entry.items.filter(isImportItemSkippableForMissingMarks);
         for (const [itemIndex, item] of entry.items.entries()) {
+          if (isImportItemSkippableForMissingMarks(item)) continue;
           const classEntity = classes.find((candidate) => candidate.id === item.classId);
           const subject = subjects.find((candidate) => candidate.id === item.subjectId);
           const resultTerm = item.term ?? entry.term;
@@ -1784,7 +1895,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           else entryCreates.push({ ...values, status: "Draft" });
         }
 
-        if (entryUpdates.length + entryCreates.length + reusedExistingResultIds.length !== entry.items.length) {
+        if (entryUpdates.length + entryCreates.length + reusedExistingResultIds.length !== itemsToSave.length) {
           throw new Error("Every subject must be linked to one saved or new result before this pupil can be saved.");
         }
         const targetResultIds = [
@@ -1795,7 +1906,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           throw new Error("The same saved subject result was selected more than once. Refresh the pupil review before saving.");
         }
 
-        const reportClassId = entry.items[0]?.classId;
+        const reportClassId = itemsToSave[0]?.classId;
         if (!reportClassId || !entry.term) throw new Error("A saved class and term are required for the report card.");
         const workbookKey = activeWorkbookDraftKey;
         const ownerId = importDraftOwnerId || user?.id;
@@ -1803,7 +1914,15 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
 
         // Save the review first so a failed transaction leaves the pupil's corrections available.
         // Marks, report-card details and exact result links are then saved together.
-        await saveImportReviewDraft({ workbookKey, entry, ownerId });
+        const trackingEntry: ResultImportPreviewEntry = {
+          ...entry,
+          items: itemsToSave,
+          skippedItems: [
+            ...(entry.skippedItems ?? []),
+            ...skippedMissingMarkItems,
+          ],
+        };
+        await saveImportReviewDraft({ workbookKey, entry: trackingEntry, ownerId });
         const details = entry.reportDetails;
         const termEnding = normalizeImportDate(details?.termEnding ?? "", "Term ending");
         const nextTermBegins = normalizeImportDate(details?.nextTermBegins ?? "", "Next term begins");
@@ -1822,7 +1941,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             term: entry.term,
             classId: reportClassId,
             reportType: entry.reportKind === "Midterm / Continuous Assessment" ? "Midterm" : "End-of-Term",
-            calculationMode: entry.items[0]?.calculationMode ?? "Manual",
+            calculationMode: itemsToSave[0]?.calculationMode ?? "Manual",
             classTeacherName: entry.teacherName,
             classTeacherComment: details?.classTeacherComment ?? "",
             headTeacherComment: details?.headTeacherComment ?? "",
@@ -3127,19 +3246,9 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     Search subject choices
                     <input value={subjectSearch} onChange={(event) => setSubjectSearch(event.target.value)} placeholder="Search subjects" />
                   </label>
-                  <div style={{ display: "grid", justifyItems: "start", gap: 8, margin: "8px 0 10px", minWidth: 0, width: "100%" }}>
-                    <span style={{ color: "#334155", fontSize: 12, fontWeight: 600 }}>Subject grid: scroll horizontally to reach the Existing result column and its controls.</span>
-                    <div role="group" aria-label="Scroll subject grid left or right" style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%" }}>
-                      <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById(`subject-mappings-${index}`)?.scrollBy({ left: -520, behavior: "smooth" })}>← Scroll left</Button>
-                      <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById(`subject-mappings-${index}`)?.scrollBy({ left: 520, behavior: "smooth" })}>Scroll right →</Button>
-                    </div>
-                  </div>
-                  <div
+                  <SynchronizedHorizontalScroll
                     id={`subject-mappings-${index}`}
-                    role="region"
-                    aria-label={`Subject mappings for ${entry.studentName}; scroll horizontally to see all columns`}
-                    tabIndex={0}
-                    style={{ display: "block", boxSizing: "border-box", minWidth: 0, width: "100%", maxWidth: "100%", overflowX: "scroll", overflowY: "hidden", scrollbarGutter: "stable", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch", padding: "0 0 12px", borderBottom: "2px solid #cbd5e1" }}
+                    label={`Subject mappings for ${entry.studentName}`}
                   >
                     <table style={{ width: "100%", minWidth: 1050, borderCollapse: "collapse" }}>
                       <thead>
@@ -3183,8 +3292,10 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                             <tr key={rowKey} id={rowKey} style={{ background: isActiveSubject ? "#eff6ff" : item.subjectId ? "#f0fdf4" : "#fff7ed" }}>
                               <td style={cellStyle}>
                                 <strong>{item.subjectName || (item.manualEntry ? "Select a subject" : "Unnamed worksheet subject")}</strong>
-                                <div role="status" style={{ color: item.subjectId ? "#166534" : "#9a3412", fontSize: 12 }}>
-                                  {item.subjectId ? "Matched" : "Needs subject mapping"}
+                                <div role="status" style={{ color: isImportItemSkippableForMissingMarks(item) ? "#92400e" : item.subjectId ? "#166534" : "#9a3412", fontSize: 12 }}>
+                                  {isImportItemSkippableForMissingMarks(item)
+                                    ? "Required mark missing — this subject will be skipped, not the pupil's other results"
+                                    : item.subjectId ? "Matched" : "Needs subject mapping"}
                                 </div>
                                 {!item.subjectId ? (
                                   <Button type="button" size="sm" variant="secondary" onClick={() => setActiveSubjectRowKey(rowKey)}>Review mapping</Button>
