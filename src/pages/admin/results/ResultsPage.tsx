@@ -1973,11 +1973,11 @@ export default function ResultsPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <h2 id="imports-awaiting-reconciliation-results" style={{ margin: 0 }}>Imports awaiting reconciliation</h2>
                   <span style={{ borderRadius: 999, background: pendingImportPupils.length > 0 ? "#fef3c7" : "#dcfce7", color: pendingImportPupils.length > 0 ? "#92400e" : "#166534", padding: "4px 9px", fontSize: 12, fontWeight: 700 }}>
-                    {loadingPendingImportPupils ? "Checking…" : `${pendingImportPupils.length} pupil(s)`}
+                    {loadingPendingImportPupils ? "Checking…" : `${pendingImportPupils.length} pupil review(s)`}
                   </span>
                 </div>
                 <p style={{ color: "#475569", margin: "6px 0 0" }}>
-                  These are pupil entries saved from Excel workbooks but not yet reconciled and imported. Confirm each pupil, class, subject and mark here. Saving review progress does not publish results.
+                  These are saved Excel reviews waiting for action. Each pupil and period appears once, even if saved from more than one workbook upload. Check the registered pupil, class, assigned class teacher, subjects and marks before saving results. Nothing is published from this review.
                 </p>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -2010,6 +2010,8 @@ export default function ResultsPage() {
                   const displayName = entry.matchStatus === "matched" && confirmedPupil
                     ? `${confirmedPupil.first_name} ${confirmedPupil.last_name}`.trim()
                     : worksheetName;
+                  const officialClass = classes.find((candidate) => candidate.id === (confirmedPupil?.class_id ?? entry.items.find((item) => item.classId)?.classId));
+                  const officialTeacherName = [officialClass?.class_teacher?.first_name, officialClass?.class_teacher?.last_name].filter(Boolean).join(" ");
                   const progress = getPendingImportPupilStatus(entry);
                   const reportTypeLabel = entry.reportKind === "Midterm / Continuous Assessment"
                     ? "Midterm (CA)"
@@ -2027,7 +2029,7 @@ export default function ResultsPage() {
                         <div style={{ minWidth: 0 }}>
                           <h3 style={{ margin: 0, fontSize: 16, overflowWrap: "anywhere" }}>{displayName}</h3>
                           <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13 }}>
-                            {entry.admissionNumber ? `Admission no.: ${entry.admissionNumber} · ` : ""}Worksheet class: {entry.className || "Needs confirmation"}
+                            {entry.admissionNumber ? `Admission no.: ${entry.admissionNumber} · ` : ""}Registered class: {officialClass?.class_name || entry.className || "Needs confirmation"} · Class teacher: {officialTeacherName || "Not assigned in the class record"}
                           </p>
                           <p style={{ margin: "3px 0 0", color: "#64748b", fontSize: 13 }}>
                             {entry.academicYear || "Session to confirm"} · {entry.term ? `${entry.term} Term` : "Term to confirm"} · {reportTypeLabel}
@@ -2044,7 +2046,7 @@ export default function ResultsPage() {
                       <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>{progress.explanation}</p>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ color: "#64748b", fontSize: 12 }}>Worksheet: {review.sheetName}{review.ownerName ? ` · Saved by ${review.ownerName}` : ""}</span>
-                        <Button type="button" size="sm" onClick={() => navigate(`/admin/results?${params.toString()}`)}>Reconcile this pupil</Button>
+                        <Button type="button" size="sm" onClick={() => navigate(`/admin/results?${params.toString()}`)}>Open saved review</Button>
                       </div>
                     </article>
                   );
@@ -2322,7 +2324,7 @@ export default function ResultsPage() {
 
       <AppModal
         open={isImportOpen}
-        title={isAddingImportStudent ? "Add Student" : isFinalImportPreview ? "Final Import Preview" : "Pupil-by-Pupil Excel Review"}
+        title={isAddingImportStudent ? "Add Student" : isFinalImportPreview ? "Final check before saving" : "Review pupil results"}
         size="xl"
         dialogStyle={{
           height: "calc(100dvh - 32px)",
@@ -2359,9 +2361,9 @@ export default function ResultsPage() {
             </Button>
             {isFinalImportPreview ? (
               <>
-                <Button type="button" size="sm" variant="secondary" onClick={() => setIsFinalImportPreview(false)}>Back to review</Button>
+                <Button type="button" size="sm" variant="secondary" onClick={() => setIsFinalImportPreview(false)}>Back to pupil review</Button>
                 <Button type="button" size="sm" onClick={() => void handleConfirmImport()} disabled={importSubmitting || importableBlocks === 0 || importPeriodConflict}>
-                  {importSubmitting ? "Importing..." : `Confirm import (${importableBlocks})`}
+                  {importSubmitting ? "Saving..." : `Save ready results (${importableBlocks})`}
                 </Button>
               </>
             ) : (
@@ -2372,7 +2374,7 @@ export default function ResultsPage() {
                   variant="secondary"
                   onClick={() => document.getElementById("import-review-pupils")?.scrollTo({ top: 0, behavior: "smooth" })}
                 >
-                  Continue / Preview
+                  Back to top of review
                 </Button>
                 <Button
                   type="button"
@@ -2392,7 +2394,7 @@ export default function ResultsPage() {
                   }}
                   disabled={importableBlocks === 0 || importPeriodConflict}
                 >
-                  Review ready pupils ({importableBlocks})
+                  Continue to final check ({importableBlocks})
                 </Button>
               </>
             )}
@@ -2500,6 +2502,9 @@ export default function ResultsPage() {
               const reportDetails = entry.reportDetails;
               return (
                 <section style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 18, background: "#fff" }}>
+                  <p role="status" style={{ marginTop: 0, color: "#475569" }}>
+                    Final check: {readyImportEntries.length} pupil result set(s) are ready to save. This saves new or corrected results as Draft and does not publish reports or send parent messages. Matching published marks are reused without being overwritten.
+                  </p>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <div>
                       <div style={{ color: "#64748b", fontSize: 13 }}>Pupil {Math.min(finalPreviewIndex, readyImportEntries.length - 1) + 1} of {readyImportEntries.length}</div>
