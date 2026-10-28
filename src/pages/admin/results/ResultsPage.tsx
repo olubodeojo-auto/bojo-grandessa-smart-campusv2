@@ -971,7 +971,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
       const completedEntries = mergedEntries.filter((entry) => Boolean(entry.workflowStatus));
       const restoredEntries = mergedEntries.filter((entry) => !entry.workflowStatus);
       setImportSummary(completedEntries.length > 0
-        ? `${completedEntries.length} pupil review(s) were skipped because their results have already been imported. Check Publish Assistant for their saved status.`
+        ? `${completedEntries.length} pupil review(s) were skipped because their results have already been imported. Check Publish Drafts and Results for their saved status.`
         : "");
       setImportEntries(withSelectedDuplicateWarnings(restoredEntries));
       setDraftSaveStates(Object.fromEntries(savedEntries.filter((entry) => !entry.workflowStatus).map((entry) => [entry.studentKey, { state: "saved" as const }])));
@@ -1018,7 +1018,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
       const completedEntries = entries.filter((entry) => Boolean(entry.workflowStatus));
       const pendingEntries = entries.filter((entry) => !entry.workflowStatus);
       if (pendingEntries.length === 0) {
-        setImportSummary("All pupil entries in this workbook have already been imported. Their publication status is shown in Publish Assistant; no duplicate import was started.");
+        setImportSummary("All pupil entries in this workbook have already been imported. Their publication status is shown in Publish Drafts and Results; no duplicate import was started.");
         return;
       }
       const reconciledEntries = reconcileSavedImportStudentMatches(
@@ -1088,7 +1088,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
       workbook.workbookKey === requestedWorkbookKey && (!requestedOwnerId || workbook.ownerId === requestedOwnerId));
     if (!workbookExists) {
       autoResumeHandled.current = autoResumeKey;
-      setError("The saved workbook linked from Publish Assistant is not available to this account. Refresh the saved-work list and try again.");
+      setError("The saved workbook linked from Publish Drafts and Results is not available to this account. Refresh the saved-work list and try again.");
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
         next.delete("resumeWorkbook");
@@ -2762,7 +2762,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 700, marginBottom: 4 }}>Results Run · {importFileName || "Uploaded file"}</div>
           <p style={{ margin: "6px 0 8px", color: "#475569", fontSize: 13 }}>
-            Review each pupil, then save the marks. After a successful save, Publish Assistant opens automatically. Only real pupil-identity, class/subject mapping, or missing/invalid CA mark issues should need attention. Subject mappings you confirm are remembered for the same class on future uploads.
+            Review each pupil, then save the marks. After a successful save, Publish Drafts and Results opens automatically. Only real pupil-identity, class/subject mapping, or missing/invalid CA mark issues should need attention. Subject mappings you confirm are remembered for the same class on future uploads.
           </p>
           {importWorkbookSheets.length > 1 ? (
             <label style={{ display: "grid", gap: 4, maxWidth: 420, margin: "8px 0" }}>

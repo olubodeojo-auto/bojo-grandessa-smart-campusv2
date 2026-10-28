@@ -1077,9 +1077,9 @@ describe("Report Center period discovery and readiness", () => {
     expect(groupedResults).toContain("<Trash2 size={16} /> Delete");
   });
 
-  it("labels the publishing workspace Publish Assistant and keeps the Results module distinct", () => {
-    expect(reportCardsPage).toContain(">Publish Assistant</h1>");
-    expect(workspacePage).toContain(">Publish Assistant</h1>");
+  it("labels the publishing workspace Publish Drafts and Results and keeps the Results module distinct", () => {
+    expect(reportCardsPage).toContain(">Publish Drafts and Results</h1>");
+    expect(workspacePage).toContain(">Publish Drafts and Results</h1>");
     expect(resultsPage).toContain('embedded ? "Enter or import results" : "Results"');
     expect(workspacePage).toContain("<ReportCardsPage embedded />");
     expect(workspacePage).toContain("<ResultsPage embedded />");
@@ -3835,7 +3835,7 @@ describe("uncertain result save feedback", () => {
 });
 
 
-describe("unified Results / Publish Assistant workflow", () => {
+describe("unified Results / Publish Drafts and Results workflow", () => {
   it("routes Results, subject entry, and report publishing into one workspace", () => {
     expect(appSource).toContain('path="results" element={<ProtectedRoute allowedRoles={resultsRoles}><ResultsWorkspacePage /></ProtectedRoute>}');
     expect(appSource).toContain('path="result-records" element={<ProtectedRoute allowedRoles={resultsRoles}><RedirectLegacyResultsRoute /></ProtectedRoute>}');

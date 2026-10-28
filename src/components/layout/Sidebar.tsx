@@ -8,7 +8,7 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/admin", implemented: true },
   { icon: Users, label: "Students", path: "/admin/students", implemented: true },
   { icon: UserSquare2, label: "Our Team / Staff Photos", path: "/admin/staff-directory", implemented: true },
-  { icon: FileSpreadsheet, label: "Publish Assistant", path: "/admin/results", implemented: true },
+  { icon: FileSpreadsheet, label: "Publish Drafts and Results", path: "/admin/results", implemented: true },
   { icon: Image, label: "Gallery", path: "/admin/gallery", implemented: true },
   { icon: Megaphone, label: "Announcements", path: "/admin/announcements", implemented: true },
 ];

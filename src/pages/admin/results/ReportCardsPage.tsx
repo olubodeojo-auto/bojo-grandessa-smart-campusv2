@@ -1498,7 +1498,7 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
       {!embedded ? (
       <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div style={{ minWidth: 0, flex: "1 1 340px" }}>
-          <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>Publish Assistant</h1>
+          <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>Publish Drafts and Results</h1>
           <p style={{ color: "#475569", marginTop: 8 }}>
             One workspace to review imports, clear blockers, publish ready reports, and confirm what is already published.
           </p>
