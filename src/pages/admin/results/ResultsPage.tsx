@@ -23,6 +23,7 @@ import {
   type ImportReviewWorkbook,
 } from "../../../services/reportCardService";
 import {
+  collapseDuplicatePendingImportPupils,
   getImportReportDateErrors,
   getImportScoreWarnings,
   areImportedResultValuesEquivalent,
@@ -139,78 +140,6 @@ function uniqueByName<T>(items: T[], nameOf: (item: T) => string, name: string):
   const target = normalize(name);
   const matching = items.filter((item) => normalize(nameOf(item)) === target);
   return matching.length === 1 ? matching[0] : null;
-}
-
-function normalizePendingImportValue(value: string | undefined): string {
-  return (value ?? "")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-function pendingImportPupilPeriodKey(entry: ResultImportPreviewEntry): string {
-  const candidateId = entry.selectedStudentId || entry.matchedStudentId;
-  const admissionNumber = normalizePendingImportValue(entry.admissionNumber);
-  const sourceName = (entry as ResultImportPreviewEntry & { sourceStudentName?: string }).sourceStudentName;
-  const identity = candidateId
-    ? "student:" + candidateId
-    : admissionNumber
-      ? "admission:" + admissionNumber
-      : "name:" + normalizePendingImportValue(sourceName || entry.studentName);
-  const classId = entry.items.find((item) => item.classId)?.classId;
-  const classKey = classId || normalizePendingImportValue(entry.className);
-  return [
-    identity,
-    classKey,
-    normalizePendingImportValue(entry.academicYear),
-    normalizePendingImportValue(entry.term ?? ""),
-    entry.reportKind,
-  ].join("::");
-}
-
-/**
- * A pupil may have been saved in more than one workbook upload. Present one
- * pupil-period card: the latest row is authoritative for this review action.
- * If that latest copy has already been imported, do not revive an older copy
- * as a new pending task. Older saved versions remain in the database.
- */
-function collapseDuplicatePendingImportPupils(records: PendingImportPupil[]): PendingImportPupil[] {
-  const groups = new Map<string, PendingImportPupil[]>();
-  records.forEach((record) => {
-    const key = pendingImportPupilPeriodKey(record.entry);
-    const group = groups.get(key) ?? [];
-    group.push(record);
-    groups.set(key, group);
-  });
-
-  const collapsed: PendingImportPupil[] = [];
-  for (const versions of groups.values()) {
-    const ordered = [...versions].sort((left, right) => {
-      const leftTime = Date.parse(left.savedAt);
-      const rightTime = Date.parse(right.savedAt);
-      const timeDifference = (Number.isFinite(rightTime) ? rightTime : 0) - (Number.isFinite(leftTime) ? leftTime : 0);
-      if (timeDifference !== 0) return timeDifference;
-      if (Boolean(left.entry.workflowStatus) !== Boolean(right.entry.workflowStatus)) {
-        return left.entry.workflowStatus ? -1 : 1;
-      }
-      return left.workbookKey.localeCompare(right.workbookKey);
-    });
-    const latest = ordered[0];
-    if (!latest || latest.entry.workflowStatus || latest.entry.included === false) continue;
-    collapsed.push({
-      ...latest,
-      duplicateCount: versions.length,
-      duplicateWorkbookCount: new Set(versions.map((version) => version.ownerId + "::" + version.workbookKey)).size,
-    });
-  }
-
-  return collapsed.sort((left, right) =>
-    left.entry.studentName.localeCompare(right.entry.studentName)
-    || left.entry.academicYear.localeCompare(right.entry.academicYear)
-    || (left.entry.term ?? "").localeCompare(right.entry.term ?? ""),
-  );
 }
 
 async function fingerprintWorkbook(file: File): Promise<string> {
@@ -489,7 +418,7 @@ export default function ResultsPage() {
     void Promise.all(savedImportWorkbooks.map(async (workbook) => {
       const entries = await getImportReviewDrafts(workbook.workbookKey, workbook.ownerId);
       const reviewEntries = reconcileSavedImportStudentMatches(
-        entries.filter((entry) => Boolean(entry.workflowStatus) || entry.included !== false),
+        entries,
         students,
         classes,
       );
