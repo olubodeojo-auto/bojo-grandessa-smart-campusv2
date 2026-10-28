@@ -95,7 +95,7 @@ const migrationFiles = import.meta.glob<string>(
 const resultsMigration = Object.values(migrationFiles)[0] ?? "";
 const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
 const workspacePage = readFileSync(resolve(process.cwd(), "src/pages/admin/results/ResultsWorkspacePage.tsx"), "utf8");
-const batchEntry = readFileSync(resolve(process.cwd(), "src/pages/admin/results/ResultBatchEntry.tsx"), "utf8");
+const batchEntrySource = readFileSync(resolve(process.cwd(), "src/pages/admin/results/ResultBatchEntry.tsx"), "utf8");
 const reportMigrationFiles = import.meta.glob<string>(
   "../../supabase/migrations/20261016000000_report_card_details.sql",
   { eager: true, query: "?raw", import: "default" },
@@ -3683,8 +3683,8 @@ describe("unified Results / Publish Arena workflow", () => {
   it("makes Save & Publish available for import and manual batch entry", () => {
     expect(resultsPage).toContain("SAVE & PUBLISH (");
     expect(resultsPage).toContain("onSaveAndPublish={publishSavedResultPeriod}");
-    expect(batchEntry).toContain("SAVE & PUBLISH");
-    expect(batchEntry).toContain("onSaveAndPublish");
+    expect(batchEntrySource).toContain("SAVE & PUBLISH");
+    expect(batchEntrySource).toContain("onSaveAndPublish");
     expect(resultsPage).toContain('overflowX: "scroll"');
   });
 });
