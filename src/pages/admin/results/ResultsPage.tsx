@@ -1566,6 +1566,21 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
     setCompletedSubjectMappingEntryKey(null);
   };
 
+  const handleRestoreSkippedImportRows = (entryIndex: number): void => {
+    const currentEntry = importEntries[entryIndex];
+    if (!currentEntry?.skippedItems?.length) return;
+    markDraftDirty(currentEntry.studentKey);
+    setImportEntries((current) => withSelectedDuplicateWarnings(updateImportEntryByKey(current, currentEntry.studentKey, (entry) =>
+      validateImportMappings({
+        ...entry,
+        items: [...entry.items, ...(entry.skippedItems ?? [])],
+        skippedItems: [],
+      })
+    )));
+    setActiveSubjectRowKey(null);
+    setCompletedSubjectMappingEntryKey(null);
+  };
+
   const handleImportTeacherNameChange = (entryIndex: number, teacherName: string): void => {
     const currentEntry = importEntries[entryIndex];
     if (!currentEntry) return;
@@ -2915,11 +2930,13 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                         {importResultStates[entry.studentKey]?.state === "saved" ? "Saved"
                           : importResultStates[entry.studentKey]?.state === "failed" ? "Import failed"
                             : draftSaveStates[entry.studentKey]?.state === "saved" ? "Saved"
-                              : entry.selectedStudentId && entry.items.some((item) => !item.subjectId) ? "Needs subject mapping"
-                                : !entry.selectedStudentId ? "Needs matching"
-                                  : getImportScoreWarnings(entry).some((warning) => /mark is missing|subject marks are missing/i.test(warning)) ? "Missing subject marks"
-                                    : getImportScoreWarnings(entry).length > 0 ? "Check marks"
-                                      : isImportEntryReady(entry) ? "Ready to import" : "Needs review"}
+                              : !entry.selectedStudentId ? "Needs matching"
+                                : getImportItemsForSave(entry).some((item) => !item.subjectId) ? "Needs subject mapping"
+                                  : isImportEntryReady(entry)
+                                    ? (entry.items.some(isImportItemSkippableForMissingMarks) || (entry.skippedItems?.length ?? 0) > 0
+                                      ? "Ready to import; incomplete subjects skipped"
+                                      : "Ready to import")
+                                    : getImportScoreWarnings({ ...entry, items: getImportItemsForSave(entry) }).length > 0 ? "Check marks" : "Needs review"}
                       </div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -3242,6 +3259,25 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                       All subjects are mapped.
                     </div>
                   ) : null}
+                  {(() => {
+                    const skippedThisAttempt = entry.items.filter(isImportItemSkippableForMissingMarks);
+                    const previouslySkipped = entry.skippedItems ?? [];
+                    const skippedNames = [...new Set([...previouslySkipped, ...skippedThisAttempt].map((item) => item.subjectName).filter(Boolean))];
+                    if (skippedNames.length === 0) return null;
+                    return (
+                      <div role="status" style={{ margin: "8px 0", padding: 12, border: "1px solid #f59e0b", borderRadius: 8, background: "#fffbeb", color: "#78350f" }}>
+                        <strong>These incomplete subjects will not hold up this pupil's other results.</strong>
+                        <div style={{ marginTop: 4 }}>Not included until marks are entered: {skippedNames.join(", ")}. Complete subject rows can still be saved and published. Missing subjects can be added later from Results.</div>
+                        {previouslySkipped.length > 0 ? (
+                          <div style={{ marginTop: 8 }}>
+                            <Button type="button" size="sm" variant="secondary" onClick={() => handleRestoreSkippedImportRows(index)}>
+                              Restore skipped subjects to edit their marks
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
                   <label style={{ display: "grid", gap: 4, maxWidth: 360, marginBottom: 8 }}>
                     Search subject choices
                     <input value={subjectSearch} onChange={(event) => setSubjectSearch(event.target.value)} placeholder="Search subjects" />
@@ -3370,7 +3406,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                         })}
                       </tbody>
                     </table>
-                  </div>
+                  </SynchronizedHorizontalScroll>
                   </div>
                   ) : null}
                 </div>
