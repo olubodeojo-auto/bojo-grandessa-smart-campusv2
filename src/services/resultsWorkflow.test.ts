@@ -3647,7 +3647,14 @@ describe("results workflow migration contract", () => {
     expect(resultsPage).toContain("SAVE & PUBLISH THIS PUPIL");
     expect(resultsPage).toContain("Save this pupil's results");
     expect(resultsPage).toContain("Ignore pupil");
-    expect(resultsPage).toContain("Find student in records");
+    expect(resultsPage).toContain('aria-label="Confirm registered pupil"');
+    expect(resultsPage).toContain("Confirm this pupil");
+    expect(resultsPage).toContain("Confirmed school record");
+    expect(resultsPage).not.toContain("Find student in records");
+    expect(resultsPage).not.toContain("Search pupil name or admission number");
+    expect(resultsPage).toContain("Preserve a resolved worksheet class");
+    expect(resultsPage).toContain("Set aside until subjects and marks are entered");
+    expect(resultsPage).toContain("Go to next issue");
   });
 
   it("allows authenticated reads but restricts session and term mutations to administrators", () => {
@@ -3810,6 +3817,22 @@ describe("unified Results / Publish Assistant workflow", () => {
     expect(batchEntrySource).toContain("onSaveAndPublish");
     expect(resultsPage).toContain('overflowX: "auto"');
     expect(resultsPage).toContain("function SynchronizedHorizontalScroll");
+  });
+});
+
+describe("pupil matching is a direct registered-record confirmation", () => {
+  it("uses the full roster dropdown, an explicit confirm action, and a visible hold for pupils with no complete marks", () => {
+    expect(resultsPage).toContain('aria-label="Confirm registered pupil"');
+    expect(resultsPage).toContain("Confirm this pupil");
+    expect(resultsPage).toContain("Confirm change of pupil");
+    expect(resultsPage).toContain("Selected but not yet confirmed");
+    expect(resultsPage).not.toContain("Search pupil name or admission number");
+    expect(resultsPage).not.toContain("studentSearch");
+    expect(resultsPage).toContain("Choose a pupil from the school register");
+    expect(resultsPage).toContain("Set aside until subjects and marks are entered");
+    expect(resultsPage).toContain("getImportSubjectRowsNeedingAction");
+    expect(resultsPage).toContain("Go to next issue");
+    expect(resultsPage).toContain("A true class-number mismatch stays in draft");
   });
 });
 
