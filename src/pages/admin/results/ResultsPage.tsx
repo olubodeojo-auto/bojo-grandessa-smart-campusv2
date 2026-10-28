@@ -98,8 +98,11 @@ type PendingImportPupil = {
 type PendingImportPupilStatus = { label: string; explanation: string };
 
 function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingImportPupilStatus {
+  const classConflict = entry.warnings.some((warning) => /worksheet says|workbook class differs|class differs|worksheet class/i.test(warning));
   if (entry.matchStatus === "manual-review") {
-    return { label: "Confirm pupil", explanation: "Confirm the registered pupil and class against the school list before importing marks." };
+    return classConflict
+      ? { label: "Class mismatch — keep in draft", explanation: "The worksheet class differs from the registered class. Keep this entry in drafts until the school confirms the correct pupil and class. Do not change the registered class to make the worksheet fit." }
+      : { label: "Confirm pupil", explanation: "Confirm the registered pupil and class against the school list before importing marks." };
   }
   if (entry.matchStatus === "unmatched" || !entry.selectedStudentId) {
     return { label: "Pupil match needed", explanation: "Select the correct registered pupil before importing. No marks have been imported for this entry." };
@@ -1939,7 +1942,12 @@ export default function ResultsPage() {
                   const displayName = entry.matchStatus === "matched" && confirmedPupil
                     ? `${confirmedPupil.first_name} ${confirmedPupil.last_name}`.trim()
                     : worksheetName;
-                  const officialClass = classes.find((candidate) => candidate.id === (confirmedPupil?.class_id ?? entry.items.find((item) => item.classId)?.classId));
+                  const rosterCandidate = confirmedPupil ?? possiblePupil;
+                  const officialClass = rosterCandidate?.class_id
+                    ? classes.find((candidate) => candidate.id === rosterCandidate.class_id)
+                    : possiblePupil
+                      ? undefined
+                      : classes.find((candidate) => candidate.id === entry.items.find((item) => item.classId)?.classId);
                   const officialTeacherName = [officialClass?.class_teacher?.first_name, officialClass?.class_teacher?.last_name].filter(Boolean).join(" ");
                   const progress = getPendingImportPupilStatus(entry);
                   const reportTypeLabel = entry.reportKind === "Midterm / Continuous Assessment"
@@ -1958,7 +1966,13 @@ export default function ResultsPage() {
                         <div style={{ minWidth: 0 }}>
                           <h3 style={{ margin: 0, fontSize: 16, overflowWrap: "anywhere" }}>{displayName}</h3>
                           <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13 }}>
-                            {entry.admissionNumber ? `Admission no.: ${entry.admissionNumber} · ` : ""}Registered class: {officialClass?.class_name || entry.className || "Needs confirmation"} · Class teacher: {officialTeacherName || "Not assigned in the class record"}
+                            {entry.matchStatus === "matched" && confirmedPupil ? (
+                              <>Registered class: {officialClass?.class_name || confirmedPupil.class_name || "Needs confirmation"} · Class teacher: {officialTeacherName || "Not assigned in the class record"}</>
+                            ) : possiblePupil ? (
+                              <>Worksheet class: {entry.className || "Needs confirmation"} · Possible registered class: {officialClass?.class_name || possiblePupil.class_name || "Needs confirmation"} · Class teacher: {officialTeacherName || "Not assigned in the class record"}</>
+                            ) : (
+                              <>Class: {officialClass?.class_name || entry.className || "Needs confirmation"} · Class teacher: {officialTeacherName || "Not assigned in the class record"}</>
+                            )}
                           </p>
                           <p style={{ margin: "3px 0 0", color: "#64748b", fontSize: 13 }}>
                             {entry.academicYear || "Session to confirm"} · {entry.term ? `${entry.term} Term` : "Term to confirm"} · {reportTypeLabel}
