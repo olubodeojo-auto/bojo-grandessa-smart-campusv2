@@ -3279,9 +3279,11 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                         onClick={() => handleImportSelection(index, pendingStudentId)}
                         disabled={!pendingStudentId || pendingStudentId === studentId}
                       >
-                        {pendingStudentId && pendingStudentId !== studentId
-                          ? studentId ? "Confirm change of pupil" : "Confirm this pupil"
-                          : "Pupil confirmed"}
+                        {!pendingStudentId
+                          ? "Select a pupil first"
+                          : pendingStudentId !== studentId
+                            ? studentId ? "Confirm change of pupil" : "Confirm this pupil"
+                            : "Pupil confirmed"}
                       </Button>
                       {isAdmin && !entry.selectedStudentId ? (
                         <Button
