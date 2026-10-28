@@ -1893,8 +1893,11 @@ export default function ResultsPage() {
         ) : null}
 
         {importSummary ? (
-          <div style={{ marginBottom: 16, padding: 12, borderRadius: 12, border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#166534" }}>
-            {importSummary}
+          <div style={{ marginBottom: 16, padding: 14, borderRadius: 12, border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#166534", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 360px", minWidth: 0 }}>{importSummary}</div>
+            <Button type="button" onClick={() => navigate("/admin/reports")} style={{ minHeight: 48, padding: "12px 18px", background: "#1d4ed8", borderColor: "#1d4ed8", fontWeight: 900 }}>
+              GO TO PUBLISH REPORTS →
+            </Button>
           </div>
         ) : null}
 
@@ -2272,7 +2275,7 @@ export default function ResultsPage() {
 
       <AppModal
         open={isImportOpen}
-        title={isAddingImportStudent ? "Add Student" : isFinalImportPreview ? "Final check before saving" : "Review pupil results"}
+        title={isAddingImportStudent ? "Add Student" : isFinalImportPreview ? "Final check — save drafts" : "Review pupil results"}
         size="xl"
         dialogStyle={{
           height: "calc(100dvh - 32px)",
@@ -2311,7 +2314,7 @@ export default function ResultsPage() {
               <>
                 <Button type="button" size="sm" variant="secondary" onClick={() => setIsFinalImportPreview(false)}>Back to pupil review</Button>
                 <Button type="button" size="sm" onClick={() => void handleConfirmImport()} disabled={importSubmitting || importableBlocks === 0 || importPeriodConflict}>
-                  {importSubmitting ? "Saving..." : `Save ready results (${importableBlocks})`}
+                  {importSubmitting ? "Saving drafts…" : `Save as Draft (${importableBlocks})`}
                 </Button>
               </>
             ) : (
@@ -2342,7 +2345,7 @@ export default function ResultsPage() {
                   }}
                   disabled={importableBlocks === 0 || importPeriodConflict}
                 >
-                  Continue to final check ({importableBlocks})
+                  Review summary before saving ({importableBlocks})
                 </Button>
               </>
             )}
@@ -2365,8 +2368,7 @@ export default function ResultsPage() {
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 700, marginBottom: 4 }}>Results Run · {importFileName || "Uploaded file"}</div>
           <p style={{ margin: "6px 0 8px", color: "#475569", fontSize: 13 }}>
-            Review one pupil at a time. Saving creates or updates draft results and never publishes automatically.
-            Subject mappings you confirm are remembered for the same class on future uploads.
+            Review one pupil at a time, then save the marks as Drafts. This screen does not publish reports or send parent messages. After saving, use GO TO PUBLISH REPORTS and click the large green PUBLISH THIS REPORT button for each pupil you want to release. Subject mappings you confirm are remembered for the same class on future uploads.
           </p>
           {importWorkbookSheets.length > 1 ? (
             <label style={{ display: "grid", gap: 4, maxWidth: 420, margin: "8px 0" }}>
@@ -2450,8 +2452,8 @@ export default function ResultsPage() {
               const reportDetails = entry.reportDetails;
               return (
                 <section style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 18, background: "#fff" }}>
-                  <p role="status" style={{ marginTop: 0, color: "#475569" }}>
-                    Final check: {readyImportEntries.length} pupil result set(s) are ready to save. This saves new or corrected results as Draft and does not publish reports or send parent messages. Matching published marks are reused without being overwritten.
+                  <p role="status" style={{ marginTop: 0, padding: 12, borderRadius: 10, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1e3a8a" }}>
+                    <strong>{readyImportEntries.length} pupil result set(s) ready to save as Draft.</strong> This is not publication. After saving, go to Pupil Report Cards and click the green PUBLISH THIS REPORT button to release a pupil’s report. No parent messages are sent here. Existing published marks are reused only when they match exactly.
                   </p>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <div>

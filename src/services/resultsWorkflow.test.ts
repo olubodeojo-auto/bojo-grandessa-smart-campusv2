@@ -2677,8 +2677,8 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain('onClick={() => document.getElementById("import-review-pupils")?.scrollTo({ top: 0, behavior: "smooth" })}');
     expect(resultsPage).toContain("Back to top of review");
     expect(resultsPage).toMatch(/>\s*Cancel\s*<\/Button>/);
-    expect(resultsPage).toContain("Continue to final check");
-    expect(resultsPage).toContain("Save ready results (");
+    expect(resultsPage).toContain("Review summary before saving");
+    expect(resultsPage).toContain("Save as Draft (");
     expect(resultsPage).toContain("saved versions across");
     expect(resultsPage).toContain("assigned class teacher");
   });
@@ -3279,7 +3279,7 @@ describe("results workflow migration contract", () => {
     expect(reportCardsPage).toContain('onClick={() => navigateToResults(period)}');
     expect(reportCardsPage).toContain("getReportCenterPublishBlockReason(period, results, isAdministrator, publicationEvidence)");
     expect(reportCardsPage).toContain("getReportCenterPublishActionState(");
-    expect(reportCardsPage).toContain("Publish results");
+    expect(reportCardsPage).toContain("PUBLISH THIS REPORT");
     expect(reportCardsPage).toContain("Unpublish results");
     expect(reportCardsPage).toContain('period.results.every((result) => result.status === "Published")');
     expect(reportCardsPage).toContain("canDeleteDraftReportPeriod(period, isAdministrator)");
@@ -3446,7 +3446,7 @@ describe("results workflow migration contract", () => {
     expect(resultsPage).toContain("importReviewCursorKey(user.id, importDraftSchoolId");
     expect(resultsPage).toContain("subjectRowKey: activeSubjectRowKey");
     expect(resultsPage).toContain("const [activeImportEntryKey, setActiveImportEntryKey] = useState<string | null>(null)");
-    expect(resultsPage).toContain("Continue to final check");
+    expect(resultsPage).toContain("Review summary before saving");
     expect(resultsPage).toContain("Save progress");
     expect(resultsPage).toContain("Ignore pupil");
     expect(resultsPage).toContain("Find student in records");

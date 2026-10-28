@@ -494,6 +494,14 @@ export default function ReportCardsPage() {
     () => filteredReportPeriods.filter((period) => getReportCenterPeriodStatus(period) === "Published"),
     [filteredReportPeriods],
   );
+  const publishableReportPeriods = useMemo(
+    () => needsAttentionReportPeriods.filter((period) =>
+      isAdministrator
+      && !getPublicationEvidenceErrorForPeriod(period)
+      && !getReportCenterPublishBlockReason(period, results, isAdministrator, publicationEvidence),
+    ),
+    [needsAttentionReportPeriods, isAdministrator, results, publicationEvidence, publicationEvidenceError],
+  );
   const filteredPendingImportPupils = useMemo(() => pendingImportPupils.filter((review) => {
     const originalName = (review.entry as ResultImportPreviewEntry & { sourceStudentName?: string }).sourceStudentName
       ?? review.entry.studentName;
@@ -1255,6 +1263,20 @@ export default function ReportCardsPage() {
                     </div>
 
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {showPublishAction ? (
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="md"
+                          aria-label={"Publish " + pupilName + "'s report for " + period.academicYear + ", " + period.term + " Term"}
+                          onClick={() => void publishReportPeriod(period)}
+                          disabled={publishAction.disabled}
+                          title={publishAction.reason ? formatPublicationBlocker(publishAction.reason) : "Publish this pupil's report after all checks pass."}
+                          style={{ flex: "1 1 240px", minHeight: 56, padding: "16px 24px", borderRadius: 14, background: "#047857", borderColor: "#047857", color: "#fff", fontSize: 16, fontWeight: 900, letterSpacing: "0.02em", boxShadow: "0 0 0 4px #d1fae5, 0 8px 20px rgba(4,120,87,0.30)" }}
+                        >
+                          {isPublishing ? "PUBLISHING REPORT…" : "PUBLISH THIS REPORT →"}
+                        </Button>
+                      ) : null}
                       <Button type="button" variant="secondary" onClick={() => void openReportPeriod(period)} disabled={period.results.length === 0} title={period.results.length === 0 ? "Subject results are required to preview a report card." : undefined}>
                         Preview report
                       </Button>
@@ -1264,11 +1286,6 @@ export default function ReportCardsPage() {
                       <Button type="button" variant="secondary" onClick={() => navigateToResults(period)} disabled={period.results.length === 0} title={period.results.length === 0 ? "No subject results are available to edit." : undefined}>
                         Edit subject marks
                       </Button>
-                      {showPublishAction ? (
-                        <Button type="button" onClick={() => void publishReportPeriod(period)} disabled={publishAction.disabled} title={publishAction.reason ? formatPublicationBlocker(publishAction.reason) : "Publish this pupil's subject results after all checks pass."}>
-                          {isPublishing ? "Publishing…" : "Publish results"}
-                        </Button>
-                      ) : null}
                       {canUnpublish ? (
                         <Button type="button" variant="secondary" onClick={() => void unpublishReportPeriod(period)} disabled={Boolean(unpublishingKey) || Boolean(publishingKey) || Boolean(unpublishVerificationErrors[period.key])} title={unpublishVerificationErrors[period.key] || "Move each published subject result to Returned through the existing review workflow."}>
                           {isUnpublishing ? "Unpublishing…" : "Unpublish results"}
@@ -1339,6 +1356,26 @@ export default function ReportCardsPage() {
         <div role="status" style={{ padding: 12, border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: 12, color: "#166534" }}>
           {success}
         </div>
+      ) : null}
+
+      {isAdministrator ? (
+        <section aria-label="Publishing instructions" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", padding: 20, border: "2px solid #059669", borderRadius: 16, background: "linear-gradient(110deg,#ecfdf5 0%,#ffffff 72%)", boxShadow: "0 4px 16px rgba(5,150,105,0.10)" }}>
+          <div style={{ flex: "1 1 360px", minWidth: 0 }}>
+            <div style={{ color: "#047857", fontWeight: 900, fontSize: 12, letterSpacing: "0.08em" }}>FINAL STEP · PUBLISH REPORTS</div>
+            <h2 style={{ margin: "5px 0", fontSize: 22, color: "#064e3b" }}>Make a pupil’s report visible</h2>
+            <p style={{ margin: "4px 0 8px", color: "#334155" }}>
+              Importing or saving marks only creates drafts. In Draft pupil results below, use the large green <strong>PUBLISH THIS REPORT</strong> button for each pupil you want to release. Publishing does not send emails.
+            </p>
+            <p role="status" style={{ margin: 0, fontWeight: 800, color: "#047857" }}>
+              {loadingPeriods ? "Checking report readiness…" : publishableReportPeriods.length > 0
+                ? String(publishableReportPeriods.length) + " pupil report" + (publishableReportPeriods.length === 1 ? "" : "s") + " ready to publish"
+                : "No report currently passes every publishing check. Each draft explains what needs fixing."}
+            </p>
+          </div>
+          <Button type="button" onClick={() => setReportListView("drafts")} style={{ minHeight: 50, padding: "14px 20px", background: "#047857", borderColor: "#047857", fontWeight: 900, fontSize: 15, boxShadow: "0 0 0 3px #d1fae5, 0 8px 18px rgba(4,120,87,0.24)" }}>
+            SHOW DRAFTS TO PUBLISH →
+          </Button>
+        </section>
       ) : null}
 
       <SectionCard>
