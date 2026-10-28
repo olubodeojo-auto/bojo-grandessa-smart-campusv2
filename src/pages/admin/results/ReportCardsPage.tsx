@@ -136,6 +136,7 @@ function formatPublicationBlocker(reason: string): string {
   }
   const friendlyMessages: Record<string, string> = {
     "No subject-result rows are available for this report period.": "No subject marks have been imported for this pupil yet.",
+    "No complete subject-result rows are available for publication. Add at least one subject with complete marks.": "No complete subject result is available yet. Add the missing marks to at least one subject; incomplete rows will remain drafts.",
     "A subject is missing or has duplicate result rows.": "A subject is missing or listed more than once. Check the subject list.",
     "One or more Midterm CA marks are missing.": "A Midterm CA mark is blank. Complete it before publishing.",
     "One or more Midterm subject maximum scores are missing.": "A subject maximum score is missing. Complete it before publishing.",
