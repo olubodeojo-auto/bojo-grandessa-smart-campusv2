@@ -21,7 +21,7 @@ export default function ResultsWorkspacePage() {
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div className="card" style={{ padding: "18px 20px" }}>
-        <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>Publish Arena</h1>
+        <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>Publish Assistant</h1>
         <p style={{ margin: "6px 0 0", color: "#475569" }}>
           One place to prepare pupils’ marks, check results and publish reports.
         </p>

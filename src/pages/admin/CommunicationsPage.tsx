@@ -470,7 +470,7 @@ export default function CommunicationsPage() {
               </label>
               {!loading && (directory?.published_results_periods.length ?? 0) === 0 ? (
                 <p role="status" style={{ margin: 0, color: "#92400e", fontSize: 13 }}>
-                  No fully published report periods are available yet. Publish and verify results in Publish Arena first; that step does not send emails.
+                  No fully published report periods are available yet. Publish and verify results in Publish Assistant first; that step does not send emails.
                 </p>
               ) : selectedPublishedResultsPeriod ? (
                 <p role="status" style={{ margin: 0, color: "#475569", fontSize: 13 }}>
