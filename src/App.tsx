@@ -78,7 +78,9 @@ export default function App() {
 
         <Route path="parent-accounts" element={<ProtectedRoute allowedRoles={administratorRoles}><ParentAccountsPage /></ProtectedRoute>} />
 
-        <Route path="results" element={<ProtectedRoute allowedRoles={resultsRoles}><ResultsPage /></ProtectedRoute>} />
+        <Route path="results" element={<ProtectedRoute allowedRoles={resultsRoles}><ReportCardsPage /></ProtectedRoute>} />
+
+        <Route path="result-records" element={<ProtectedRoute allowedRoles={resultsRoles}><ResultsPage /></ProtectedRoute>} />
 
         <Route path="classes" element={<ProtectedRoute allowedRoles={classManagementRoles}><ClassesPage /></ProtectedRoute>} />
 

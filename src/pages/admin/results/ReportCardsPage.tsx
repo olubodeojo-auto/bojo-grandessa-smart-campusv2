@@ -518,6 +518,21 @@ export default function ReportCardsPage() {
       || className.toLowerCase().includes(searchName);
   }), [pendingImportPupils, reportSearch, students]);
 
+  const blockedReportPeriodsCount = Math.max(0, needsAttentionReportPeriods.length - publishableReportPeriods.length);
+  const dashboardStatusMessage = loadingPeriods || loadingImportWorkbooks
+    ? "Checking saved imports and report publication status…"
+    : error || importWorkbooksError
+      ? "The dashboard could not confirm every status. Review the alert above or refresh before treating this list as clear."
+      : reportSearch.trim() && filteredPendingImportPupils.length === 0 && needsAttentionReportPeriods.length === 0
+        ? `No outstanding imports or unpublished drafts match “${reportSearch.trim()}”. Clear the search to review the full school list.`
+        : filteredPendingImportPupils.length === 0 && needsAttentionReportPeriods.length === 0
+          ? reportPeriods.length > 0
+            ? "All pupil reports in this workspace are published. No imports or unpublished drafts are outstanding."
+            : "No imports or unpublished drafts are outstanding. Import a workbook or enter results to start the next reporting cycle."
+          : publishableReportPeriods.length > 0
+            ? `${publishableReportPeriods.length} pupil report(s) are ready to publish now. ${blockedReportPeriodsCount > 0 ? `${blockedReportPeriodsCount} draft(s) still need attention. ` : ""}${filteredPendingImportPupils.length > 0 ? `${filteredPendingImportPupils.length} saved import(s) await review.` : "No other drafts or imports are outstanding."}`
+            : `${filteredPendingImportPupils.length} saved import(s) are waiting for review, and ${blockedReportPeriodsCount} unpublished report draft(s) still need attention before they can be released. Open an item below to see the next step.`;
+
   async function openReportPeriod(period: ReportCenterPeriod, editDetails = false): Promise<void> {
     const student = students.find((candidate) => candidate.id === period.studentId);
     if (!student) {
@@ -575,7 +590,7 @@ export default function ReportCardsPage() {
       classId: period.classId,
       search: student ? `${student.first_name} ${student.last_name}`.trim() : "",
     });
-    navigate(`/admin/results?${params.toString()}`);
+    navigate(`/admin/result-records?${params.toString()}`);
   }
 
   function getPublicationEvidenceErrorForPeriod(period: ReportCenterPeriod): string {
@@ -1422,10 +1437,15 @@ export default function ReportCardsPage() {
   return (
     <div style={{ display: "grid", gap: 20 }}>
       <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>Pupil Report Cards</h1>
-          <p style={{ color: "#666", marginTop: 8 }}>Review each pupil separately. Drafts and published reports are shown in separate lists below.</p>
+        <div style={{ minWidth: 0, flex: "1 1 340px" }}>
+          <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>Results</h1>
+          <p style={{ color: "#475569", marginTop: 8 }}>
+            One workspace to review imports, clear blockers, publish ready reports, and confirm what is already published.
+          </p>
         </div>
+        <Button type="button" variant="secondary" onClick={() => navigate("/admin/result-records")}>
+          Manage subject marks
+        </Button>
       </div>
 
       {error ? (
@@ -1439,6 +1459,37 @@ export default function ReportCardsPage() {
         </div>
       ) : null}
 
+      <section aria-labelledby="results-progress-heading" style={{ padding: 18, border: "1px solid #dbeafe", borderRadius: 16, background: "linear-gradient(135deg,#f8fbff 0%,#ffffff 72%)", display: "grid", gap: 14 }}>
+        <div>
+          <h2 id="results-progress-heading" style={{ margin: 0, fontSize: 21 }}>Results publishing progress</h2>
+          <p style={{ color: "#475569", margin: "5px 0 0" }}>
+            Follow each pupil from import review to a published report. Ready reports are separate from drafts that still need work.
+          </p>
+        </div>
+        <p role="status" aria-live="polite" style={{ margin: 0, padding: "12px 14px", borderRadius: 10, background: error || importWorkbooksError ? "#fff7ed" : "#f0fdf4", color: error || importWorkbooksError ? "#9a3412" : "#166534", fontWeight: 750 }}>
+          {dashboardStatusMessage}
+        </p>
+        <div role="group" aria-label="Results status counts" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(155px,1fr))", gap: 10 }}>
+          {[
+            { label: "Imports to review", count: filteredPendingImportPupils.length, note: "Saved workbook entries", color: "#9a3412" },
+            { label: "Ready to publish", count: publishableReportPeriods.length, note: "Passed publishing checks", color: "#047857" },
+            { label: "Need attention", count: blockedReportPeriodsCount, note: "Drafts with a blocker", color: "#b91c1c" },
+            { label: "Published", count: publishedReportPeriods.length, note: "Reports already released", color: "#1d4ed8" },
+          ].map((item) => (
+            <div key={item.label} style={{ minWidth: 0, padding: 13, borderRadius: 12, border: "1px solid #e2e8f0", background: "#fff" }}>
+              <div style={{ color: "#475569", fontSize: 12, fontWeight: 800 }}>{item.label}</div>
+              <div style={{ color: item.color, fontSize: 30, lineHeight: 1.2, fontWeight: 900, fontVariantNumeric: "tabular-nums", margin: "5px 0" }}>{item.count}</div>
+              <div style={{ color: "#64748b", fontSize: 12 }}>{item.note}</div>
+            </div>
+          ))}
+        </div>
+        <p style={{ color: "#64748b", fontSize: 12, margin: 0 }}>
+          {reportSearch.trim()
+            ? `Counts are for the pupil search “${reportSearch.trim()}”. Clear the search to see school-wide progress.`
+            : "Counts cover all pupils. A report marked “Ready to publish” still needs to be published; published reports are counted separately."}
+        </p>
+      </section>
+
       {isAdministrator ? (
         <section aria-label="Publishing instructions" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", padding: 20, border: "2px solid #059669", borderRadius: 16, background: "linear-gradient(110deg,#ecfdf5 0%,#ffffff 72%)", boxShadow: "0 4px 16px rgba(5,150,105,0.10)" }}>
           <div style={{ flex: "1 1 360px", minWidth: 0 }}>
@@ -1448,9 +1499,11 @@ export default function ReportCardsPage() {
               Importing or saving marks only creates drafts. In Draft pupil results below, use the large green <strong>PUBLISH THIS REPORT</strong> button for each pupil you want to release. Publishing does not send emails.
             </p>
             <p role="status" style={{ margin: 0, fontWeight: 800, color: "#047857" }}>
-              {loadingPeriods ? "Checking report readiness…" : publishableReportPeriods.length > 0
+              {loadingPeriods || loadingImportWorkbooks ? "Checking report readiness…" : publishableReportPeriods.length > 0
                 ? String(publishableReportPeriods.length) + " pupil report" + (publishableReportPeriods.length === 1 ? "" : "s") + " ready to publish"
-                : "No report currently passes every publishing check. Each draft explains what needs fixing."}
+                : filteredPendingImportPupils.length === 0 && needsAttentionReportPeriods.length === 0
+                  ? reportSearch.trim() ? "No outstanding work matches this search." : reportPeriods.length > 0 ? "All reports in this view are published. Nothing is outstanding." : "Nothing is waiting to publish yet. Import or enter results to begin."
+                  : `No draft is ready yet. ${blockedReportPeriodsCount} report draft(s) need attention and ${filteredPendingImportPupils.length} saved import(s) are waiting for review. Follow the action on each item below.`}
             </p>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -1550,7 +1603,7 @@ export default function ReportCardsPage() {
                           </div>
                           <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>{progress.explanation}</p>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <Button type="button" onClick={() => navigate(`/admin/results?${params.toString()}`)}>Reconcile this pupil</Button>
+                            <Button type="button" onClick={() => navigate(`/admin/result-records?${params.toString()}`)}>Reconcile this pupil</Button>
                           </div>
                         </article>
                       );

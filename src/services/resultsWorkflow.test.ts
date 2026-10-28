@@ -3315,6 +3315,10 @@ describe("results workflow migration contract", () => {
     expect(reportCardsPage).toContain("getReportCenterPublishActionState(");
     expect(reportCardsPage).toContain("PUBLISH THIS REPORT");
     expect(reportCardsPage).toContain("PUBLISH ALL READY REPORTS");
+    expect(reportCardsPage).toContain('aria-labelledby="results-progress-heading"');
+    expect(reportCardsPage).toContain("Imports to review");
+    expect(reportCardsPage).toContain("All pupil reports in this workspace are published.");
+    expect(reportCardsPage).toContain('navigate("/admin/result-records")');
     expect(reportCardsPage).toContain("async function publishAllReadyReports()");
     expect(reportCardsPage).toContain("publishReportPeriod(period, false, false)");
     expect(reportCardsPage).toContain("Unpublish results");
