@@ -1,0 +1,35 @@
+name: Supabase migration access guard
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**/*.sql"
+      - "scripts/check-supabase-migration-access.mjs"
+      - ".github/workflows/supabase-migration-access.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  migration-access:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check changed migration files
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch origin "$BASE_REF"
+          mapfile -t migrations < <(git diff --name-only "origin/$BASE_REF...HEAD" -- 'supabase/migrations/*.sql')
+          if [ "${#migrations[@]}" -eq 0 ]; then
+            echo "No changed Supabase migration files to check."
+            exit 0
+          fi
+          node scripts/check-supabase-migration-access.mjs "${migrations[@]}"
