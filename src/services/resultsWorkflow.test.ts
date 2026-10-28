@@ -2968,7 +2968,7 @@ describe("result workbook import preview", () => {
 
   it("collapses ignored pupil cards and retains an Include control", () => {
     expect(resultsPage).toContain('useState<string | null>(null)');
-    expect(resultsPage).toMatch(/if \(entry\.included === false\)\s*\{\s*return \([\s\S]*?key=\{getImportEntryKey\(entry\)\}[\s\S]*?\{entry\.studentName \|\| "Unknown pupil"\}[\s\S]*?Ignored[\s\S]*?>\s*Include pupil\s*<\/Button>[\s\S]*?\);\s*\}/);
+    expect(resultsPage).toMatch(/if \(entry\.included === false\)\s*\{\s*return \([\s\S]*?key=\{getImportEntryKey\(entry\)\}[\s\S]*?\{entry\.studentName \|\| "Unknown pupil"\}[\s\S]*?Set aside[\s\S]*?>\s*Include pupil\s*<\/Button>[\s\S]*?\);\s*\}/);
     expect(resultsPage).toContain("activeImportEntryKey === entry.studentKey");
     expect(resultsPage).toContain('key={getImportSubjectRowKey(entry, itemIndex)}');
   });
