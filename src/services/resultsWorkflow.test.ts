@@ -709,6 +709,90 @@ describe("Report Center period discovery and readiness", () => {
     expect(canPublishReportCenterPeriod(period)).toBe(false);
   });
 
+
+  it("allows an intentional missing CRS row while still blocking other missing subjects", () => {
+    const referenceRows = [
+      result({
+        id: "reference-crs",
+        student_id: "reference-pupil",
+        class_id: "basic-5",
+        class_name: "Basic 5",
+        subject_id: "subject-crs",
+        subject_name: "CRS",
+        academic_year: "2026/2027",
+        term: "First",
+        assessment_type: "CA",
+        continuous_assessment: 25,
+        maximum_score: 40,
+        examination: null,
+        total_score: null,
+        status: "Published",
+      }),
+      result({
+        id: "reference-english",
+        student_id: "reference-pupil",
+        class_id: "basic-5",
+        class_name: "Basic 5",
+        subject_id: "subject-english",
+        subject_name: "English Language",
+        academic_year: "2026/2027",
+        term: "First",
+        assessment_type: "CA",
+        continuous_assessment: 30,
+        maximum_score: 40,
+        examination: null,
+        total_score: null,
+        status: "Published",
+      }),
+      result({
+        id: "target-english",
+        student_id: "target-pupil",
+        class_id: "basic-5",
+        class_name: "Basic 5",
+        subject_id: "subject-english",
+        subject_name: "English Language",
+        academic_year: "2026/2027",
+        term: "First",
+        assessment_type: "CA",
+        continuous_assessment: 32,
+        maximum_score: 40,
+        examination: null,
+        total_score: null,
+        status: "Draft",
+      }),
+    ];
+    const [targetPeriod] = discoverReportCenterPeriods(referenceRows, []).filter(
+      (period) => period.studentId === "target-pupil",
+    );
+
+    expect(getReportCenterCompleteness(targetPeriod, referenceRows)).toMatchObject({ complete: true });
+    expect(canPublishReportCenterPeriod(targetPeriod, referenceRows, true)).toBe(true);
+
+    const referenceWithMath = [
+      ...referenceRows,
+      result({
+        id: "reference-math",
+        student_id: "reference-pupil",
+        class_id: "basic-5",
+        class_name: "Basic 5",
+        subject_id: "subject-math",
+        subject_name: "Mathematics",
+        academic_year: "2026/2027",
+        term: "First",
+        assessment_type: "CA",
+        continuous_assessment: 29,
+        maximum_score: 40,
+        examination: null,
+        total_score: null,
+        status: "Published",
+      }),
+    ];
+    expect(getReportCenterCompleteness(targetPeriod, referenceWithMath)).toMatchObject({
+      complete: false,
+      reason: "Missing subject results observed for this class and session: Mathematics.",
+    });
+  });
+
   it("makes complete End-of-Term rows publishable only while existing statuses are reviewable", () => {
     const submitted = [
       result({ id: "math", status: "Submitted" }),
