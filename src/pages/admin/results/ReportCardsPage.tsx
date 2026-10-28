@@ -81,8 +81,11 @@ function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingIm
   if (entry.reportKind === "Unclear") {
     return { label: "Report type to confirm", explanation: "Choose Midterm (CA) or End-of-Term before importing." };
   }
+  if (!entry.academicYear.trim()) {
+    return { label: "Session to confirm", explanation: "Reconcile this pupil and open session/report settings to choose the correct academic session." };
+  }
   if (!entry.term) {
-    return { label: "Term to confirm", explanation: "Choose the correct school term before importing." };
+    return { label: "Term to confirm", explanation: "Reconcile this pupil and choose the correct school term." };
   }
   if (entry.items.length === 0) {
     return { label: "No subject rows", explanation: "No subject marks were found. Add the subjects and marks, or set this pupil aside. This does not block other pupils." };
