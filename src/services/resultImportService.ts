@@ -1782,8 +1782,10 @@ export async function parseResultWorkbook(
       warnings.push("Duplicate subject-assessment rows found for this student.");
     }
     entry.items.forEach((item) => {
+      const effectiveReportKind = reportKindOverride === "Unclear" ? item.reportKind : reportKindOverride;
+      const isMidtermCA = effectiveReportKind === "Midterm / Continuous Assessment";
       if (item.assessmentType === "CA") {
-        if (item.totalScore !== null || item.grade || item.remark) {
+        if (!isMidtermCA && (item.totalScore !== null || item.grade || item.remark)) {
           notices.push(`${item.subjectName}: CA entries do not retain final totals, grades, or remarks.`);
         }
         item.totalScore = null;
@@ -1791,10 +1793,10 @@ export async function parseResultWorkbook(
         item.remark = null;
       }
       if (!item.subjectName.trim() || item.subjectName === "Unknown subject") warnings.push("A subject could not be identified.");
-      if (item.continuousAssessment === null || item.examination === null) {
+      if (!isMidtermCA && (item.continuousAssessment === null || item.examination === null)) {
         notices.push(`${item.subjectName}: one or more assessment components are blank and will remain blank.`);
       }
-      const calculated = item.assessmentType === "Combined"
+      const calculated = !isMidtermCA && item.assessmentType === "Combined"
         ? computeTotal(item.continuousAssessment, item.examination)
         : null;
       if (calculated !== null && item.totalScore !== null && Math.abs(item.totalScore - calculated) > 0.01) {
@@ -1802,22 +1804,22 @@ export async function parseResultWorkbook(
       } else if (calculated !== null && item.totalScore === null) {
         notices.push(`${item.subjectName}: a calculated total would be ${calculated}, but no total was entered; no total will be added.`);
       }
-      if (item.totalDerivedFromComponents) {
+      if (!isMidtermCA && item.totalDerivedFromComponents) {
         notices.push(`${item.subjectName}: the workbook total was blank; the preview derives ${item.totalScore} from the two valid assessment components.`);
       }
-      if (item.workbookTotal === null && item.continuousAssessment === null && item.examination === null) {
+      if (!isMidtermCA && item.workbookTotal === null && item.continuousAssessment === null && item.examination === null) {
         notices.push(`${item.subjectName}: total and assessment components are blank; the total will remain blank.`);
       }
-      if (item.grade) {
+      if (!isMidtermCA && item.grade) {
         const expectedGrade = gradeFromTotal(item.workbookTotal ?? item.totalScore ?? calculated);
         if (expectedGrade && item.grade !== expectedGrade) {
           notices.push(`${item.subjectName}: entered grade ${item.grade} differs from the configured scale suggestion (${expectedGrade}); the entered grade is preserved.`);
         }
       }
-      if (!item.grade) {
+      if (!isMidtermCA && !item.grade) {
         notices.push(`${item.subjectName}: no grade was entered; it will remain blank.`);
       }
-      if (!item.remark) {
+      if (!isMidtermCA && !item.remark) {
         notices.push(`${item.subjectName}: no remark was entered; it will remain blank.`);
       }
       item.notices = [...new Set(item.notices)];

@@ -1908,8 +1908,29 @@ describe("result workbook import preview", () => {
       remark: null,
     });
 
-    expect(preview[0].notices.join(" ")).toContain("CA entries do not retain final totals, grades, or remarks");
+    const notices = preview[0].notices.join(" ").toLowerCase();
+    expect(notices).not.toContain("ca entries do not retain final totals");
+    expect(notices).not.toContain("assessment components are blank");
+    expect(notices).not.toContain("no grade was entered");
+    expect(notices).not.toContain("no remark was entered");
+    expect(getImportScoreWarnings(preview[0])).toEqual([]);
     expect(preview[0].warnings.every((warning) => !warning.includes("must be present"))).toBe(true);
+  });
+
+  it("does not show final-report blank-field notices when Midterm is selected explicitly", async () => {
+    const preview = await parseResultWorkbook(
+      workbookFile("Unlisted Learner", true, { ca: 30, exam: 55, total: 85 }),
+      [student("student-1", "Omolekan Treasure", "K2-001")],
+      "Midterm / Continuous Assessment",
+    );
+
+    expect(preview[0].reportKind).toBe("Midterm / Continuous Assessment");
+    expect(preview[0].items[0].assessmentType).toBe("CA");
+    const notices = preview[0].notices.join(" ").toLowerCase();
+    expect(notices).not.toContain("assessment components are blank");
+    expect(notices).not.toContain("no grade was entered");
+    expect(notices).not.toContain("no remark was entered");
+    expect(getImportScoreWarnings(preview[0])).toEqual([]);
   });
 
   it("distinguishes zero, blank and malformed marks in the preview", async () => {
@@ -2719,6 +2740,9 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toMatch(/>\s*Cancel\s*<\/Button>/);
     expect(resultsPage).toContain("Review summary before saving");
     expect(resultsPage).toContain("Save as Draft (");
+    expect(resultsPage).toContain("const allSelectedPupilsSaved = outcomes.failed.length === 0");
+    expect(resultsPage).toContain('navigate("/admin/results");');
+    expect(resultsPage).not.toContain("go to Pupil Report Cards");
     expect(resultsPage).toContain("saved versions across");
     expect(resultsPage).toContain("assigned class teacher");
   });

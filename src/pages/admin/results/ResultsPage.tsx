@@ -1775,6 +1775,11 @@ export default function ResultsPage() {
         `Created ${createdRows} result row(s), updated ${updatedRows}, reused ${reusedRows} exact matches.`,
         verifiedStatuses.length > 0 ? `Database-verified status: ${verifiedStatuses.join("; ")}.` : "",
       ].filter(Boolean).join(" "));
+      const allSelectedPupilsSaved = outcomes.failed.length === 0
+        && outcomes.saved.length === selectedEntries.length;
+      if (allSelectedPupilsSaved) {
+        navigate("/admin/results");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to import results.";
       setError(message);
@@ -1896,7 +1901,7 @@ export default function ResultsPage() {
           <div style={{ marginBottom: 16, padding: 14, borderRadius: 12, border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#166534", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 360px", minWidth: 0 }}>{importSummary}</div>
             <Button type="button" onClick={() => navigate("/admin/results")} style={{ minHeight: 48, padding: "12px 18px", background: "#1d4ed8", borderColor: "#1d4ed8", fontWeight: 900 }}>
-              RETURN TO RESULTS DASHBOARD →
+              OPEN PUBLISH ARENA →
             </Button>
           </div>
         ) : null}
@@ -2368,7 +2373,7 @@ export default function ResultsPage() {
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 700, marginBottom: 4 }}>Results Run · {importFileName || "Uploaded file"}</div>
           <p style={{ margin: "6px 0 8px", color: "#475569", fontSize: 13 }}>
-            Review one pupil at a time, then save the marks as Drafts. This screen does not publish reports or send parent messages. After saving, return to Publish Arena to publish reports that pass their checks and verify completion. Subject mappings you confirm are remembered for the same class on future uploads.
+            Review each pupil, then save the marks. After a successful save, Publish Arena opens automatically. Only real pupil-identity, class/subject mapping, or missing/invalid CA mark issues should need attention. Subject mappings you confirm are remembered for the same class on future uploads.
           </p>
           {importWorkbookSheets.length > 1 ? (
             <label style={{ display: "grid", gap: 4, maxWidth: 420, margin: "8px 0" }}>
@@ -2453,7 +2458,7 @@ export default function ResultsPage() {
               return (
                 <section style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 18, background: "#fff" }}>
                   <p role="status" style={{ marginTop: 0, padding: 12, borderRadius: 10, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1e3a8a" }}>
-                    <strong>{readyImportEntries.length} pupil result set(s) ready to save as Draft.</strong> This is not publication. After saving, go to Pupil Report Cards and click the green PUBLISH THIS REPORT button to release a pupil’s report. No parent messages are sent here. Existing published marks are reused only when they match exactly.
+                    <strong>{readyImportEntries.length} pupil result set(s) ready to save.</strong> After a successful save, Publish Arena opens automatically so you can publish each pupil report from one place. Midterm CA does not require exam marks, totals, grades, or remarks. No parent messages are sent here. Existing published marks are reused only when they match exactly.
                   </p>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <div>
@@ -2545,6 +2550,10 @@ export default function ResultsPage() {
                 classTeacherComment: "",
                 headTeacherComment: "",
               };
+              const expectedMidtermNotice = /CA entries do not retain final totals, grades, or remarks|one or more assessment components are blank and will remain blank|no grade was entered; it will remain blank|no remark was entered; it will remain blank/i;
+              const visibleNotices = entry.reportKind === "Midterm / Continuous Assessment"
+                ? entry.notices.filter((notice) => !expectedMidtermNotice.test(notice))
+                : entry.notices;
 
               if (entry.included === false) {
                 return (
@@ -2872,9 +2881,9 @@ export default function ResultsPage() {
                       ))}
                     </div>
                   ) : null}
-                  {entry.notices.length > 0 ? (
+                  {visibleNotices.length > 0 ? (
                     <div role="status" style={{ marginBottom: 12, padding: 10, borderRadius: 8, background: "#eff6ff", color: "#1e40af", fontSize: 13 }}>
-                      {entry.notices.map((notice) => (
+                      {visibleNotices.map((notice) => (
                         <div key={notice}>{notice}</div>
                       ))}
                     </div>
