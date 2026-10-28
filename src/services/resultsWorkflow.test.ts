@@ -6,6 +6,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
+  collapseDuplicatePendingImportPupils,
   getImportScoreWarnings,
   areImportedResultValuesEquivalent,
   normalizeImportSubjectKey,
@@ -1806,6 +1807,130 @@ describe("result workbook import preview", () => {
     expect(preview[0].warnings).toContain("Term missing from workbook; select the correct term before importing.");
   });
 
+
+  it("shows one latest saved review for duplicate pupil-period uploads", () => {
+    const entry: ResultImportPreviewEntry = {
+      index: 0,
+      studentKey: "Sheet1-5-0-ABDULMUMEEN ONASANYA",
+      studentName: "Abdulmumeen Onasanya",
+      sourceStudentName: "ABDULMUMEEN ONASANYA",
+      admissionNumber: "GDS-0021",
+      academicYear: "2026/2027",
+      term: "First",
+      assessmentType: "CA",
+      reportKind: "Midterm / Continuous Assessment",
+      className: "Basic 5",
+      teacherName: "Miss Ayomide Olayemi",
+      matchStatus: "matched",
+      selectedStudentId: "student-abdul",
+      included: true,
+      warnings: [],
+      notices: [],
+      items: [{
+        assessmentType: "CA",
+        calculationMode: "Manual",
+        reportKind: "Midterm / Continuous Assessment",
+        subjectName: "English Language",
+        subjectId: "subject-english",
+        className: "Basic 5",
+        classId: "class-basic-5",
+        teacherName: "Miss Ayomide Olayemi",
+        academicYear: "2026/2027",
+        term: "First",
+        continuousAssessment: 34,
+        maximumScore: 40,
+        examination: null,
+        totalScore: null,
+        grade: null,
+        remark: null,
+        notices: [],
+        invalidMarks: [],
+      }],
+    };
+    const rows = [
+      {
+        workbookKey: "older-workbook:Sheet1",
+        ownerId: "admin-1",
+        savedAt: "2026-10-28T06:00:00Z",
+        entry: { ...entry, studentKey: "older-entry" },
+      },
+      {
+        workbookKey: "latest-workbook:Sheet1",
+        ownerId: "admin-1",
+        savedAt: "2026-10-28T06:30:00Z",
+        entry: { ...entry, studentKey: "latest-entry" },
+      },
+    ];
+    const [latest] = collapseDuplicatePendingImportPupils(rows);
+    expect(latest).toMatchObject({
+      workbookKey: "latest-workbook:Sheet1",
+      entry: { studentKey: "latest-entry" },
+      duplicateCount: 2,
+      duplicateWorkbookCount: 2,
+    });
+  });
+
+  it("does not resurrect an older workbook review after the latest copy is imported or excluded", () => {
+    const entry: ResultImportPreviewEntry = {
+      index: 0,
+      studentKey: "pupil-1",
+      studentName: "Abdulmumeen Onasanya",
+      sourceStudentName: "ABDULMUMEEN ONASANYA",
+      admissionNumber: "GDS-0021",
+      academicYear: "2026/2027",
+      term: "First",
+      assessmentType: "CA",
+      reportKind: "Midterm / Continuous Assessment",
+      className: "Basic 5",
+      teacherName: "Miss Ayomide Olayemi",
+      matchStatus: "matched",
+      selectedStudentId: "student-abdul",
+      included: true,
+      warnings: [],
+      notices: [],
+      items: [{
+        assessmentType: "CA",
+        calculationMode: "Manual",
+        reportKind: "Midterm / Continuous Assessment",
+        subjectName: "English Language",
+        subjectId: "subject-english",
+        className: "Basic 5",
+        classId: "class-basic-5",
+        teacherName: "Miss Ayomide Olayemi",
+        academicYear: "2026/2027",
+        term: "First",
+        continuousAssessment: 34,
+        maximumScore: 40,
+        examination: null,
+        totalScore: null,
+        grade: null,
+        remark: null,
+        notices: [],
+        invalidMarks: [],
+      }],
+    };
+    const oldPending = {
+      workbookKey: "older-workbook:Sheet1",
+      ownerId: "admin-1",
+      savedAt: "2026-10-28T06:00:00Z",
+      entry,
+    };
+    const latestImported = {
+      workbookKey: "latest-workbook:Sheet1",
+      ownerId: "admin-1",
+      savedAt: "2026-10-28T06:30:00Z",
+      entry: { ...entry, workflowStatus: "imported_draft" as const },
+    };
+    const latestExcluded = {
+      workbookKey: "latest-workbook:Sheet1",
+      ownerId: "admin-1",
+      savedAt: "2026-10-28T06:30:00Z",
+      entry: { ...entry, included: false },
+    };
+    expect(collapseDuplicatePendingImportPupils([oldPending, latestImported])).toEqual([]);
+    expect(collapseDuplicatePendingImportPupils([oldPending, latestExcluded])).toEqual([]);
+  });
+
   it("populates the selected pupil's saved class and its assigned teacher without guessing", () => {
     const assignment = resolveImportStudentAssignment(
       { class_id: "class-1" },
@@ -2401,10 +2526,12 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain('minWidth: 0');
     expect(resultsPage).toContain('maxWidth: "100%", overflowX: "auto"');
     expect(resultsPage).toContain('onClick={() => document.getElementById("import-review-pupils")?.scrollTo({ top: 0, behavior: "smooth" })}');
-    expect(resultsPage).toContain("Continue / Preview");
+    expect(resultsPage).toContain("Back to top of review");
     expect(resultsPage).toMatch(/>\s*Cancel\s*<\/Button>/);
-    expect(resultsPage).toContain("Review ready pupils");
-    expect(resultsPage).toContain("Confirm import (");
+    expect(resultsPage).toContain("Continue to final check");
+    expect(resultsPage).toContain("Save ready results (");
+    expect(resultsPage).toContain("saved versions across");
+    expect(resultsPage).toContain("assigned class teacher");
   });
 
   it("keeps raw workbook score text in the autosaved import entry and blocks invalid text", () => {
@@ -3170,7 +3297,7 @@ describe("results workflow migration contract", () => {
     expect(resultsPage).toContain("importReviewCursorKey(user.id, importDraftSchoolId");
     expect(resultsPage).toContain("subjectRowKey: activeSubjectRowKey");
     expect(resultsPage).toContain("const [activeImportEntryKey, setActiveImportEntryKey] = useState<string | null>(null)");
-    expect(resultsPage).toContain("Review ready pupils");
+    expect(resultsPage).toContain("Continue to final check");
     expect(resultsPage).toContain("Save progress");
     expect(resultsPage).toContain("Ignore pupil");
     expect(resultsPage).toContain("Find student in records");
