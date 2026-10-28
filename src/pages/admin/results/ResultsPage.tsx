@@ -2830,7 +2830,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             minWidth: 0,
             minHeight: 0,
             overflowY: "auto",
-            overflowX: "hidden",
+            maxWidth: "100%", overflowX: "scroll",
             paddingRight: 4,
           }}
         >
