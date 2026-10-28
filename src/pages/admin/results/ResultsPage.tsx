@@ -521,6 +521,17 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
   }, [loadData]);
 
   useEffect(() => {
+    if (!isImportOpen || isFinalImportPreview || !activeImportEntryKey) return;
+    const frameId = window.requestAnimationFrame(() => {
+      document.getElementById("active-import-pupil-editor")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [isImportOpen, isFinalImportPreview, activeImportEntryKey]);
+
+  useEffect(() => {
     if (!canManage || !user) {
       setLoadingSavedWorkbooks(false);
       return;
@@ -2981,7 +2992,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     <div>
                       <strong>{entry.studentName || "Unknown pupil"}</strong>
                       <div style={{ color: "#64748b", fontSize: 13 }}>
-                        {entry.admissionNumber ? `Admission: ${entry.admissionNumber}` : "Admission number unavailable"} · {entry.className || "Class not matched"} · Ignored
+                        {entry.admissionNumber ? `Admission: ${entry.admissionNumber}` : "Admission number unavailable"} · {entry.className || "Class not matched"} · Set aside
                       </div>
                     </div>
                     <Button
@@ -2999,6 +3010,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               return (
                 <div
                   key={getImportEntryKey(entry)}
+                  id={isActivePupil ? "active-import-pupil-editor" : undefined}
                   aria-label={`Review item for ${entry.studentName || "pupil"}`}
                   style={{
                     border: isActivePupil ? "2px solid #2563eb" : "1px solid #e2e8f0",
