@@ -1962,7 +1962,7 @@ describe("result workbook import preview", () => {
       class_name: "Basic 1",
       class_teacher_id: "teacher-ada",
       class_teacher: { id: "teacher-ada", first_name: "Ada", last_name: "Teacher", status: "Active" },
-      status: "Active",
+      status: "Active" as const,
       created_at: "",
       updated_at: "",
     }];
