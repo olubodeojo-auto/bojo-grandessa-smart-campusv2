@@ -1931,6 +1931,51 @@ describe("result workbook import preview", () => {
     expect(collapseDuplicatePendingImportPupils([oldPending, latestExcluded])).toEqual([]);
   });
 
+
+  it("restores the class teacher from the official registered class when a saved pupil review is reopened", () => {
+    const rosterStudent: Student = {
+      ...student("student-ada", "Ada Student", "GDS-001", "Basic 1"),
+      class_id: "class-basic-1",
+    };
+    const review: ResultImportPreviewEntry = {
+      index: 0,
+      studentKey: "Sheet1-0-ADA STUDENT",
+      studentName: "Ada Student",
+      sourceStudentName: "ADA STUDENT",
+      admissionNumber: "GDS-001",
+      academicYear: "2026/2027",
+      term: "First",
+      assessmentType: "CA",
+      reportKind: "Midterm / Continuous Assessment",
+      className: "Basic 1",
+      teacherName: "",
+      matchStatus: "matched",
+      matchedStudentId: "student-ada",
+      selectedStudentId: "student-ada",
+      included: true,
+      warnings: [],
+      notices: [],
+      items: [],
+    };
+    const classes = [{
+      id: "class-basic-1",
+      class_name: "Basic 1",
+      class_teacher_id: "teacher-ada",
+      class_teacher: { id: "teacher-ada", first_name: "Ada", last_name: "Teacher", status: "Active" },
+      status: "Active",
+      created_at: "",
+      updated_at: "",
+    }];
+
+    const [restored] = reconcileSavedImportStudentMatches([review], [rosterStudent], classes);
+    expect(restored).toMatchObject({
+      className: "Basic 1",
+      teacherName: "Ada Teacher",
+      selectedStudentId: "student-ada",
+      items: [],
+    });
+  });
+
   it("populates the selected pupil's saved class and its assigned teacher without guessing", () => {
     const assignment = resolveImportStudentAssignment(
       { class_id: "class-1" },
