@@ -215,6 +215,8 @@ function withSelectedDuplicateWarnings(entries: ResultImportPreviewEntry[]): Res
   result.forEach((entry, entryIndex) => {
     if (entry.included === false || !entry.selectedStudentId) return;
     entry.items.forEach((item) => {
+      // Rows with no required marks are skipped and must not raise duplicate-result blockers.
+      if (isImportItemSkippableForMissingMarks(item)) return;
       const academicYear = item.academicYear || entry.academicYear;
       const term = item.term ?? entry.term;
       if (!item.subjectId || !term || !academicYear) return;
@@ -1175,6 +1177,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
     );
 
     entry.items.forEach((item) => {
+      // Blank-mark subject rows are intentionally omitted; they need no mapping or class warning this pass.
+      if (isImportItemSkippableForMissingMarks(item)) return;
       const classEntity = item.classId ? classes.find((candidate) => candidate.id === item.classId) : undefined;
       const subject = item.subjectId ? subjects.find((candidate) => candidate.id === item.subjectId) : undefined;
       if (!classEntity) warnings.push(`Class "${item.className || entry.className || "missing"}" must be resolved before import.`);
@@ -2920,6 +2924,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               const matchedCandidate = studentsMap.get(entry.matchedStudentId ?? "");
               const pupilStatus = getPendingImportPupilStatus(entry);
               const subjectRowsNeedingAction = getImportSubjectRowsNeedingAction(entry);
+              const importScoreWarnings = getImportScoreWarnings({ ...entry, items: getImportItemsForSave(entry) });
               const hasNoCompleteSubjectMarks = entry.items.length === 0 || getImportItemsForSave(entry).length === 0;
               const reviewableEntries = importEntries.filter((candidate) => candidate.included !== false);
               const reviewPosition = reviewableEntries.findIndex((candidate) => candidate.studentKey === entry.studentKey);
@@ -3301,9 +3306,9 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     )}
                   </section>
 
-                  {entry.warnings.length > 0 || getImportScoreWarnings(entry).length > 0 ? (
-                    <div style={{ marginBottom: 12, color: "#b45309", fontSize: 13 }}>
-                      {[...entry.warnings, ...getImportScoreWarnings(entry)].map((warning) => (
+                  {entry.warnings.length > 0 || importScoreWarnings.length > 0 ? (
+                    <div style={{ marginBottom: 12, color: "#b45309", fontSize: 13, overflowWrap: "anywhere" }}>
+                      {[...entry.warnings, ...importScoreWarnings].map((warning) => (
                         <div key={warning}>{warning}</div>
                       ))}
                     </div>
