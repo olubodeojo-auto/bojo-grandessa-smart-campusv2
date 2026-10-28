@@ -2762,7 +2762,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 700, marginBottom: 4 }}>Results Run · {importFileName || "Uploaded file"}</div>
           <p style={{ margin: "6px 0 8px", color: "#475569", fontSize: 13 }}>
-            Review each pupil, then save the marks. After a successful save, Publish Drafts and Results opens automatically. Only real pupil-identity, class/subject mapping, or missing/invalid CA mark issues should need attention. Subject mappings you confirm are remembered for the same class on future uploads.
+            Review one pupil at a time. Each pupil stays in a compact row until you open it. Save review progress to keep your checks, save marks as a draft to keep them unpublished, or explicitly publish only the pupil shown in the highlighted editor. Subject mappings you confirm are remembered for the same class on future uploads.
           </p>
           {importWorkbookSheets.length > 1 ? (
             <label style={{ display: "grid", gap: 4, maxWidth: 420, margin: "8px 0" }}>
@@ -2818,10 +2818,13 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           ) : null}
         </div>
 
+        <div role="status" style={{ margin: "0 0 12px", padding: "12px 14px", border: "1px solid #dbeafe", borderRadius: 12, background: "#eff6ff", color: "#1e3a8a", lineHeight: 1.5 }}>
+          <strong>One pupil at a time.</strong> The open pupil is moved to the bottom of this list, with their details and marks directly under their name. Before saving, check the name and class shown in the highlighted editor.
+        </div>
         <div
           id="import-review-pupils"
           role="region"
-          aria-label="Import review pupils; scroll vertically to review pupils"
+          aria-label="Pupil review list and active pupil editor"
           tabIndex={0}
           style={{
             display: "grid",
@@ -2830,8 +2833,11 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             minWidth: 0,
             minHeight: 0,
             overflowY: "auto",
-            maxWidth: "100%", overflowX: "scroll",
+            width: "100%",
+            maxWidth: "100%",
+            overflowX: "hidden",
             paddingRight: 4,
+            paddingBottom: 12,
           }}
         >
           {isFinalImportPreview ? (
@@ -2919,7 +2925,14 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           ) : importEntries.length === 0 ? (
             <EmptyState title="No import preview" description="Upload a workbook to preview result rows." />
           ) : (
-            importEntries.map((entry, index) => {
+            importEntries
+              .map((entry, index) => ({ entry, index }))
+              .sort((left, right) => {
+                const leftIsActive = activeImportEntryKey === left.entry.studentKey;
+                const rightIsActive = activeImportEntryKey === right.entry.studentKey;
+                return Number(leftIsActive) - Number(rightIsActive);
+              })
+              .map(({ entry, index }) => {
               const studentId = entry.selectedStudentId ?? "";
               const pendingStudentId = pendingStudentSelections[entry.studentKey] ?? studentId;
               const registeredStudent = studentsMap.get(studentId);
@@ -2982,8 +2995,20 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                 );
               }
 
+              const isActivePupil = activeImportEntryKey === entry.studentKey;
               return (
-                <div key={getImportEntryKey(entry)} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 14 }}>
+                <div
+                  key={getImportEntryKey(entry)}
+                  aria-label={`Review item for ${entry.studentName || "pupil"}`}
+                  style={{
+                    border: isActivePupil ? "2px solid #2563eb" : "1px solid #e2e8f0",
+                    borderRadius: 12,
+                    padding: isActivePupil ? 16 : 12,
+                    background: isActivePupil ? "#ffffff" : "#fbfcfe",
+                    boxShadow: isActivePupil ? "0 4px 16px rgba(37, 99, 235, 0.10)" : "none",
+                    scrollMarginTop: 12,
+                  }}
+                >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                     <div>
                       <div style={{ fontSize: 16, fontWeight: 700 }}>{entry.studentName || "Unknown student"}</div>
@@ -3034,7 +3059,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                           else void handleMoveToPupil(entry);
                         }}
                       >
-                        {activeImportEntryKey === entry.studentKey ? "Close review" : "Review pupil"}
+                        {activeImportEntryKey === entry.studentKey ? "Close this pupil" : "Open this pupil"}
                       </Button>
                       <div role="group" aria-label={`Import ${entry.studentName || "pupil"}`}>
                         <Button
@@ -3044,16 +3069,20 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                           aria-pressed={false}
                           onClick={() => handleImportInclusionChange(index, false)}
                         >
-                          Ignore pupil
+                          Set aside
                         </Button>
                       </div>
                     </div>
                   </div>
 
                   {activeImportEntryKey === entry.studentKey ? (
-                  <div style={{ marginTop: 14, borderTop: "1px solid #e2e8f0", paddingTop: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-                    <strong>Reviewing {entry.studentName || "pupil"}</strong>
+                  <div style={{ marginTop: 14, borderTop: "1px solid #dbeafe", paddingTop: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14, padding: "12px 14px", borderRadius: 12, background: "#eff6ff", border: "1px solid #bfdbfe" }}>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", color: "#1d4ed8", textTransform: "uppercase" }}>Currently editing · Pupil {Math.max(1, reviewPosition + 1)} of {reviewableEntries.length}</div>
+                      <div style={{ fontSize: 19, fontWeight: 800, color: "#0f172a", marginTop: 3 }}>{entry.studentName || "Unknown pupil"}</div>
+                      <div style={{ fontSize: 13, color: "#334155", marginTop: 3 }}>Admission: {registeredStudent?.admission_number || entry.admissionNumber || "Not matched"} · Class: {registeredStudent?.class_name || entry.className || "Not confirmed"}</div>
+                    </div>
                     <span role="status" style={{ color: draftSaveStates[entry.studentKey]?.state === "failed" ? "#b91c1c" : "#475569" }}>
                       {draftSaveStates[entry.studentKey]?.state === "saving" ? "Saving…"
                         : draftSaveStates[entry.studentKey]?.state === "saved" ? "Saved"
@@ -3091,44 +3120,53 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                       Only this pupil is being edited. Saving here keeps the entry in review; it does not publish results. Class numbers must match the school record, even when the class-name capitalisation differs.
                     </div>
                   </section>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
                     <Button type="button" size="sm" variant="secondary" onClick={() => {
                       const previous = reviewableEntries[reviewPosition - 1];
                       if (previous) void handleMoveToPupil(previous);
-                    }} disabled={reviewPosition <= 0}>Previous pupil</Button>
+                    }} disabled={reviewPosition <= 0}>← Previous pupil</Button>
+                    <span style={{ color: "#64748b", fontSize: 13 }}>{Math.max(1, reviewPosition + 1)} of {reviewableEntries.length} included pupils</span>
                     <Button type="button" size="sm" variant="secondary" onClick={() => {
                       const next = reviewableEntries[reviewPosition + 1];
                       if (next) void handleMoveToPupil(next);
-                    }} disabled={reviewPosition < 0 || reviewPosition >= reviewableEntries.length - 1}>Next pupil</Button>
-                    <Button type="button" size="sm" variant="secondary" onClick={() => void handleSaveProgress()}>
-                      {draftSaveStates[entry.studentKey]?.state === "saving" ? "Saving…" : "Save review"}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => void handleConfirmImport(false, entry.studentKey)}
-                      disabled={importSubmitting || !isImportEntryReady(entry)}
-                    >
-                      Save this pupil's results
-                    </Button>
-                    {isAdmin ? (
+                    }} disabled={reviewPosition < 0 || reviewPosition >= reviewableEntries.length - 1}>Next pupil →</Button>
+                  </div>
+                  <section aria-label={`Save actions for ${entry.studentName || "this pupil"}`} style={{ border: "1px solid #cbd5e1", borderRadius: 12, padding: 14, marginBottom: 16, background: "#f8fafc" }}>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>Save options for {entry.studentName || "this pupil"}</div>
+                    <p style={{ margin: "5px 0 12px", color: "#475569", fontSize: 13, lineHeight: 1.5 }}>
+                      Save review progress keeps your matching and checks. Save marks as draft records the marks but does not publish them. Publishing releases only this pupil's results.
+                    </p>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      <Button type="button" size="sm" variant="secondary" onClick={() => void handleSaveProgress()}>
+                        {draftSaveStates[entry.studentKey]?.state === "saving" ? "Saving review…" : "Save review progress"}
+                      </Button>
                       <Button
                         type="button"
                         size="sm"
-                        onClick={() => void handleConfirmImport(true, entry.studentKey)}
+                        variant="secondary"
+                        onClick={() => void handleConfirmImport(false, entry.studentKey)}
                         disabled={importSubmitting || !isImportEntryReady(entry)}
-                        style={{ background: "#047857", borderColor: "#047857", color: "#fff", fontWeight: 900 }}
                       >
-                        SAVE & PUBLISH THIS PUPIL
+                        Save marks as draft
                       </Button>
-                    ) : null}
-                    {draftSaveStates[entry.studentKey]?.state === "saved" ? (
-                      <Button type="button" size="sm" variant="secondary" onClick={() => void handleDiscardImportDraft(entry)}>
-                        Discard saved draft
-                      </Button>
-                    ) : null}
-                  </div>
+                      {isAdmin ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void handleConfirmImport(true, entry.studentKey)}
+                          disabled={importSubmitting || !isImportEntryReady(entry)}
+                          style={{ background: "#047857", borderColor: "#047857", color: "#fff", fontWeight: 900 }}
+                        >
+                          Save & publish this pupil
+                        </Button>
+                      ) : null}
+                      {draftSaveStates[entry.studentKey]?.state === "saved" ? (
+                        <Button type="button" size="sm" variant="secondary" onClick={() => void handleDiscardImportDraft(entry)}>
+                          Discard this saved review
+                        </Button>
+                      ) : null}
+                    </div>
+                  </section>
 
                   <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 9, background: "#f8fafc", color: "#334155", fontSize: 13 }}>
                     <strong>Results context:</strong>{" "}
