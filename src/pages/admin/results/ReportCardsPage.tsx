@@ -43,6 +43,7 @@ import {
   getReportCenterPublishBlockReason,
   getReportCenterPublishActionState,
   getReportCenterPeriodStatus,
+  getReportCenterResultsWithRecordedMarks,
   getReportPeriodResults,
   publishReportResultsAndVerify,
   unpublishReportResultsAndVerify,
@@ -694,8 +695,14 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
         return { ok: false, message };
       }
       const pupilName = (student.first_name + " " + student.last_name).trim();
-      const pendingResults = period.results.filter((result) => result.status !== "Published");
-      if (pendingResults.length === 0) return { ok: true, message: pupilName + " was already published." };
+      const publishableResults = getReportCenterResultsWithRecordedMarks(period.results);
+      if (publishableResults.length === 0) {
+        const message = "No complete subject marks are available to publish yet. Incomplete subject rows remain drafts; add their marks later.";
+        if (requireConfirmation) setError(message);
+        return { ok: false, message };
+      }
+      const pendingResults = publishableResults.filter((result) => result.status !== "Published");
+      if (pendingResults.length === 0) return { ok: true, message: pupilName + " has no complete unpublished subject results. Incomplete subject rows remain drafts." };
       const className = classes.find((candidate) => candidate.id === period.classId)?.class_name
         ?? period.results.find((result) => result.class_name)?.class_name
         ?? "Class unavailable";
