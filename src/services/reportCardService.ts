@@ -152,13 +152,15 @@ export async function saveImportReviewDraft(params: {
   ownerId?: string;
 }): Promise<void> {
   const schoolSettings = await getSchoolSettings();
+  const draftPayload = { ...params.entry };
+  delete draftPayload.savedAt;
   const { error } = await supabase.rpc("save_result_import_review_draft_v2", {
     target_school_id: schoolSettings.school_id,
     target_workbook_key: params.workbookKey,
     target_entry_key: params.entry.studentKey,
     target_student_id: params.entry.selectedStudentId ?? null,
     target_class_id: params.entry.items[0]?.classId ?? null,
-    draft_payload: params.entry,
+    draft_payload: draftPayload,
     target_owner_id: params.ownerId ?? null,
   });
   if (error) throw new Error(`Unable to save ${params.entry.studentName}'s import review progress: ${error.message}`);
@@ -182,7 +184,12 @@ export async function getImportReviewDrafts(workbookKey: string, ownerId?: strin
     if (!entry || typeof entry !== "object" || typeof entry.studentKey !== "string" || !Array.isArray(entry.items)) {
       throw new Error("A saved import review entry is malformed.");
     }
-    return entry;
+    return {
+      ...entry,
+      // Use the database row's actual updated_at value to pick the newest saved copy
+      // when a pupil was reviewed from multiple workbook uploads.
+      savedAt: typeof row.updated_at === "string" ? row.updated_at : entry.savedAt,
+    };
   });
 }
 
