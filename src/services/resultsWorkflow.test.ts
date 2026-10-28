@@ -2860,8 +2860,10 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain("Review summary before saving");
     expect(resultsPage).toContain("SAVE & PUBLISH THIS PUPIL");
     expect(resultsPage).toContain("Save this pupil's results");
-    expect(resultsPage).toContain("Scroll left");
-    expect(resultsPage).toContain("Scroll right");
+    expect(resultsPage).toContain("function SynchronizedHorizontalScroll");
+    expect(resultsPage).toContain("horizontal scrollbar");
+    expect(resultsPage).not.toContain("Scroll left");
+    expect(resultsPage).not.toContain("Scroll right");
     expect(resultsPage).toContain("Save results (");
     expect(resultsPage).toContain("const allSelectedPupilsSaved = outcomes.failed.length === 0");
     expect(resultsPage).toContain('navigate("/admin/results");');
@@ -3806,7 +3808,8 @@ describe("unified Results / Publish Assistant workflow", () => {
     expect(resultsPage).toContain("onSaveAndPublish={publishSavedResultPeriod}");
     expect(batchEntrySource).toContain("SAVE & PUBLISH");
     expect(batchEntrySource).toContain("onSaveAndPublish");
-    expect(resultsPage).toContain('overflowX: "scroll"');
+    expect(resultsPage).toContain('overflowX: "auto"');
+    expect(resultsPage).toContain("function SynchronizedHorizontalScroll");
   });
 });
 
