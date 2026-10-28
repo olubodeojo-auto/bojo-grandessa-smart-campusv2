@@ -12,7 +12,7 @@ import SectionCard from "../../../components/ui/SectionCard";
 import Button from "../../../components/ui/Button";
 import { type AcademicCalendarConfig } from "../../../config/grandessaCalendar";
 import { buildStudentReportCard, deleteReportCard, getImportReviewDrafts, getImportReviewWorkbooks, getSavedReportCards, markImportReviewDraftStatus, saveReportCardDetails, type SavedReportCard } from "../../../services/reportCardService";
-import { getImportScoreWarnings, reconcileSavedImportStudentMatches, type ResultImportPreviewEntry } from "../../../services/resultImportService";
+import { getImportScoreWarnings, getImportItemsForSave, isImportItemSkippableForMissingMarks, reconcileSavedImportStudentMatches, type ResultImportPreviewEntry } from "../../../services/resultImportService";
 import { getAcademicSessionSetups, saveAcademicSessionSetup } from "../../../services/academicSessionService";
 import { getClasses } from "../../../services/classService";
 import { deleteResult, getResultPublicationEvidence, getResults, publishResult, reviewResult } from "../../../services/resultService";
@@ -81,19 +81,25 @@ function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingIm
   if (entry.items.length === 0) {
     return { label: "No subject scores found", explanation: "Check the original worksheet. No subject-score rows were detected for this pupil." };
   }
-  const unresolvedSubject = entry.items.find((item) => !item.subjectId);
+  const itemsToSave = getImportItemsForSave(entry);
+  const unresolvedSubject = itemsToSave.find((item) => !item.subjectId);
   if (unresolvedSubject) {
     return { label: "Subject to confirm", explanation: `Confirm the subject for "${unresolvedSubject.subjectName}" before importing.` };
   }
-  const scoreWarnings = getImportScoreWarnings(entry);
-  if (scoreWarnings.some((warning) => /mark is missing|subject marks are missing/i.test(warning))) {
-    return {
-      label: "Missing subject marks",
-      explanation: "One or more subject marks are blank. Open Reconcile this pupil, complete the blank mark cells, and save the draft before publishing.",
-    };
+  if (itemsToSave.length === 0) {
+    return { label: "No complete marks to import", explanation: "Every subject row is missing at least one required mark. Enter at least one complete subject result before this pupil can be published." };
   }
-  if (scoreWarnings.length > 0 || entry.items.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
-    return { label: "Check marks", explanation: "One or more marks need correction before this pupil's results can be imported." };
+  const scoreWarnings = getImportScoreWarnings({ ...entry, items: itemsToSave });
+  if (scoreWarnings.length > 0 || itemsToSave.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
+    return { label: "Check marks", explanation: "A subject row contains an invalid or out-of-range mark. Correct that value before importing this pupil." };
+  }
+  const skippedItems = [...(entry.skippedItems ?? []), ...entry.items.filter(isImportItemSkippableForMissingMarks)];
+  if (skippedItems.length > 0) {
+    const names = [...new Set(skippedItems.map((item) => item.subjectName).filter(Boolean))].join(", ");
+    return {
+      label: "Ready — incomplete subjects skipped",
+      explanation: `The complete subject results can be saved and published now. ${names || "The incomplete subject rows"} will be left out and can be entered later.`,
+    };
   }
   return { label: "Ready to review", explanation: "Check the subject marks, then complete this pupil's import." };
 }
