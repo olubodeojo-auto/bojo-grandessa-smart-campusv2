@@ -14,7 +14,6 @@ import { deleteResult, getMyResultAssignments, getResults, publishResult, review
 import {
   deleteImportReviewDraft,
   getImportReviewDrafts,
-  markImportReviewDraftStatus,
   getImportReviewSchoolId,
   getImportReviewWorkbooks,
   getImportSubjectMappings,
@@ -1843,15 +1842,6 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               reportType: entry.reportKind === "Midterm / Continuous Assessment" ? "Midterm" : "End-of-Term",
             }, false);
             wasPublished = true;
-            try {
-              await markImportReviewDraftStatus({
-                workbookKey, entryKey: entry.studentKey, ownerId, studentId: student.id,
-                classId: reportClassId, workflowStatus: "published", resultIds: saveOutcome.resultIds,
-              });
-            } catch (trackingError) {
-              publicationError = "Published and verified, but import tracking could not be updated. Do not import this pupil again. "
-                + (trackingError instanceof Error ? trackingError.message : "Unknown import-tracking error.");
-            }
           } catch (publishError) {
             publicationError = publishError instanceof Error ? publishError.message : "Publication failed; the saved marks remain available in Results.";
           }
