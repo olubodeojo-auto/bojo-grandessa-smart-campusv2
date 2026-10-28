@@ -99,6 +99,8 @@ export type ResultImportPreviewEntry = {
   warnings: string[];
   notices: string[];
   items: ResultImportItem[];
+  /** Subjects intentionally not imported because their required marks were blank. */
+  skippedItems?: ResultImportItem[];
 };
 
 
@@ -414,12 +416,55 @@ export function selectCreatedImportStudent(
   };
 }
 
+/**
+ * A subject with blank required marks is omitted from this import, not allowed to block
+ * the pupil's other complete subject results. A nonblank invalid value or out-of-range
+ * score is never silently skipped; it remains a correction the school must make.
+ */
+export function isImportItemSkippableForMissingMarks(item: ResultImportItem): boolean {
+  const effectiveTotal = item.assessmentType === "Combined" && item.calculationMode === "Automatic"
+    ? calculateResult("Combined", item.continuousAssessment, item.examination).total
+    : item.totalScore;
+  const requiredMarkMissing = item.assessmentType === "CA"
+    ? item.continuousAssessment === null
+      || !(item.maximumScore !== null && Number.isFinite(item.maximumScore) && item.maximumScore > 0)
+    : item.assessmentType === "Combined"
+      ? item.continuousAssessment === null || item.examination === null || effectiveTotal === null
+      : item.assessmentType === "Examination"
+        ? item.examination === null || effectiveTotal === null
+        : false;
+
+  if (!requiredMarkMissing || (item.invalidMarks?.length ?? 0) > 0) return false;
+
+  for (const [field, text] of Object.entries(item.scoreInputText ?? {}) as Array<[ResultImportScoreField, string]>) {
+    if (field === "continuousAssessment" && item.assessmentType === "Examination") continue;
+    if (field === "maximumScore" && item.assessmentType !== "CA") continue;
+    if ((field === "examination" || field === "totalScore") && item.assessmentType === "CA") continue;
+    if (text.trim() !== "" && !parseScoreInput(text).valid) return false;
+  }
+
+  return validateAssessmentMarks({
+    assessment_type: item.assessmentType,
+    continuous_assessment: item.continuousAssessment,
+    maximum_score: item.maximumScore,
+    examination: item.examination,
+    total_score: effectiveTotal,
+    grade: item.grade ?? "",
+    remark: item.remark ?? "",
+  }).length === 0;
+}
+
+export function getImportItemsForSave(entry: ResultImportPreviewEntry): ResultImportItem[] {
+  return entry.items.filter((item) => !isImportItemSkippableForMissingMarks(item));
+}
+
 export function isImportEntryReady(entry: ResultImportPreviewEntry): boolean {
   if (entry.workflowStatus) return false;
+  const itemsToSave = getImportItemsForSave(entry);
   return Boolean(entry.included !== false && entry.selectedStudentId && entry.warnings.length === 0
-    && entry.items.length > 0
-    && entry.items.every((item) => Boolean(item.classId && item.subjectId))
-    && getImportScoreWarnings(entry).length === 0);
+    && itemsToSave.length > 0
+    && itemsToSave.every((item) => Boolean(item.classId && item.subjectId))
+    && getImportScoreWarnings({ ...entry, items: itemsToSave }).length === 0);
 }
 
 export function getImportableResultEntries(
