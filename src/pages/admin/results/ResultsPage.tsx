@@ -2915,6 +2915,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               const studentId = entry.selectedStudentId ?? "";
               const pendingStudentId = pendingStudentSelections[entry.studentKey] ?? studentId;
               const registeredStudent = studentsMap.get(studentId);
+              const pendingStudent = studentsMap.get(pendingStudentId);
               const matchedCandidate = studentsMap.get(entry.matchedStudentId ?? "");
               const pupilStatus = getPendingImportPupilStatus(entry);
               const subjectRowsNeedingAction = getImportSubjectRowsNeedingAction(entry);
@@ -3284,13 +3285,17 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                         </Button>
                       ) : null}
                     </div>
-                    {registeredStudent ? (
+                    {pendingStudentId && pendingStudentId !== studentId && pendingStudent ? (
+                      <div role="status" style={{ marginTop: 8, padding: 8, borderRadius: 8, background: "#fffbeb", color: "#92400e", fontSize: 13, overflowWrap: "anywhere" }}>
+                        <strong>Selected but not yet confirmed:</strong> {[pendingStudent.first_name, pendingStudent.middle_name, pendingStudent.last_name].filter(Boolean).join(" ")} · Admission {pendingStudent.admission_number || "not recorded"} · Class {pendingStudent.class_name || "not assigned"}. Press <strong>{studentId ? "Confirm change of pupil" : "Confirm this pupil"}</strong> above to apply this selection.
+                      </div>
+                    ) : registeredStudent ? (
                       <div role="status" style={{ marginTop: 8, color: "#166534", fontSize: 13, overflowWrap: "anywhere" }}>
                         <strong>Confirmed school record:</strong> {[registeredStudent.first_name, registeredStudent.middle_name, registeredStudent.last_name].filter(Boolean).join(" ")} · Admission {registeredStudent.admission_number || "not recorded"} · Class {registeredStudent.class_name || "not assigned"}
                       </div>
                     ) : (
                       <div style={{ marginTop: 8, color: "#475569", fontSize: 13 }}>
-                        Choose the pupil who actually owns these marks, then press <strong>Confirm this pupil</strong>. The worksheet name may differ in order or wording; the registered student record is what will be used.
+                        This dropdown lists the registered pupil records. Choose the pupil who actually owns these marks, then press <strong>Confirm this pupil</strong>. The worksheet name may differ in order or wording; the school record is what will be used.
                       </div>
                     )}
                   </section>
