@@ -316,24 +316,52 @@ function resultSubjectKey(result: Result): string | null {
   return result.subject_id?.trim() || result.subject_name?.trim().toLowerCase() || null;
 }
 
+/**
+ * Return only subject rows that have every required mark recorded for their assessment.
+ * A completely blank subject stays Draft and can be completed later; it must not prevent
+ * the pupil's other complete subjects from being published. Nonblank invalid marks remain
+ * in this set so validation still blocks a genuinely incorrect score.
+ */
+export function getReportCenterResultsWithRecordedMarks(results: Result[]): Result[] {
+  return results.filter((result) => {
+    if (result.assessment_type === "CA") {
+      return result.continuous_assessment !== null
+        && typeof result.maximum_score === "number"
+        && Number.isFinite(result.maximum_score)
+        && result.maximum_score > 0;
+    }
+    if (result.assessment_type === "Combined") {
+      return result.continuous_assessment !== null
+        && result.examination !== null
+        && result.total_score !== null;
+    }
+    if (result.assessment_type === "Examination") {
+      return result.examination !== null && result.total_score !== null;
+    }
+    return true;
+  });
+}
+
 export function getReportCenterCompleteness(
   period: ReportCenterPeriod,
   _allResults: Result[] = period.results,
 ): { complete: boolean; reason: string } {
-  if (period.results.length === 0) {
-    return { complete: false, reason: "No subject-result rows are available for this report period." };
+  const recordedResults = getReportCenterResultsWithRecordedMarks(period.results);
+  if (recordedResults.length === 0) {
+    return {
+      complete: false,
+      reason: "No complete subject-result rows are available for publication. Add at least one subject with complete marks.",
+    };
   }
 
-  const subjectIds = period.results.map(resultSubjectKey).filter((subjectId): subjectId is string => Boolean(subjectId));
-  if (subjectIds.length !== period.results.length || new Set(subjectIds).size !== subjectIds.length) {
+  const subjectIds = recordedResults.map(resultSubjectKey).filter((subjectId): subjectId is string => Boolean(subjectId));
+  if (subjectIds.length !== recordedResults.length || new Set(subjectIds).size !== subjectIds.length) {
     return { complete: false, reason: "A subject is missing or has duplicate result rows." };
   }
 
-  // School policy: a pupil may be published with only the subject rows actually recorded.
-  // Class-wide expected-subject differences are not a publication blocker; the school can
-  // add or correct subjects after release. Existing result rows still pass the mark checks below.
-
-  for (const result of period.results) {
+  // School policy: not-offered and not-yet-entered subjects stay out of this release.
+  // Validate every complete result row; never discard a nonblank invalid score.
+  for (const result of recordedResults) {
     const assessmentType = result.assessment_type;
     const total = result.calculation_mode === "Automatic" && assessmentType === "Combined"
       ? calculateResult("Combined", result.continuous_assessment, result.examination).total
@@ -347,25 +375,10 @@ export function getReportCenterCompleteness(
       grade: result.grade ?? "",
       remark: result.remark ?? "",
     });
-    if (errors.length > 0) {
-      return { complete: false, reason: errors[0] };
-    }
-    if (assessmentType === "CA" && result.continuous_assessment === null) {
-      return { complete: false, reason: "One or more Midterm CA marks are missing." };
-    }
-    if (assessmentType === "CA" && !(result.maximum_score && result.maximum_score > 0)) {
-      return { complete: false, reason: "One or more Midterm subject maximum scores are missing." };
-    }
-    if (assessmentType === "Combined"
-      && (result.continuous_assessment === null || result.examination === null || total === null)) {
-      return { complete: false, reason: "One or more End-of-Term CA, examination, or total marks are missing." };
-    }
-    if (assessmentType === "Examination" && (result.examination === null || total === null)) {
-      return { complete: false, reason: "One or more examination or total marks are missing." };
-    }
+    if (errors.length > 0) return { complete: false, reason: errors[0] };
   }
 
-  return { complete: true, reason: `${period.results.length} subject result(s) have complete marks.` };
+  return { complete: true, reason: `${recordedResults.length} subject result(s) have complete marks. Incomplete subject rows will remain drafts.` };
 }
 
 export function getReportCenterPublishBlockReason(
@@ -374,10 +387,12 @@ export function getReportCenterPublishBlockReason(
   isAdministrator: boolean,
   publicationEvidence: ReadonlyMap<string, ResultPublicationEvidence> = new Map(),
 ): string {
-  const completeness = getReportCenterCompleteness(period, allResults);
+  const publishableResults = getReportCenterResultsWithRecordedMarks(period.results);
+  const publishablePeriod = { ...period, results: publishableResults };
+  const completeness = getReportCenterCompleteness(publishablePeriod, allResults);
   if (!completeness.complete) return completeness.reason;
-  const unpublished = period.results.filter((result) => result.status !== "Published");
-  if (unpublished.length === 0) return "All subject results in this report period are already published.";
+  const unpublished = publishableResults.filter((result) => result.status !== "Published");
+  if (unpublished.length === 0) return "All complete subject results in this report period are already published. Incomplete subject rows remain drafts.";
   const blockers = unpublished.flatMap((result) => {
     const reason = getResultPublishBlockReason(result, isAdministrator, publicationEvidence.get(result.id));
     return reason
