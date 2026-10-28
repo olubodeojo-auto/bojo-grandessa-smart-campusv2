@@ -3869,7 +3869,7 @@ describe("pupil matching is a direct registered-record confirmation", () => {
     expect(resultsPage).toContain("Go to next issue");
     expect(resultsPage).toContain("Blank-mark subject rows are intentionally omitted");
     expect(resultsPage).toContain("Rows with no required marks are skipped and must not raise duplicate-result blockers");
-    expect(resultsPage).toContain("A true class-number mismatch stays in draft");
+    expect(resultsPage).toContain("a true class-number mismatch stays in draft");
     expect(reportCardsPage).toContain("Ready — missing marks skipped");
     expect(reportCardsPage).toContain("Set aside — no complete marks");
   });
