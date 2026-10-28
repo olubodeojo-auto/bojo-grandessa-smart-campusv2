@@ -22,7 +22,7 @@ const adminNavigation = [
   { key: "dashboard", label: "Dashboard", path: "/admin", searchPlaceholder: "Search dashboard", allowedRoles: administratorRoles },
   { key: "students", label: "Students", path: "/admin/students", searchPlaceholder: "Search students", allowedRoles: administratorRoles },
   { key: "parent-accounts", label: "Parent Accounts", path: "/admin/parent-accounts", searchPlaceholder: "Search parent accounts", allowedRoles: administratorRoles },
-  { key: "results", label: "Results", path: "/admin/results", searchPlaceholder: "Search results", allowedRoles: resultsRoles },
+  { key: "results", label: "Publish Arena", path: "/admin/results", searchPlaceholder: "Search reports", allowedRoles: resultsRoles },
   { key: "classes", label: "Classes", path: "/admin/classes", searchPlaceholder: "Search classes", allowedRoles: classManagementRoles },
   { key: "staff", label: "Staff & Users", path: "/admin/staff", searchPlaceholder: "Search staff", allowedRoles: staffManagementRoles },
   { key: "communications", label: "Communications", path: "/admin/communications", searchPlaceholder: "Search communications", allowedRoles: staffManagementRoles },

@@ -818,7 +818,7 @@ export default function ResultsPage() {
       const completedEntries = mergedEntries.filter((entry) => Boolean(entry.workflowStatus));
       const restoredEntries = mergedEntries.filter((entry) => !entry.workflowStatus);
       setImportSummary(completedEntries.length > 0
-        ? `${completedEntries.length} pupil review(s) were skipped because their results have already been imported. Check Results dashboard for their saved status.`
+        ? `${completedEntries.length} pupil review(s) were skipped because their results have already been imported. Check Publish Arena for their saved status.`
         : "");
       setImportEntries(withSelectedDuplicateWarnings(restoredEntries));
       setDraftSaveStates(Object.fromEntries(savedEntries.filter((entry) => !entry.workflowStatus).map((entry) => [entry.studentKey, { state: "saved" as const }])));
@@ -865,7 +865,7 @@ export default function ResultsPage() {
       const completedEntries = entries.filter((entry) => Boolean(entry.workflowStatus));
       const pendingEntries = entries.filter((entry) => !entry.workflowStatus);
       if (pendingEntries.length === 0) {
-        setImportSummary("All pupil entries in this workbook have already been imported. Their publication status is shown in Results dashboard; no duplicate import was started.");
+        setImportSummary("All pupil entries in this workbook have already been imported. Their publication status is shown in Publish Arena; no duplicate import was started.");
         return;
       }
       const reconciledEntries = reconcileSavedImportStudentMatches(
@@ -935,7 +935,7 @@ export default function ResultsPage() {
       workbook.workbookKey === requestedWorkbookKey && (!requestedOwnerId || workbook.ownerId === requestedOwnerId));
     if (!workbookExists) {
       autoResumeHandled.current = autoResumeKey;
-      setError("The saved workbook linked from Results dashboard is not available to this account. Refresh the saved-work list and try again.");
+      setError("The saved workbook linked from Publish Arena is not available to this account. Refresh the saved-work list and try again.");
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
         next.delete("resumeWorkbook");
@@ -1813,7 +1813,7 @@ export default function ResultsPage() {
           <div>
             <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 32 }}>Subject Result Records</h1>
             <p style={{ marginTop: 8, color: "#666", fontFamily: "Poppins" }}>
-              Enter, review, and correct individual subject marks here. The Results dashboard brings imports, drafts, publication, and completion status together.
+              Enter, review, and correct individual subject marks here. Publish Arena brings imports, drafts, publication, and completion status together.
             </p>
           </div>
 
@@ -1833,7 +1833,7 @@ export default function ResultsPage() {
             <Button type="button" variant="secondary" onClick={() => void loadData()} disabled={loading}>
               Refresh
             </Button>
-            <Button type="button" variant="secondary" onClick={() => navigate("/admin/results")}>Results dashboard</Button>
+            <Button type="button" variant="secondary" onClick={() => navigate("/admin/results")}>Publish Arena</Button>
             <label style={{ display: "grid", gap: 4, color: "#334155", fontSize: 12, fontWeight: 700 }}>
               Workbook report type
               <select
@@ -1919,7 +1919,7 @@ export default function ResultsPage() {
                 <Button type="button" variant="secondary" onClick={() => void handleRefreshSavedWorkbooks()} disabled={loadingSavedWorkbooks || loadingPendingImportPupils}>
                   Refresh imports
                 </Button>
-                <Button type="button" variant="secondary" onClick={() => navigate("/admin/results")}>Return to Results dashboard</Button>
+                <Button type="button" variant="secondary" onClick={() => navigate("/admin/results")}>Return to Publish Arena</Button>
               </div>
             </div>
 
@@ -2368,7 +2368,7 @@ export default function ResultsPage() {
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 700, marginBottom: 4 }}>Results Run · {importFileName || "Uploaded file"}</div>
           <p style={{ margin: "6px 0 8px", color: "#475569", fontSize: 13 }}>
-            Review one pupil at a time, then save the marks as Drafts. This screen does not publish reports or send parent messages. After saving, return to the Results dashboard to publish reports that pass their checks and verify completion. Subject mappings you confirm are remembered for the same class on future uploads.
+            Review one pupil at a time, then save the marks as Drafts. This screen does not publish reports or send parent messages. After saving, return to Publish Arena to publish reports that pass their checks and verify completion. Subject mappings you confirm are remembered for the same class on future uploads.
           </p>
           {importWorkbookSheets.length > 1 ? (
             <label style={{ display: "grid", gap: 4, maxWidth: 420, margin: "8px 0" }}>

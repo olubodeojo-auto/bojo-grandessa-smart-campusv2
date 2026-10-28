@@ -990,6 +990,12 @@ describe("Report Center period discovery and readiness", () => {
     expect(groupedResults).toContain("<Trash2 size={16} /> Delete");
   });
 
+  it("labels the publishing workspace Publish Arena and keeps the Results module distinct", () => {
+    expect(reportCardsPage).toContain(">Publish Arena</h1>");
+    expect(resultsPage).toContain(">Subject Result Records</h1>");
+    expect(resultsPage).toContain(">Results Module</h2>");
+  });
+
   it("allows complete recorded marks to publish without forcing every pupil to have the same subject list", () => {
     const endOfTermRows = Array.from({ length: 12 }, (_, index) => result({
       id: `end-${index}`,

@@ -31,7 +31,7 @@ const tools = [
     disabled: true,
   },
   {
-    title: "Results",
+    title: "Publish Arena",
     path: "/admin/results",
     icon: <FileSpreadsheet size={34} color="#2E7D32" />,
   },
