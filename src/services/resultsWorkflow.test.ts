@@ -2744,7 +2744,7 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain("Back to top of review");
     expect(resultsPage).toMatch(/>\s*Cancel\s*<\/Button>/);
     expect(resultsPage).toContain("Review summary before saving");
-    expect(resultsPage).toContain("Save as Draft (");
+    expect(resultsPage).toContain("Save results (");
     expect(resultsPage).toContain("const allSelectedPupilsSaved = outcomes.failed.length === 0");
     expect(resultsPage).toContain('navigate("/admin/results");');
     expect(resultsPage).not.toContain("go to Pupil Report Cards");
