@@ -1942,11 +1942,6 @@ export default function ResultsPage() {
                   const officialClass = classes.find((candidate) => candidate.id === (confirmedPupil?.class_id ?? entry.items.find((item) => item.classId)?.classId));
                   const officialTeacherName = [officialClass?.class_teacher?.first_name, officialClass?.class_teacher?.last_name].filter(Boolean).join(" ");
                   const progress = getPendingImportPupilStatus(entry);
-                   {review.duplicateCount > 1 ? (
-                     <p style={{ margin: 0, color: "#92400e", fontSize: 13 }}>
-                       {review.duplicateCount} saved versions across {review.duplicateWorkbookCount} workbook upload(s) refer to this same pupil and period. This opens the latest saved version; older versions are retained and will not appear as separate pupil tasks.
-                     </p>
-                   ) : null}
                   const reportTypeLabel = entry.reportKind === "Midterm / Continuous Assessment"
                     ? "Midterm (CA)"
                     : entry.reportKind === "End-of-Term / Year Report Card"
@@ -1978,6 +1973,11 @@ export default function ResultsPage() {
                         <span style={statusBadgeStyle(progress.label)}>{progress.label}</span>
                       </div>
                       <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>{progress.explanation}</p>
+                       {review.duplicateCount > 1 ? (
+                         <p style={{ margin: 0, color: "#92400e", fontSize: 13 }}>
+                           {review.duplicateCount} saved versions across {review.duplicateWorkbookCount} workbook upload(s) refer to this same pupil and period. This opens the latest saved version; older versions are retained and will not appear as separate pupil tasks.
+                         </p>
+                       ) : null}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ color: "#64748b", fontSize: 12 }}>Worksheet: {review.sheetName}{review.ownerName ? ` · Saved by ${review.ownerName}` : ""}</span>
                         <Button type="button" size="sm" onClick={() => navigate(`/admin/results?${params.toString()}`)}>Open saved review</Button>
