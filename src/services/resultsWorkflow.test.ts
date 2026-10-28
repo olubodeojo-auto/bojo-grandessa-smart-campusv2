@@ -995,7 +995,8 @@ describe("Report Center period discovery and readiness", () => {
 
   it("labels the publishing workspace Publish Arena and keeps the Results module distinct", () => {
     expect(reportCardsPage).toContain(">Publish Arena</h1>");
-    expect(resultsPage).toContain(">Subject Result Records</h1>");
+    expect(resultsPage).toContain('embedded ? "Enter or import results" : "Results"');
+    expect(workspacePage).toContain(">Results</h1>");
     expect(resultsPage).toContain(">Results Module</h2>");
   });
 
@@ -2736,9 +2737,9 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain('aria-label="Import review pupils; scroll vertically to review pupils"');
     expect(resultsPage).toContain('tabIndex={0}');
     expect(resultsPage).toContain('overflowY: "auto"');
-    expect(resultsPage).toContain('overflowX: "auto"');
+    expect(resultsPage).toContain('overflowX: "scroll"');
     expect(resultsPage).toContain('minWidth: 0');
-    expect(resultsPage).toContain('maxWidth: "100%", overflowX: "auto"');
+    expect(resultsPage).toContain('maxWidth: "100%", overflowX: "scroll"');
     expect(resultsPage).toContain('onClick={() => document.getElementById("import-review-pupils")?.scrollTo({ top: 0, behavior: "smooth" })}');
     expect(resultsPage).toContain("Back to top of review");
     expect(resultsPage).toMatch(/>\s*Cancel\s*<\/Button>/);
@@ -3352,7 +3353,7 @@ describe("results workflow migration contract", () => {
     expect(reportCardsPage).toContain('aria-labelledby="results-progress-heading"');
     expect(reportCardsPage).toContain("Imports to review");
     expect(reportCardsPage).toContain("All pupil reports in this workspace are published.");
-    expect(reportCardsPage).toContain('navigate("/admin/result-records")');
+    expect(reportCardsPage).toContain('navigate("/admin/results")');
     expect(reportCardsPage).toContain("async function publishAllReadyReports()");
     expect(reportCardsPage).toContain("publishReportPeriod(period, false, false)");
     expect(reportCardsPage).toContain("Unpublish results");
