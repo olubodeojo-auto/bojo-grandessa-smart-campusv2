@@ -324,21 +324,39 @@ function resultSubjectKey(result: Result): string | null {
  */
 export function getReportCenterResultsWithRecordedMarks(results: Result[]): Result[] {
   return results.filter((result) => {
+    let requiredMarksPresent: boolean;
     if (result.assessment_type === "CA") {
-      return result.continuous_assessment !== null
+      requiredMarksPresent = result.continuous_assessment !== null
         && typeof result.maximum_score === "number"
         && Number.isFinite(result.maximum_score)
         && result.maximum_score > 0;
-    }
-    if (result.assessment_type === "Combined") {
-      return result.continuous_assessment !== null
+    } else if (result.assessment_type === "Combined") {
+      requiredMarksPresent = result.continuous_assessment !== null
         && result.examination !== null
         && result.total_score !== null;
+    } else if (result.assessment_type === "Examination") {
+      requiredMarksPresent = result.examination !== null && result.total_score !== null;
+    } else {
+      requiredMarksPresent = true;
     }
-    if (result.assessment_type === "Examination") {
-      return result.examination !== null && result.total_score !== null;
-    }
-    return true;
+
+    // Blank required fields alone mean "not entered yet" and are skipped this pass.
+    // A present but invalid mark is different: keep that row in the publish set so
+    // the validation below blocks publication and tells staff to correct it.
+    if (requiredMarksPresent) return true;
+    const total = result.calculation_mode === "Automatic" && result.assessment_type === "Combined"
+      ? calculateResult("Combined", result.continuous_assessment, result.examination).total
+      : result.total_score;
+    const errors = validateAssessmentMarks({
+      assessment_type: result.assessment_type,
+      continuous_assessment: result.continuous_assessment,
+      maximum_score: result.maximum_score ?? null,
+      examination: result.examination,
+      total_score: total,
+      grade: result.grade ?? "",
+      remark: result.remark ?? "",
+    });
+    return errors.length > 0;
   });
 }
 
