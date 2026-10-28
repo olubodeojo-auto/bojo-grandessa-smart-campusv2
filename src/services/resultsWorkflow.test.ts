@@ -2772,6 +2772,11 @@ describe("result workbook import preview", () => {
     expect(isImportEntryReady(entry)).toBe(true);
     expect(getImportableResultEntries([entry])).toEqual([entry]);
 
+    const noCompleteMarksEntry = { ...entry, items: [missingMarkItem] };
+    expect(getImportItemsForSave(noCompleteMarksEntry)).toEqual([]);
+    expect(isImportEntryReady(noCompleteMarksEntry)).toBe(false);
+    expect(getImportableResultEntries([noCompleteMarksEntry])).toEqual([]);
+
     const invalidButBlankItem = { ...missingMarkItem, invalidMarks: ["CA"] };
     expect(isImportItemSkippableForMissingMarks(invalidButBlankItem)).toBe(false);
     expect(isImportEntryReady({ ...entry, items: [completeItem, invalidButBlankItem] })).toBe(false);
@@ -3830,9 +3835,16 @@ describe("pupil matching is a direct registered-record confirmation", () => {
     expect(resultsPage).not.toContain("studentSearch");
     expect(resultsPage).toContain("Choose a pupil from the school register");
     expect(resultsPage).toContain("Set aside until subjects and marks are entered");
+    expect(resultsPage).toContain("Set aside until class is confirmed");
+    expect(resultsPage).toContain("Open session and report settings");
+    expect(resultsPage).toContain("Open report-card date fields");
     expect(resultsPage).toContain("getImportSubjectRowsNeedingAction");
     expect(resultsPage).toContain("Go to next issue");
+    expect(resultsPage).toContain("Blank-mark subject rows are intentionally omitted");
+    expect(resultsPage).toContain("Rows with no required marks are skipped and must not raise duplicate-result blockers");
     expect(resultsPage).toContain("A true class-number mismatch stays in draft");
+    expect(reportCardsPage).toContain("Ready — missing marks skipped");
+    expect(reportCardsPage).toContain("Set aside — no complete marks");
   });
 });
 
