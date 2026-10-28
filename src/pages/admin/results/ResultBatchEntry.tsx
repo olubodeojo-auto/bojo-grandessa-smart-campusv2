@@ -342,7 +342,7 @@ export default function ResultBatchEntry({
       (row.hasValue || row.entry.dirty) && row.errors.length === 0,
     );
     if (rowsToSave.length === 0) {
-      setError("Enter at least one subject mark before saving a draft.");
+      setError("Enter at least one subject mark before saving results.");
       return;
     }
 
@@ -639,7 +639,7 @@ export default function ResultBatchEntry({
           </Button>
         ) : null}
         <Button type="button" variant="secondary" onClick={() => void saveDrafts(false)} disabled={saving || !draftLoaded || !selectedStudent}>
-          {saving ? "Saving…" : "Save Draft"}
+          {saving ? "Saving…" : "Save Results"}
         </Button>
       </div>
     </section>

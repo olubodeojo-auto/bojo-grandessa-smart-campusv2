@@ -1468,7 +1468,7 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
   }
 
   return (
-    <div style={{ display: "grid", gap: 20 }}>
+    <div id="publish-arena-reports" style={{ display: "grid", gap: 20, scrollMarginTop: 16 }}>
       {!embedded ? (
       <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div style={{ minWidth: 0, flex: "1 1 340px" }}>

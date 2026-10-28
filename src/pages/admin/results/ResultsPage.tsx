@@ -1683,9 +1683,15 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
     window.dispatchEvent(new Event("grandessa:results-updated"));
   };
 
-  const handleConfirmImport = async (publishAfterSave = false): Promise<void> => {
-    const selectedEntries = readyImportEntries;
+  const handleConfirmImport = async (publishAfterSave = false, targetStudentKey?: string): Promise<void> => {
+    const selectedEntries = targetStudentKey
+      ? readyImportEntries.filter((entry) => entry.studentKey === targetStudentKey)
+      : readyImportEntries;
     if (selectedEntries.length === 0) {
+      if (targetStudentKey) {
+        setError("This pupil is not ready to save. Complete the highlighted pupil, subject and mark issues first.");
+        return;
+      }
       const includedEntries = importEntries.filter((entry) => entry.included !== false);
       setError(includedEntries.length === 0
         ? "Include at least one pupil before importing."
@@ -1899,6 +1905,9 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
         setActiveSubjectRowKey(null);
         setIsFinalImportPreview(false);
         window.dispatchEvent(new Event("grandessa:results-updated"));
+        requestAnimationFrame(() => {
+          document.getElementById("publish-arena-reports")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
         if (!embedded) navigate("/admin/results");
       }
     } catch (err) {
@@ -2161,6 +2170,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           </section>
         ) : null}
 
+        {!embedded ? (
         <section className="card" aria-labelledby="saved-result-drafts-heading" style={{ marginBottom: 20, padding: 18 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
             <div>
@@ -2233,6 +2243,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             </div>
           )}
         </section>
+        ) : null}
 
         {!embedded ? (
         <section className="card" aria-labelledby="saved-workbook-drafts-heading" style={{ marginBottom: 20, padding: 18 }}>
@@ -2866,9 +2877,29 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                       const next = reviewableEntries[reviewPosition + 1];
                       if (next) void handleMoveToPupil(next);
                     }} disabled={reviewPosition < 0 || reviewPosition >= reviewableEntries.length - 1}>Next pupil</Button>
-                    <Button type="button" size="sm" onClick={() => void handleSaveProgress()}>
-                      {draftSaveStates[entry.studentKey]?.state === "saving" ? "Saving…" : "Save progress"}
+                    <Button type="button" size="sm" variant="secondary" onClick={() => void handleSaveProgress()}>
+                      {draftSaveStates[entry.studentKey]?.state === "saving" ? "Saving…" : "Save review"}
                     </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void handleConfirmImport(false, entry.studentKey)}
+                      disabled={importSubmitting || !isImportEntryReady(entry)}
+                    >
+                      Save this pupil's results
+                    </Button>
+                    {isAdmin ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => void handleConfirmImport(true, entry.studentKey)}
+                        disabled={importSubmitting || !isImportEntryReady(entry)}
+                        style={{ background: "#047857", borderColor: "#047857", color: "#fff", fontWeight: 900 }}
+                      >
+                        SAVE & PUBLISH THIS PUPIL
+                      </Button>
+                    ) : null}
                     {draftSaveStates[entry.studentKey]?.state === "saved" ? (
                       <Button type="button" size="sm" variant="secondary" onClick={() => void handleDiscardImportDraft(entry)}>
                         Discard saved draft
@@ -3076,7 +3107,15 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     Search subject choices
                     <input value={subjectSearch} onChange={(event) => setSubjectSearch(event.target.value)} placeholder="Search subjects" />
                   </label>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", margin: "8px 0" }}>
+                    <span style={{ color: "#475569", fontSize: 12 }}>Subject grid — use the arrows or the horizontal scrollbar to reach every column.</span>
+                    <div role="group" aria-label="Scroll subject grid left or right" style={{ display: "flex", gap: 6 }}>
+                      <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById(`subject-mappings-${index}`)?.scrollBy({ left: -520, behavior: "smooth" })}>← Scroll left</Button>
+                      <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById(`subject-mappings-${index}`)?.scrollBy({ left: 520, behavior: "smooth" })}>Scroll right →</Button>
+                    </div>
+                  </div>
                   <div
+                    id={`subject-mappings-${index}`}
                     role="region"
                     aria-label={`Subject mappings for ${entry.studentName}; scroll horizontally to see all columns`}
                     tabIndex={0}
