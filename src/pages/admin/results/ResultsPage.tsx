@@ -32,6 +32,7 @@ import {
   normalizeImportSubjectKey,
   getImportEntryKey,
   getImportSubjectRowKey,
+  getNextUnresolvedImportSubjectIndex,
   getImportableResultEntries,
   isImportEntryReady,
   inspectResultWorkbook,
