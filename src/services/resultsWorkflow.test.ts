@@ -3049,7 +3049,7 @@ describe("result lifecycle permissions", () => {
     expect(groupedResults).toContain('minWidth: 1050');
     expect(batchEntry).toContain('aria-label="Batch subject results; scroll horizontally to see all columns"');
     expect(batchEntry).toContain('minWidth: 900');
-    expect(resultsPage).toContain('aria-label={`Subject mappings for ${entry.studentName}; scroll horizontally to see all columns`}');
+    expect(resultsPage).toContain('aria-label={`Subject mappings for ${entry.studentName}; scroll horizontally to access every column`}');
     expect(resultsPage).toContain('overflowX: "hidden"');
     expect(reportCardDocument).toContain('role="region"');
     expect(reportCardStyles).toContain('min-width: 620px');
@@ -3630,7 +3630,7 @@ describe("results workflow migration contract", () => {
     expect(reportCardService).toContain("reportTypeReviewPupilNames");
     expect(reportCardService).toContain("missingScorePupilNames");
     expect(reportCardsPage).toContain("Imports awaiting reconciliation");
-    expect(reportCardsPage).toContain("Confirm the registered pupil and class against the school list before importing marks.");
+    expect(reportCardsPage).toContain("Choose the correct registered pupil. If the worksheet class number differs from the registered class, keep this entry in drafts until the class is reconciled.");
     expect(reportCardsPage).toContain("Report type to confirm");
     expect(reportCardsPage).toContain("No outstanding imports to reconcile.");
     expect(reportCardsPage).toContain("Draft pupil results");
