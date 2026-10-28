@@ -488,29 +488,29 @@ export default function ResultsPage() {
     setPendingImportPupilsError("");
     void Promise.all(savedImportWorkbooks.map(async (workbook) => {
       const entries = await getImportReviewDrafts(workbook.workbookKey, workbook.ownerId);
-      const pendingEntries = reconcileSavedImportStudentMatches(
-        entries.filter((entry) => !entry.workflowStatus && entry.included !== false),
+      const reviewEntries = reconcileSavedImportStudentMatches(
+        entries.filter((entry) => Boolean(entry.workflowStatus) || entry.included !== false),
         students,
+        classes,
       );
       const separatorIndex = workbook.workbookKey.indexOf(":");
       const sheetName = separatorIndex >= 0
         ? workbook.workbookKey.slice(separatorIndex + 1)
         : "Saved worksheet";
-      return pendingEntries.map((entry) => ({
+      return reviewEntries.map((entry) => ({
         workbookKey: workbook.workbookKey,
         ownerId: workbook.ownerId,
         ownerName: workbook.ownerName,
         sheetName,
+        savedAt: entry.savedAt || workbook.updatedAt,
+        duplicateCount: 1,
+        duplicateWorkbookCount: 1,
         entry,
       }));
     }))
       .then((workbookEntries) => {
         if (cancelled) return;
-        setPendingImportPupils(workbookEntries.flat().sort((left, right) =>
-          left.entry.studentName.localeCompare(right.entry.studentName)
-          || left.entry.academicYear.localeCompare(right.entry.academicYear)
-          || (left.entry.term ?? "").localeCompare(right.entry.term ?? ""),
-        ));
+        setPendingImportPupils(collapseDuplicatePendingImportPupils(workbookEntries.flat()));
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -520,7 +520,7 @@ export default function ResultsPage() {
         if (!cancelled) setLoadingPendingImportPupils(false);
       });
     return () => { cancelled = true; };
-  }, [isAdmin, user, loading, loadingSavedWorkbooks, savedImportWorkbooks, students]);
+  }, [isAdmin, user, loading, loadingSavedWorkbooks, savedImportWorkbooks, students, classes]);
 
   const studentsMap = useMemo(() => {
     const map = new Map<string, Student>();
@@ -881,6 +881,7 @@ export default function ResultsPage() {
       const mergedEntries = reconcileSavedImportStudentMatches(
         mergeSavedImportReviewDrafts(validatedEntries, savedEntries),
         students,
+        classes,
       );
       const completedEntries = mergedEntries.filter((entry) => Boolean(entry.workflowStatus));
       const restoredEntries = mergedEntries.filter((entry) => !entry.workflowStatus);
@@ -938,6 +939,7 @@ export default function ResultsPage() {
       const reconciledEntries = reconcileSavedImportStudentMatches(
         [...pendingEntries].sort((left, right) => left.index - right.index),
         students,
+        classes,
       );
       const restoredEntries = withSelectedDuplicateWarnings(reconciledEntries);
       setImportSummary(completedEntries.length > 0
