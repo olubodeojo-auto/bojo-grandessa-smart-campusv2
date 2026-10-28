@@ -8,6 +8,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   collapseDuplicatePendingImportPupils,
   getImportScoreWarnings,
+  getImportItemsForSave,
+  isImportItemSkippableForMissingMarks,
   areImportedResultValuesEquivalent,
   normalizeImportSubjectKey,
   inspectResultWorkbook,
@@ -2664,6 +2666,60 @@ describe("result workbook import preview", () => {
     expect(getUnresolvedIncludedResultEntries([unresolved])).toEqual([unresolved]);
     expect(getImportableResultEntries([unresolved])).toEqual([]);
     expect(getUnresolvedIncludedResultEntries([{ ...unresolved, included: false, warnings: [] }])).toEqual([]);
+  });
+
+  it("imports complete pupil subject rows while skipping only rows with missing required marks", () => {
+    const completeItem: ResultImportItem = {
+      assessmentType: "CA",
+      calculationMode: "Manual",
+      reportKind: "Midterm / Continuous Assessment",
+      subjectName: "Mathematics",
+      subjectId: "subject-math",
+      className: "Basic 1",
+      classId: "class-1",
+      teacherName: "",
+      academicYear: "2026/2027",
+      term: "First",
+      continuousAssessment: 30,
+      maximumScore: 40,
+      examination: null,
+      totalScore: null,
+      grade: null,
+      remark: null,
+      notices: [],
+    };
+    const missingMarkItem: ResultImportItem = {
+      ...completeItem,
+      subjectName: "Writing",
+      subjectId: "subject-writing",
+      continuousAssessment: null,
+    };
+    const entry: ResultImportPreviewEntry = {
+      index: 0,
+      studentKey: "damilare-2026-first-ca",
+      studentName: "Damilare Omoboye",
+      admissionNumber: "G-100",
+      academicYear: "2026/2027",
+      term: "First",
+      assessmentType: "CA",
+      reportKind: "Midterm / Continuous Assessment",
+      className: "Basic 1",
+      teacherName: "",
+      matchStatus: "matched",
+      selectedStudentId: "student-damilare",
+      warnings: [],
+      notices: [],
+      items: [completeItem, missingMarkItem],
+    };
+
+    expect(isImportItemSkippableForMissingMarks(missingMarkItem)).toBe(true);
+    expect(getImportItemsForSave(entry)).toEqual([completeItem]);
+    expect(isImportEntryReady(entry)).toBe(true);
+    expect(getImportableResultEntries([entry])).toEqual([entry]);
+
+    const invalidButBlankItem = { ...missingMarkItem, invalidMarks: ["CA"] };
+    expect(isImportItemSkippableForMissingMarks(invalidButBlankItem)).toBe(false);
+    expect(isImportEntryReady({ ...entry, items: [completeItem, invalidButBlankItem] })).toBe(false);
   });
 
   it("selects the ID returned by Add Student and retains the pupil's reviewed result", () => {
