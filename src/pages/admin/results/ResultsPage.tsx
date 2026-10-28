@@ -32,7 +32,6 @@ import {
   normalizeImportSubjectKey,
   getImportEntryKey,
   getImportSubjectRowKey,
-  getNextUnresolvedImportSubjectIndex,
   getImportableResultEntries,
   isImportEntryReady,
   inspectResultWorkbook,
@@ -1292,9 +1291,9 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
   const handleReviewPupil = (entry: ResultImportPreviewEntry): void => {
     setIsFinalImportPreview(false);
     setActiveImportEntryKey(entry.studentKey);
-    const unresolved = entry.items.findIndex((item) => !item.subjectId);
-    setActiveSubjectRowKey(unresolved >= 0 ? getImportSubjectRowKey(entry, unresolved) : null);
-    setCompletedSubjectMappingEntryKey(unresolved < 0 ? entry.studentKey : null);
+    const firstActionIndex = getImportSubjectRowsNeedingAction(entry)[0] ?? -1;
+    setActiveSubjectRowKey(firstActionIndex >= 0 ? getImportSubjectRowKey(entry, firstActionIndex) : null);
+    setCompletedSubjectMappingEntryKey(firstActionIndex < 0 ? entry.studentKey : null);
     setPendingStudentSelections((current) => ({ ...current, [entry.studentKey]: entry.selectedStudentId ?? "" }));
     setSubjectSearch("");
   };
@@ -3252,7 +3251,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     </div>
                     <select
                       id={`registered-pupil-${entry.studentKey}`}
-                      value={pendingStudentSelections[entry.studentKey] ?? studentId}
+                      value={pendingStudentId}
                       onChange={(event) => setPendingStudentSelections((current) => ({ ...current, [entry.studentKey]: event.target.value }))}
                       style={{ boxSizing: "border-box", width: "100%", maxWidth: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #94a3b8", background: "#fff" }}
                     >
@@ -3267,10 +3266,10 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                       <Button
                         type="button"
                         size="sm"
-                        onClick={() => handleImportSelection(index, pendingStudentSelections[entry.studentKey] ?? studentId)}
-                        disabled={!(pendingStudentSelections[entry.studentKey] ?? studentId) || (pendingStudentSelections[entry.studentKey] ?? studentId) === studentId}
+                        onClick={() => handleImportSelection(index, pendingStudentId)}
+                        disabled={!pendingStudentId || pendingStudentId === studentId}
                       >
-                        {pendingStudentSelections[entry.studentKey] && pendingStudentSelections[entry.studentKey] !== studentId
+                        {pendingStudentId && pendingStudentId !== studentId
                           ? studentId ? "Confirm change of pupil" : "Confirm this pupil"
                           : "Pupil confirmed"}
                       </Button>
@@ -3313,7 +3312,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
 
                   <div role="status" style={{ margin: "4px 0 12px", padding: 12, borderRadius: 10, border: isImportEntryReady(entry) ? "1px solid #86efac" : "1px solid #cbd5e1", background: isImportEntryReady(entry) ? "#f0fdf4" : "#f8fafc", color: isImportEntryReady(entry) ? "#166534" : "#334155", overflowWrap: "anywhere" }}>
                     <strong>{isImportEntryReady(entry) ? "Ready to save" : pupilStatus.label}</strong>
-                    <div style={{ marginTop: 4 }}>{isImportEntryReady(entry) ? pupilStatus.explanation : pupilStatus.explanation}</div>
+                    <div style={{ marginTop: 4 }}>{pupilStatus.explanation}</div>
                     {hasNoCompleteSubjectMarks ? (
                       <div style={{ marginTop: 8 }}>
                         <Button
