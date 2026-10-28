@@ -101,6 +101,86 @@ export type ResultImportPreviewEntry = {
   items: ResultImportItem[];
 };
 
+
+export type SavedImportReviewVersion = {
+  workbookKey: string;
+  ownerId: string;
+  savedAt: string;
+  entry: ResultImportPreviewEntry;
+};
+
+export type CollapsedImportReviewVersion<T extends SavedImportReviewVersion = SavedImportReviewVersion> =
+  T & { duplicateCount: number; duplicateWorkbookCount: number };
+
+function normalizePendingImportValue(value: string | undefined): string {
+  return (value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function pendingImportPupilPeriodKey(entry: ResultImportPreviewEntry): string {
+  const candidateId = entry.selectedStudentId || entry.matchedStudentId;
+  const admissionNumber = normalizePendingImportValue(entry.admissionNumber);
+  const sourceName = entry.sourceStudentName;
+  const identity = candidateId
+    ? "student:" + candidateId
+    : admissionNumber
+      ? "admission:" + admissionNumber
+      : "name:" + normalizePendingImportValue(sourceName || entry.studentName);
+  const classId = entry.items.find((item) => item.classId)?.classId;
+  const classKey = classId || normalizePendingImportValue(entry.className);
+  return [
+    identity,
+    classKey,
+    normalizePendingImportValue(entry.academicYear),
+    normalizePendingImportValue(entry.term ?? ""),
+    entry.reportKind,
+  ].join("::");
+}
+
+/** Collapse repeated saves of the same pupil/period without deleting their saved rows. */
+export function collapseDuplicatePendingImportPupils<T extends SavedImportReviewVersion>(
+  records: T[],
+): Array<CollapsedImportReviewVersion<T>> {
+  const groups = new Map<string, T[]>();
+  records.forEach((record) => {
+    const key = pendingImportPupilPeriodKey(record.entry);
+    const group = groups.get(key) ?? [];
+    group.push(record);
+    groups.set(key, group);
+  });
+
+  const collapsed: Array<CollapsedImportReviewVersion<T>> = [];
+  for (const versions of groups.values()) {
+    const ordered = [...versions].sort((left, right) => {
+      const leftTime = Date.parse(left.savedAt);
+      const rightTime = Date.parse(right.savedAt);
+      const timeDifference = (Number.isFinite(rightTime) ? rightTime : 0) - (Number.isFinite(leftTime) ? leftTime : 0);
+      if (timeDifference !== 0) return timeDifference;
+      if (Boolean(left.entry.workflowStatus) !== Boolean(right.entry.workflowStatus)) {
+        return left.entry.workflowStatus ? -1 : 1;
+      }
+      return left.workbookKey.localeCompare(right.workbookKey);
+    });
+    const latest = ordered[0];
+    if (!latest || latest.entry.workflowStatus || latest.entry.included === false) continue;
+    collapsed.push({
+      ...latest,
+      duplicateCount: versions.length,
+      duplicateWorkbookCount: new Set(versions.map((version) => version.ownerId + "::" + version.workbookKey)).size,
+    });
+  }
+
+  return collapsed.sort((left, right) =>
+    left.entry.studentName.localeCompare(right.entry.studentName)
+    || left.entry.academicYear.localeCompare(right.entry.academicYear)
+    || (left.entry.term ?? "").localeCompare(right.entry.term ?? ""),
+  );
+}
+
 export function getImportEntryKey(entry: ResultImportPreviewEntry): string {
   return entry.studentKey;
 }
