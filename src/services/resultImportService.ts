@@ -122,7 +122,7 @@ function normalizePendingImportValue(value: string | undefined): string {
 }
 
 function pendingImportPupilPeriodKey(entry: ResultImportPreviewEntry): string {
-  const candidateId = entry.selectedStudentId || entry.matchedStudentId;
+  const candidateId = entry.selectedStudentId || entry.matchedStudentId || entry.resultImportStudentId;
   const admissionNumber = normalizePendingImportValue(entry.admissionNumber);
   const sourceName = entry.sourceStudentName;
   const identity = candidateId
@@ -130,7 +130,7 @@ function pendingImportPupilPeriodKey(entry: ResultImportPreviewEntry): string {
     : admissionNumber
       ? "admission:" + admissionNumber
       : "name:" + normalizePendingImportValue(sourceName || entry.studentName);
-  const classId = entry.items.find((item) => item.classId)?.classId;
+  const classId = entry.items.find((item) => item.classId)?.classId || entry.resultImportClassId;
   const classKey = classId || normalizePendingImportValue(entry.className);
   return [
     identity,
@@ -166,7 +166,10 @@ export function collapseDuplicatePendingImportPupils<T extends SavedImportReview
       return left.workbookKey.localeCompare(right.workbookKey);
     });
     const latest = ordered[0];
-    if (!latest || latest.entry.workflowStatus || latest.entry.included === false) continue;
+    // A result set already imported or published must not reappear as a new task
+    // just because a later duplicate workbook review exists. Corrections to the
+    // saved results belong in the normal result-edit/review workflow.
+    if (!latest || versions.some((version) => Boolean(version.entry.workflowStatus)) || latest.entry.included === false) continue;
     collapsed.push({
       ...latest,
       duplicateCount: versions.length,
