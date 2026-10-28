@@ -66,42 +66,51 @@ type PendingImportPupilStatus = {
 };
 
 function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingImportPupilStatus {
-  if (entry.matchStatus === "manual-review") {
-    return { label: "Confirm pupil", explanation: "Confirm the registered pupil and class against the school list before importing marks." };
+  const classConflict = entry.warnings.some((warning) =>
+    /selected student is not currently|worksheet says|workbook class differs|class differs|worksheet class/i.test(warning),
+  );
+  if (classConflict || entry.matchStatus === "manual-review") {
+    return {
+      label: "Class or pupil confirmation needed",
+      explanation: "Choose the correct registered pupil. If the worksheet class number differs from the registered class, keep this entry in drafts until the class is reconciled.",
+    };
   }
   if (entry.matchStatus === "unmatched" || !entry.selectedStudentId) {
-    return { label: "Pupil match needed", explanation: "Select the correct registered pupil before importing. No marks have been imported for this entry." };
+    return { label: "Pupil match needed", explanation: "Open Reconcile this pupil, choose the actual registered pupil from the dropdown, and press Confirm this pupil. Name differences alone do not prevent manual matching." };
   }
   if (entry.reportKind === "Unclear") {
-    return { label: "Report type to confirm", explanation: "Confirm the correct report type before importing." };
+    return { label: "Report type to confirm", explanation: "Choose Midterm (CA) or End-of-Term before importing." };
   }
   if (!entry.term) {
-    return { label: "Term to confirm", explanation: "Confirm the term from the school's approved results sheet before importing." };
+    return { label: "Term to confirm", explanation: "Choose the correct school term before importing." };
   }
   if (entry.items.length === 0) {
-    return { label: "No subject scores found", explanation: "Check the original worksheet. No subject-score rows were detected for this pupil." };
+    return { label: "No subject rows", explanation: "No subject marks were found. Add the subjects and marks, or set this pupil aside. This does not block other pupils." };
   }
   const itemsToSave = getImportItemsForSave(entry);
-  const unresolvedSubject = itemsToSave.find((item) => !item.subjectId);
+  const unresolvedSubject = itemsToSave.find((item) => !item.subjectId || !item.classId);
   if (unresolvedSubject) {
-    return { label: "Subject to confirm", explanation: `Confirm the subject for "${unresolvedSubject.subjectName}" before importing.` };
+    return { label: "Subject or class to confirm", explanation: `Resolve "${unresolvedSubject.subjectName}" in the subject grid. Use Go to next issue to reach the row.` };
   }
   if (itemsToSave.length === 0) {
-    return { label: "No complete marks to import", explanation: "Every subject row is missing at least one required mark. Enter at least one complete subject result before this pupil can be published." };
+    return {
+      label: "Set aside — no complete marks",
+      explanation: "There are no complete subject marks for this pupil yet. Leave this pupil in the review queue until subjects and marks are entered; other pupils can still proceed.",
+    };
   }
   const scoreWarnings = getImportScoreWarnings({ ...entry, items: itemsToSave });
   if (scoreWarnings.length > 0 || itemsToSave.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
-    return { label: "Check marks", explanation: "A subject row contains an invalid or out-of-range mark. Correct that value before importing this pupil." };
+    return { label: "Correct invalid marks", explanation: "A nonblank mark is invalid or outside the allowed range. Reconcile this pupil, use Go to next issue, correct the row, and save again." };
   }
   const skippedItems = [...(entry.skippedItems ?? []), ...entry.items.filter(isImportItemSkippableForMissingMarks)];
   if (skippedItems.length > 0) {
     const names = [...new Set(skippedItems.map((item) => item.subjectName).filter(Boolean))].join(", ");
     return {
-      label: "Ready — incomplete subjects skipped",
-      explanation: `The complete subject results can be saved and published now. ${names || "The incomplete subject rows"} will be left out and can be entered later.`,
+      label: "Ready — missing marks skipped",
+      explanation: `Complete subject results can be saved and published now. Blank-mark subjects (${names || "shown in the subject grid"}) will be left out of this pass and entered later.`,
     };
   }
-  return { label: "Ready to review", explanation: "Check the subject marks, then complete this pupil's import." };
+  return { label: "Ready to review", explanation: "The required subject rows have complete marks. Reconcile this pupil to save or publish the complete results." };
 }
 
 function statusBadgeStyle(status: string): React.CSSProperties {
