@@ -849,6 +849,33 @@ describe("Report Center period discovery and readiness", () => {
       reason: "CA score must not exceed its positive maximum score.",
     });
     expect(canPublishReportCenterPeriod(invalidPeriod, invalidPeriod.results, true)).toBe(false);
+
+    const invalidButIncomplete = result({
+      id: "target-combined-invalid-incomplete",
+      student_id: "target-pupil",
+      class_id: "basic-5",
+      class_name: "Basic 5",
+      subject_id: "subject-science",
+      subject_name: "Science",
+      academic_year: "2026/2027",
+      term: "First",
+      assessment_type: "Combined",
+      continuous_assessment: 45,
+      examination: null,
+      total_score: null,
+      status: "Draft",
+    });
+    const [invalidButIncompletePeriod] = discoverReportCenterPeriods(
+      [completeEnglish, missingWriting, invalidButIncomplete],
+      [],
+    ).filter((item) => item.studentId === "target-pupil");
+    expect(getReportCenterResultsWithRecordedMarks(invalidButIncompletePeriod.results).map((item) => item.id))
+      .toContain("target-combined-invalid-incomplete");
+    expect(getReportCenterCompleteness(invalidButIncompletePeriod)).toMatchObject({
+      complete: false,
+      reason: "End-of-term CA score cannot exceed 40.",
+    });
+    expect(canPublishReportCenterPeriod(invalidButIncompletePeriod, invalidButIncompletePeriod.results, true)).toBe(false);
   });
 
   it("makes complete End-of-Term rows publishable only while existing statuses are reviewable", () => {
