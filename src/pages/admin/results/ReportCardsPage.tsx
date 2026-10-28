@@ -657,15 +657,10 @@ export default function ReportCardsPage() {
         ?? "Class unavailable";
       if (requireConfirmation) {
         const confirmed = window.confirm(
-          "Publish subject results for " + pupilName + "?\n\nClass: " + className
-          + "\nSession: " + period.academicYear
-          + "\nTerm: " + period.term
-          + "\nSubject results to publish: " + pendingResults.length
-          + "\n\nOnly this pupil's subject results will be published after the existing checks pass. This does not send emails.",
+          `Publish subject results for ${student.first_name} ${student.last_name}?\n\nClass: ${className}\nSession: ${period.academicYear}\nTerm: ${period.term}\nSubject results to publish: ${pendingResults.length}\n\nOnly this pupil's subject results will be published after the existing checks pass. This does not send emails.`,
         );
         if (!confirmed) return { ok: false, message: "Publication was cancelled.", cancelled: true };
       }
-
       setPublishingKey(period.key);
       if (requireConfirmation) {
         setError("");
