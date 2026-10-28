@@ -48,7 +48,6 @@ import {
   selectResultWorkbookSheet,
   mergeSavedImportReviewDrafts,
   parseImportReviewCursor,
-  searchImportStudents,
   normalizeImportDate,
   saveImportEntriesIndependently,
   serializeImportReviewCursor,
@@ -110,37 +109,46 @@ type PublishSavedPeriodParams = {
 type PendingImportPupilStatus = { label: string; explanation: string };
 
 function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingImportPupilStatus {
-  const classConflict = entry.warnings.some((warning) => /worksheet says|workbook class differs|class differs|worksheet class/i.test(warning));
+  const classConflict = entry.warnings.some((warning) =>
+    /selected student is not currently|worksheet says|workbook class differs|class differs|worksheet class/i.test(warning),
+  );
+  if (classConflict) {
+    return {
+      label: "Class mismatch — keep in draft",
+      explanation: "The selected pupil and worksheet class do not match. Keep this entry in drafts until the correct class is confirmed; do not move marks into a different class.",
+    };
+  }
   if (entry.matchStatus === "manual-review") {
-    return classConflict
-      ? { label: "Class mismatch — keep in draft", explanation: "The worksheet class differs from the registered class. Keep this entry in drafts until the school confirms the correct pupil and class. Do not change the registered class to make the worksheet fit." }
-      : { label: "Confirm pupil", explanation: "Confirm the registered pupil and class against the school list before importing marks." };
+    return { label: "Confirm pupil", explanation: "Choose the exact registered pupil from the dropdown and press Confirm this pupil." };
   }
   if (entry.matchStatus === "unmatched" || !entry.selectedStudentId) {
-    return { label: "Pupil match needed", explanation: "Select the correct registered pupil before importing. No marks have been imported for this entry." };
+    return { label: "Pupil match needed", explanation: "Choose the exact registered pupil from the dropdown and press Confirm this pupil. Name differences alone do not prevent a manual match." };
   }
   if (entry.reportKind === "Unclear") {
-    return { label: "Report type to confirm", explanation: "Confirm the report type before importing." };
+    return { label: "Report type to confirm", explanation: "Choose Midterm (CA) or End-of-Term before importing." };
   }
   if (!entry.term) {
-    return { label: "Term to confirm", explanation: "Confirm the term from the school's approved results sheet before importing." };
+    return { label: "Term to confirm", explanation: "Choose the correct school term before importing." };
   }
   if (entry.items.length === 0) {
-    return { label: "No subject scores found", explanation: "Check the original worksheet. No subject-score rows were detected for this pupil." };
+    return { label: "No subject rows", explanation: "No subject rows were found. Add the required subjects and marks, or set this pupil aside. Other pupils can still proceed." };
   }
 
   const itemsToSave = getImportItemsForSave(entry);
-  const unresolvedSubject = itemsToSave.find((item) => !item.subjectId);
+  const unresolvedSubject = itemsToSave.find((item) => !item.subjectId || !item.classId);
   if (unresolvedSubject) {
-    return { label: "Subject to confirm", explanation: `Confirm the subject for "${unresolvedSubject.subjectName}" before importing.` };
+    return { label: "Subject or class to confirm", explanation: `Resolve "${unresolvedSubject.subjectName}" in the subject grid. Use Go to next issue to bring its row into view.` };
   }
   if (itemsToSave.length === 0) {
-    return { label: "No complete marks to import", explanation: "Every subject row is missing at least one required mark. Enter at least one complete subject result before this pupil can be published." };
+    return {
+      label: "Set aside — no complete marks",
+      explanation: "There are no complete subject marks for this pupil yet. Set this pupil aside until subjects and marks are entered. This will not block other pupils from being saved or published.",
+    };
   }
 
   const scoreWarnings = getImportScoreWarnings({ ...entry, items: itemsToSave });
   if (scoreWarnings.length > 0 || itemsToSave.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
-    return { label: "Check marks", explanation: "A subject row contains an invalid or out-of-range mark. Correct that value before importing this pupil." };
+    return { label: "Correct invalid marks", explanation: "A subject contains a nonblank invalid or out-of-range mark. Use Go to next issue to find the row, correct the value, and try again." };
   }
 
   const skippedItems = [
@@ -150,15 +158,35 @@ function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingIm
   if (skippedItems.length > 0) {
     const names = [...new Set(skippedItems.map((item) => item.subjectName).filter(Boolean))].join(", ");
     return {
-      label: "Ready — incomplete subjects skipped",
-      explanation: `The complete subject results can be saved and published now. ${names || "The incomplete subject rows"} will be left out and can be entered later.`,
+      label: "Ready — missing marks skipped",
+      explanation: `Complete subject rows can be saved and published now. Blank-mark subjects (${names || "listed in the subject grid"}) will remain out of this pass and can be entered later.`,
     };
   }
-  return { label: "Ready to review", explanation: "Check the subject marks, then complete this pupil's import." };
+  return { label: "Ready to review", explanation: "The required subject rows have complete marks. Save the pupil's results or publish them now." };
 }
 
 function importItemKey(entry: ResultImportPreviewEntry, itemIndex: number): string {
   return `${entry.studentKey}|${itemIndex}`;
+}
+
+function getImportSubjectRowsNeedingAction(entry: ResultImportPreviewEntry): number[] {
+  return entry.items.flatMap((item, index) => {
+    if (isImportItemSkippableForMissingMarks(item)) return [];
+    if (!item.subjectId || !item.classId || (item.invalidMarks?.length ?? 0) > 0) return [index];
+    const totalScore = item.assessmentType === "Combined" && item.calculationMode === "Automatic"
+      ? calculateResult("Combined", item.continuousAssessment, item.examination).total
+      : item.totalScore;
+    const markErrors = validateAssessmentMarks({
+      assessment_type: item.assessmentType,
+      continuous_assessment: item.continuousAssessment,
+      maximum_score: item.maximumScore,
+      examination: item.examination,
+      total_score: totalScore,
+      grade: item.grade ?? "",
+      remark: item.remark ?? "",
+    });
+    return markErrors.length > 0 ? [index] : [];
+  });
 }
 
 function importReviewCursorKey(userId: string, schoolId: string, workbookKey: string): string {
@@ -408,7 +436,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
   const [activeImportEntryKey, setActiveImportEntryKey] = useState<string | null>(null);
   const [activeSubjectRowKey, setActiveSubjectRowKey] = useState<string | null>(null);
   const [completedSubjectMappingEntryKey, setCompletedSubjectMappingEntryKey] = useState<string | null>(null);
-  const [studentSearch, setStudentSearch] = useState<string>("");
+  const [pendingStudentSelections, setPendingStudentSelections] = useState<Record<string, string>>({});
   const [subjectSearch, setSubjectSearch] = useState<string>("");
   const [isFinalImportPreview, setIsFinalImportPreview] = useState<boolean>(false);
   const [finalPreviewIndex, setFinalPreviewIndex] = useState<number>(0);
@@ -668,13 +696,14 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
       return null;
     }
   };
-  const searchedStudents = searchImportStudents(students, studentSearch);
-  const selectedRosterStudent = activeImportEntry?.selectedStudentId
-    ? studentsMap.get(activeImportEntry.selectedStudentId)
-    : undefined;
-  const studentOptions = selectedRosterStudent && !searchedStudents.some((student) => student.id === selectedRosterStudent.id)
-    ? [selectedRosterStudent, ...searchedStudents]
-    : searchedStudents;
+  const studentOptions = useMemo(
+    () => [...students].sort((left, right) => {
+      const nameOf = (student: Student): string =>
+        [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ").trim();
+      return nameOf(left).localeCompare(nameOf(right)) || (left.admission_number ?? "").localeCompare(right.admission_number ?? "");
+    }),
+    [students],
+  );
 
   const persistImportDraft = useCallback(async (entry: ResultImportPreviewEntry): Promise<boolean> => {
     if (!activeWorkbookDraftKey) return false;
@@ -1195,17 +1224,29 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
   const handleImportSelection = (entryIndex: number, studentId: string): void => {
     const currentEntry = importEntries[entryIndex];
     if (!currentEntry) return;
-    if (studentId && currentEntry?.selectedStudentId && currentEntry.selectedStudentId !== studentId) {
-      const selectedStudent = studentsMap.get(studentId);
-      const displayedName = selectedStudent ? formatName(selectedStudent.first_name, selectedStudent.last_name) : "selected pupil";
-      const targetClass = currentEntry.className || "selected class";
-      if (!window.confirm(`Use these marks for ${displayedName} in ${targetClass}?`)) return;
+
+    const selectedStudent = studentId ? studentsMap.get(studentId) : undefined;
+    if (studentId && !selectedStudent) {
+      setError("That pupil is no longer in the loaded school list. Refresh the pupil list and select the registered record again.");
+      return;
     }
+
     markDraftDirty(currentEntry.studentKey);
-    const assignment = resolveImportStudentAssignment(
-      studentId ? studentsMap.get(studentId) : undefined,
-      classes,
+    const studentAssignment = resolveImportStudentAssignment(selectedStudent, classes);
+    const normalizeClassName = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, "");
+    const worksheetClass = classes.find((candidate) =>
+      normalizeClassName(candidate.class_name) === normalizeClassName(currentEntry.className),
     );
+    const existingResolvedClassId = currentEntry.items.find((item) => item.classId)?.classId;
+    // Preserve a resolved worksheet class. An explicit pupil match must never silently
+    // move marks into another class; a true class-number mismatch stays in draft.
+    const targetClassId = existingResolvedClassId ?? worksheetClass?.id ?? studentAssignment.classId;
+    const targetClass = classes.find((candidate) => candidate.id === targetClassId);
+    const targetClassName = targetClass?.class_name || currentEntry.className || studentAssignment.className;
+    const targetTeacherName = targetClass
+      ? [targetClass.class_teacher?.first_name, targetClass.class_teacher?.last_name].filter(Boolean).join(" ")
+      : studentAssignment.teacherName;
+
     setImportEntries((current) => withSelectedDuplicateWarnings(updateImportEntryByKey(
       current,
       currentEntry.studentKey,
@@ -1214,15 +1255,20 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
         selectedStudentId: studentId || undefined,
         matchedStudentId: studentId || undefined,
         matchStatus: studentId ? "matched" : "unmatched",
-        className: assignment.className,
-        teacherName: assignment.teacherName,
-        items: entry.items.map((item) => ({
-          ...item,
-          classId: assignment.classId,
-          className: assignment.className,
-        })),
+        className: targetClassName,
+        teacherName: targetTeacherName || entry.teacherName,
+        items: entry.items.map((item) => {
+          const itemClassId = item.classId ?? targetClassId;
+          const mappedClass = classes.find((candidate) => candidate.id === itemClassId);
+          return {
+            ...item,
+            classId: itemClassId,
+            className: mappedClass?.class_name ?? item.className ?? targetClassName,
+          };
+        }),
       }),
     )));
+    setPendingStudentSelections((current) => ({ ...current, [currentEntry.studentKey]: studentId }));
   };
 
   const handleImportInclusionChange = (entryIndex: number, included: boolean): void => {
@@ -1249,7 +1295,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
     const unresolved = entry.items.findIndex((item) => !item.subjectId);
     setActiveSubjectRowKey(unresolved >= 0 ? getImportSubjectRowKey(entry, unresolved) : null);
     setCompletedSubjectMappingEntryKey(unresolved < 0 ? entry.studentKey : null);
-    setStudentSearch("");
+    setPendingStudentSelections((current) => ({ ...current, [entry.studentKey]: entry.selectedStudentId ?? "" }));
     setSubjectSearch("");
   };
 
@@ -1311,7 +1357,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
     const currentIndex = entry.items.findIndex((_item, index) =>
       getImportSubjectRowKey(entry, index) === activeSubjectRowKey,
     );
-    const nextIndex = getNextUnresolvedImportSubjectIndex(entry.items, currentIndex);
+    const actionIndices = getImportSubjectRowsNeedingAction(entry);
+    const nextIndex = actionIndices.find((index) => index > currentIndex) ?? actionIndices[0] ?? null;
     if (nextIndex !== null) {
       setActiveSubjectRowKey(getImportSubjectRowKey(entry, nextIndex));
       setCompletedSubjectMappingEntryKey(null);
@@ -1426,6 +1473,9 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
     setError("");
     setIsAddingImportStudent(false);
     setImportStudentDraft(null);
+    if (importStudentEntryKey) {
+      setPendingStudentSelections((current) => ({ ...current, [importStudentEntryKey]: hydratedStudent.id }));
+    }
     setImportStudentEntryKey(null);
   };
 
@@ -2864,8 +2914,12 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           ) : (
             importEntries.map((entry, index) => {
               const studentId = entry.selectedStudentId ?? "";
+              const pendingStudentId = pendingStudentSelections[entry.studentKey] ?? studentId;
               const registeredStudent = studentsMap.get(studentId);
               const matchedCandidate = studentsMap.get(entry.matchedStudentId ?? "");
+              const pupilStatus = getPendingImportPupilStatus(entry);
+              const subjectRowsNeedingAction = getImportSubjectRowsNeedingAction(entry);
+              const hasNoCompleteSubjectMarks = entry.items.length === 0 || getImportItemsForSave(entry).length === 0;
               const reviewableEntries = importEntries.filter((candidate) => candidate.included !== false);
               const reviewPosition = reviewableEntries.findIndex((candidate) => candidate.studentKey === entry.studentKey);
               const reportDetails = entry.reportDetails ?? {
@@ -3189,44 +3243,58 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     ))}
                   </details>
 
-                  <div style={{ marginBottom: 12 }}>
-                    <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>
-                      {studentId ? "Change student" : "Find student in records"}
+                  <section aria-label="Confirm registered pupil" style={{ marginBottom: 12, padding: 12, border: "1px solid #cbd5e1", borderRadius: 10, background: "#f8fafc", minWidth: 0 }}>
+                    <label htmlFor={`registered-pupil-${entry.studentKey}`} style={{ display: "block", fontWeight: 700, marginBottom: 6 }}>
+                      {studentId ? "Registered pupil" : "Choose the registered pupil"}
                     </label>
-                    <input
-                      value={studentSearch}
-                      onChange={(event) => setStudentSearch(event.target.value)}
-                      placeholder="Search pupil name or admission number"
-                      aria-label="Search students by name or admission number"
-                      style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #cbd5e1", marginBottom: 8 }}
-                    />
+                    <div style={{ color: "#475569", fontSize: 13, marginBottom: 8, overflowWrap: "anywhere" }}>
+                      <strong>Name on worksheet:</strong> {entry.sourceStudentName || entry.studentName || "Name missing"}
+                    </div>
                     <select
-                      value={studentId}
-                      onChange={(event) => handleImportSelection(index, event.target.value)}
-                      style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #cbd5e1" }}
+                      id={`registered-pupil-${entry.studentKey}`}
+                      value={pendingStudentSelections[entry.studentKey] ?? studentId}
+                      onChange={(event) => setPendingStudentSelections((current) => ({ ...current, [entry.studentKey]: event.target.value }))}
+                      style={{ boxSizing: "border-box", width: "100%", maxWidth: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #94a3b8", background: "#fff" }}
                     >
-                      <option value="">Select matching student</option>
+                      <option value="">Choose a pupil from the school register</option>
                       {studentOptions.map((student) => (
                         <option key={student.id} value={student.id}>
                           {[student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ")} · {student.admission_number || "No admission number"} · {student.class_name || "No class"}
                         </option>
                       ))}
                     </select>
-                    {searchedStudents.length === 0 ? (
-                      <div style={{ marginTop: 6, color: "#64748b", fontSize: 13 }}>No roster matches this search. No student record has been added.</div>
-                    ) : null}
-                    {isAdmin && !entry.selectedStudentId ? (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
                       <Button
                         type="button"
-                        variant="secondary"
                         size="sm"
-                        style={{ marginTop: 8 }}
-                        onClick={() => handleAddStudentToImport(index)}
+                        onClick={() => handleImportSelection(index, pendingStudentSelections[entry.studentKey] ?? studentId)}
+                        disabled={!(pendingStudentSelections[entry.studentKey] ?? studentId) || (pendingStudentSelections[entry.studentKey] ?? studentId) === studentId}
                       >
-                        Add Student
+                        {pendingStudentSelections[entry.studentKey] && pendingStudentSelections[entry.studentKey] !== studentId
+                          ? studentId ? "Confirm change of pupil" : "Confirm this pupil"
+                          : "Pupil confirmed"}
                       </Button>
-                    ) : null}
-                  </div>
+                      {isAdmin && !entry.selectedStudentId ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleAddStudentToImport(index)}
+                        >
+                          Add a new student record
+                        </Button>
+                      ) : null}
+                    </div>
+                    {registeredStudent ? (
+                      <div role="status" style={{ marginTop: 8, color: "#166534", fontSize: 13, overflowWrap: "anywhere" }}>
+                        <strong>Confirmed school record:</strong> {[registeredStudent.first_name, registeredStudent.middle_name, registeredStudent.last_name].filter(Boolean).join(" ")} · Admission {registeredStudent.admission_number || "not recorded"} · Class {registeredStudent.class_name || "not assigned"}
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: 8, color: "#475569", fontSize: 13 }}>
+                        Choose the pupil who actually owns these marks, then press <strong>Confirm this pupil</strong>. The worksheet name may differ in order or wording; the registered student record is what will be used.
+                      </div>
+                    )}
+                  </section>
 
                   {entry.warnings.length > 0 || getImportScoreWarnings(entry).length > 0 ? (
                     <div style={{ marginBottom: 12, color: "#b45309", fontSize: 13 }}>
@@ -3243,8 +3311,21 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     </div>
                   ) : null}
 
-                  <div role="status" style={{ margin: "4px 0 12px", fontWeight: 700, color: isImportEntryReady(entry) ? "#166534" : "#64748b" }}>
-                    {isImportEntryReady(entry) ? "Included and ready to import" : "Resolve issues or Ignore this pupil"}
+                  <div role="status" style={{ margin: "4px 0 12px", padding: 12, borderRadius: 10, border: isImportEntryReady(entry) ? "1px solid #86efac" : "1px solid #cbd5e1", background: isImportEntryReady(entry) ? "#f0fdf4" : "#f8fafc", color: isImportEntryReady(entry) ? "#166534" : "#334155", overflowWrap: "anywhere" }}>
+                    <strong>{isImportEntryReady(entry) ? "Ready to save" : pupilStatus.label}</strong>
+                    <div style={{ marginTop: 4 }}>{isImportEntryReady(entry) ? pupilStatus.explanation : pupilStatus.explanation}</div>
+                    {hasNoCompleteSubjectMarks ? (
+                      <div style={{ marginTop: 8 }}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleImportInclusionChange(index, false)}
+                        >
+                          Set aside until subjects and marks are entered
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                   {getImportReportDateErrors(entry).map((dateError) => (
                     <div key={dateError} role="alert" style={{ color: "#b91c1c", fontSize: 13, marginBottom: 8 }}>
@@ -3254,8 +3335,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
 
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
                     <strong>{entry.items.filter((item) => item.subjectId).length} subjects mapped · {entry.items.filter((item) => !item.subjectId).length} unresolved</strong>
-                    <Button type="button" size="sm" variant="secondary" onClick={() => handleNextUnresolvedSubject(entry)} disabled={!entry.items.some((item) => !item.subjectId)}>
-                      Next unresolved subject
+                    <Button type="button" size="sm" variant="secondary" onClick={() => handleNextUnresolvedSubject(entry)} disabled={subjectRowsNeedingAction.length === 0}>
+                      Go to next issue
                     </Button>
                   </div>
                   {completedSubjectMappingEntryKey === entry.studentKey ? (
