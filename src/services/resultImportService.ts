@@ -73,6 +73,8 @@ export type ResultImportPreviewEntry = {
   selectedStudentId?: string;
   included?: boolean;
   workflowStatus?: "published" | "imported_draft";
+  /** Row-level save time supplied by the review RPC; not part of the persisted pupil payload. */
+  savedAt?: string;
   resultImportStudentId?: string;
   resultImportClassId?: string;
   importedResultCount?: number;
@@ -1220,21 +1222,26 @@ function reconcileMatchedImportEntry(
   student: Student,
   sourceStudentName: string,
   retainedWarnings: string[],
+  classes: SchoolClass[] = [],
 ): ResultImportPreviewEntry {
-  const officialClass = student.class_name?.trim() || entry.className;
+  // The registered pupil's class record is authoritative. Restore its assigned
+  // class teacher whenever a saved workbook review is reopened.
+  const assignment = resolveImportStudentAssignment(student, classes);
+  const officialClass = assignment.className || student.class_name?.trim() || entry.className;
   return {
     ...entry,
     sourceStudentName,
     studentName: getRegisteredStudentName(student),
     admissionNumber: student.admission_number || entry.admissionNumber,
     className: officialClass,
+    teacherName: assignment.teacherName || entry.teacherName,
     matchStatus: "matched",
     matchedStudentId: student.id,
     selectedStudentId: student.id,
     warnings: retainedWarnings,
     items: entry.items.map((item) => ({
       ...item,
-      classId: student.class_id ?? item.classId,
+      classId: assignment.classId ?? student.class_id ?? item.classId,
       className: officialClass || item.className,
     })),
   };
@@ -1324,6 +1331,7 @@ function normalizeSavedImportEntry(entry: ResultImportPreviewEntry): ResultImpor
 export function reconcileSavedImportStudentMatches(
   entries: ResultImportPreviewEntry[],
   students: Student[],
+  classes: SchoolClass[] = [],
 ): ResultImportPreviewEntry[] {
   const mappingWarningPrefixes = [
     "Select the correct student before import",
@@ -1365,7 +1373,7 @@ export function reconcileSavedImportStudentMatches(
           warnings: [...retainedWarnings, classConflict],
         };
       }
-      return reconcileMatchedImportEntry(entry, selectedStudent, sourceStudentName, retainedWarnings);
+      return reconcileMatchedImportEntry(entry, selectedStudent, sourceStudentName, retainedWarnings, classes);
     }
 
     // Preserve an intentionally saved candidate for manual review. A possible match is
@@ -1405,7 +1413,7 @@ export function reconcileSavedImportStudentMatches(
           warnings: [...retainedWarnings, classConflict],
         };
       }
-      return reconcileMatchedImportEntry(entry, matchedStudent, sourceStudentName, retainedWarnings);
+      return reconcileMatchedImportEntry(entry, matchedStudent, sourceStudentName, retainedWarnings, classes);
     }
 
     if (match.status === "manual-review") {
