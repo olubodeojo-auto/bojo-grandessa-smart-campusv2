@@ -1921,6 +1921,25 @@ describe("result workbook import preview", () => {
       savedAt: "2026-10-28T06:30:00Z",
       entry: { ...entry, workflowStatus: "imported_draft" as const },
     };
+    const olderImportedWithOnlyLinkedIdentity = {
+      workbookKey: "older-workbook:Sheet1",
+      ownerId: "admin-1",
+      savedAt: "2026-10-28T05:30:00Z",
+      entry: {
+        ...entry,
+        selectedStudentId: undefined,
+        matchedStudentId: undefined,
+        resultImportStudentId: "student-abdul",
+        resultImportClassId: "class-basic-5",
+        workflowStatus: "published" as const,
+      },
+    };
+    const newerPendingCopy = {
+      workbookKey: "newest-workbook:Sheet1",
+      ownerId: "admin-1",
+      savedAt: "2026-10-28T07:00:00Z",
+      entry: { ...entry, studentKey: "newer-entry" },
+    };
     const latestExcluded = {
       workbookKey: "latest-workbook:Sheet1",
       ownerId: "admin-1",
@@ -1928,6 +1947,7 @@ describe("result workbook import preview", () => {
       entry: { ...entry, included: false },
     };
     expect(collapseDuplicatePendingImportPupils([oldPending, latestImported])).toEqual([]);
+    expect(collapseDuplicatePendingImportPupils([olderImportedWithOnlyLinkedIdentity, newerPendingCopy])).toEqual([]);
     expect(collapseDuplicatePendingImportPupils([oldPending, latestExcluded])).toEqual([]);
   });
 
