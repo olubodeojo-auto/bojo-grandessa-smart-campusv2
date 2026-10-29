@@ -1583,7 +1583,7 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
               {bulkPublishing ? "Publishing ready reports…" : "Publish all ready reports"}
             </Button>
             <Button type="button" variant="secondary" onClick={() => setReportListView("drafts")}>
-              View reports needing attention
+              View unpublished reports
             </Button>
           </div>
         </section>
@@ -1593,7 +1593,7 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: 5, border: "1px solid #e2e8ef", borderRadius: 13, background: "#f8fafc" }} role="group" aria-label="Filter pupil report list">
             <Button type="button" variant={reportListView === "drafts" ? "primary" : "secondary"} aria-pressed={reportListView === "drafts"} onClick={() => setReportListView("drafts")}>
-              Needs attention
+              Unpublished
             </Button>
             <Button type="button" variant={reportListView === "all" ? "primary" : "secondary"} aria-pressed={reportListView === "all"} onClick={() => setReportListView("all")}>
               All reports
@@ -1688,14 +1688,14 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
 
               <section aria-labelledby="draft-pupil-results" style={{ display: "grid", gap: 10, minWidth: 0 }}>
                 <div>
-                  <h2 id="draft-pupil-results" style={{ margin: 0, fontSize: 19 }}>Reports needing attention</h2>
+                  <h2 id="draft-pupil-results" style={{ margin: 0, fontSize: 19 }}>Unpublished pupil reports</h2>
                   <p style={{ color: "#64748b", margin: "5px 0 0", fontSize: 13 }}>Reports that are not yet published, including reports that need a correction before release.</p>
                 </div>
                 {loadingPeriods ? (
                   <p role="status" style={{ color: "#64748b", margin: 0 }}>Loading draft pupil results…</p>
                 ) : needsAttentionReportPeriods.length === 0 ? (
                   <p style={{ color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 10, padding: 12, margin: 0 }}>
-                    {reportSearch ? "No draft pupil results match this search." : "No imported drafts need attention."}
+                    {reportSearch ? "No unpublished reports match this search." : "No unpublished reports need attention."}
                   </p>
                 ) : (
                   <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
