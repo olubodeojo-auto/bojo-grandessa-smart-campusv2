@@ -3512,7 +3512,7 @@ describe("results workflow migration contract", () => {
     expect(reportCardsPage).toContain('onClick={() => navigateToResults(period)}');
     expect(reportCardsPage).toContain("getReportCenterPublishBlockReason(period, results, isAdministrator, publicationEvidence)");
     expect(reportCardsPage).toContain("getReportCenterPublishActionState(");
-    expect(reportCardsPage).toContain("PUBLISH THIS REPORT");
+    expect(reportCardsPage).toContain("Publish report");\n    expect(reportCardsPage).toContain("More actions");
     expect(reportCardsPage).toContain("Publish all ready reports");
     expect(reportCardsPage).toContain('aria-labelledby="results-progress-heading"');
     expect(reportCardsPage).toContain("Imports to review");
