@@ -2537,12 +2537,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           setEditingResult(null);
         }}
       >
-        <div
-          role="region"
-          aria-label="Result form; scroll vertically to view all fields"
-          tabIndex={0}
-          style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable" }}
-        >
+        <ResultsScrollRegion label="Result form" maxHeight="calc(100dvh - 170px)">
           <ResultForm
             key={`${formMode}-${editingResult?.id ?? "new"}`}
             mode={formMode}
@@ -2558,7 +2553,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             }}
             onSaved={loadData}
           />
-        </div>
+        </ResultsScrollRegion>
       </AppModal>
 
       <AppModal
@@ -2581,12 +2576,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
         }}
         onClose={() => setIsBatchOpen(false)}
       >
-        <div
-          role="region"
-          aria-label="Batch result entry; scroll vertically to view all fields"
-          tabIndex={0}
-          style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable" }}
-        >
+        <ResultsScrollRegion label="Batch result entry" maxHeight="calc(100dvh - 170px)">
           <ResultBatchEntry
             key={resumeBatchResult?.id ?? "new-batch-entry"}
             students={students}
@@ -2606,7 +2596,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               setIsFormOpen(true);
             }}
           />
-        </div>
+        </ResultsScrollRegion>
       </AppModal>
 
       <AppModal
@@ -3644,14 +3634,9 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           </div>
         }
       >
-        <div
-          role="region"
-          aria-label="Result details; scroll vertically to view all fields"
-          tabIndex={0}
-          style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable" }}
-        >
+        <ResultsScrollRegion label="Result details" maxHeight="calc(100dvh - 170px)">
           <ResultDetails row={selectedRow} />
-        </div>
+        </ResultsScrollRegion>
       </AppModal>
     </>
   );
