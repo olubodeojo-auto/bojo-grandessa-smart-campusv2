@@ -2103,7 +2103,9 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
           </AppModal>
           : null}
 
-          <ReportCardDocument report={report} />
+          <ResultsScrollRegion label="Report card preview" maxHeight="min(75vh, 820px)">
+            <ReportCardDocument report={report} />
+          </ResultsScrollRegion>
         </div>
       ) : (
         <EmptyState title="Choose a report period" description="Search for a pupil above, then preview an available period from their existing results." />
