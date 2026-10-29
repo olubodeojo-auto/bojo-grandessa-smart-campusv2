@@ -2841,7 +2841,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           tabIndex={0}
           style={{
             display: "grid",
-            gridTemplateColumns: activeImportEntryKey ? "minmax(250px, 300px) minmax(0, 1fr)" : "minmax(0, 1fr)",
+            gridTemplateColumns: activeImportEntryKey ? "minmax(min(230px, 30vw), min(300px, 34vw)) minmax(0, 1fr)" : "minmax(0, 1fr)",
             gridAutoFlow: "row",
             alignItems: "start",
             gap: 10,
@@ -3033,7 +3033,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     top: isActivePupil ? "clamp(150px, 17vh, 178px)" : undefined,
                     right: isActivePupil ? 24 : undefined,
                     bottom: isActivePupil ? 78 : undefined,
-                    width: isActivePupil ? "calc(100vw - max(280px, 25vw) - 52px)" : undefined,
+                    width: isActivePupil ? "calc(100vw - min(300px, 34vw) - 52px)" : undefined,
                     boxSizing: "border-box",
                     zIndex: isActivePupil ? 1001 : undefined,
                     alignSelf: "start",
