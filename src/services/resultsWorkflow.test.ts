@@ -2889,7 +2889,7 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain("Currently editing · Pupil");
     expect(resultsPage).toContain("Save options for");
     expect(resultsPage).toContain("Save review progress");
-    expect(resultsPage).toContain("Save & publish this pupil");
+    expect(resultsPage).toContain("Publish this pupil now");
     expect(resultsPage).toContain("window.requestAnimationFrame");
     expect(resultsPage).toContain('overflowX: "hidden"');
     expect(resultsPage).toContain('tabIndex={0}');
@@ -2903,10 +2903,17 @@ describe("result workbook import preview", () => {
     expect(resultsPage).not.toContain("Back to top of review");
     expect(resultsPage).toMatch(/>\s*Cancel\s*<\/Button>/);
     expect(resultsPage).toContain("Review summary before saving");
-    expect(resultsPage).toContain("Save & publish this pupil");
+    expect(resultsPage).toContain("Publish this pupil now");
     expect(resultsPage).toContain("Save marks as draft");
     expect(resultsPage).toContain("function SynchronizedHorizontalScroll");
     expect(resultsPage).toContain("horizontal scrollbar");
+    expect(resultsPage).toContain('position: "sticky"');
+    expect(resultsPage).toContain("Next action for this pupil");
+    expect(resultsPage).toContain("Publish completed subjects now");
+    expect(resultsPage).toContain("Create pupil record");
+    expect(resultsPage).toContain("Delete saved review");
+    expect(resultsPage).not.toContain("Not assigned in the class record");
+    expect(resultsPage).not.toContain("Possible registered match");
     expect(resultsPage).not.toContain("Scroll left");
     expect(resultsPage).not.toContain("Scroll right");
     expect(resultsPage).toContain("Save results (");
@@ -3691,7 +3698,7 @@ describe("results workflow migration contract", () => {
     expect(resultsPage).toContain("const [activeImportEntryKey, setActiveImportEntryKey] = useState<string | null>(null)");
     expect(resultsPage).toContain("Review summary before saving");
     expect(resultsPage).toContain("Save review");
-    expect(resultsPage).toContain("Save & publish this pupil");
+    expect(resultsPage).toContain("Publish this pupil now");
     expect(resultsPage).toContain("Save marks as draft");
     expect(resultsPage).toContain("Set aside");
     expect(resultsPage).toContain('aria-label="Confirm registered pupil"');
@@ -3700,8 +3707,8 @@ describe("results workflow migration contract", () => {
     expect(resultsPage).not.toContain("Find student in records");
     expect(resultsPage).not.toContain("Search pupil name or admission number");
     expect(resultsPage).toContain("Preserve a resolved worksheet class");
-    expect(resultsPage).toContain("Set aside until subjects and marks are entered");
-    expect(resultsPage).toContain("Go to next issue");
+    expect(resultsPage).toContain("Add subject & marks");
+    expect(resultsPage).toContain("Fix next subject");
   });
 
   it("allows authenticated reads but restricts session and term mutations to administrators", () => {
@@ -3872,21 +3879,21 @@ describe("pupil matching is a direct registered-record confirmation", () => {
     expect(resultsPage).toContain('aria-label="Confirm registered pupil"');
     expect(resultsPage).toContain("Confirm this pupil");
     expect(resultsPage).toContain("Confirm change of pupil");
-    expect(resultsPage).toContain("Selected but not yet confirmed");
+    expect(resultsPage).toContain("Selected pupil");
     expect(resultsPage).not.toContain("Search pupil name or admission number");
     expect(resultsPage).not.toContain("studentSearch");
     expect(resultsPage).toContain("Choose a pupil from the school register");
-    expect(resultsPage).toContain("Set aside until subjects and marks are entered");
-    expect(resultsPage).toContain("Set aside until class is confirmed");
-    expect(resultsPage).toContain("Open session and report settings");
-    expect(resultsPage).toContain("Open report-card date fields");
+    expect(resultsPage).toContain("Add subject & marks");
+    expect(resultsPage).toContain("Class needs checking");
+    expect(resultsPage).toContain("Edit report settings");
+    expect(resultsPage).toContain("Fix report dates");
     expect(resultsPage).toContain("getImportSubjectRowsNeedingAction");
-    expect(resultsPage).toContain("Go to next issue");
+    expect(resultsPage).toContain("Fix next subject");
     expect(resultsPage).toContain("Blank-mark subject rows are intentionally omitted");
     expect(resultsPage).toContain("Rows with no required marks are skipped and must not raise duplicate-result blockers");
     expect(resultsPage).toContain("a true class-number mismatch stays in draft");
-    expect(reportCardsPage).toContain("Ready — missing marks skipped");
-    expect(reportCardsPage).toContain("Set aside — no complete marks");
+    expect(reportCardsPage).toContain("Ready — some marks left blank");
+    expect(reportCardsPage).toContain("Enter marks");
   });
 });
 
