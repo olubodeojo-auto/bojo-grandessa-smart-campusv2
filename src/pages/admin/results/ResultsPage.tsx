@@ -3047,7 +3047,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     boxShadow: "none",
                     gridColumn: isActivePupil ? "2" : "1",
                     position: isActivePupil ? "fixed" : "relative",
-                    top: isActivePupil ? "clamp(165px, 24vh, 218px)" : undefined,
+                    top: isActivePupil ? 200 : undefined,
                     right: isActivePupil ? 24 : undefined,
                     width: isActivePupil ? "calc(100vw - max(245px, 24vw) - 52px)" : undefined,
                     boxSizing: "border-box",
@@ -3055,7 +3055,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     alignSelf: "start",
                     minWidth: 0,
                     minHeight: 0,
-                    maxHeight: isActivePupil ? "calc(100dvh - clamp(245px, 34vh, 280px))" : undefined,
+                    maxHeight: isActivePupil ? "calc(100dvh - clamp(300px, 40vh, 350px))" : undefined,
                     overflowY: isActivePupil ? "auto" : "visible",
                     scrollMarginTop: 4,
                   }}
