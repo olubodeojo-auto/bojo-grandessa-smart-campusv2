@@ -694,10 +694,6 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
   const readyImportEntries = getImportableResultEntries(importEntries)
     .filter((entry) => importResultStates[entry.studentKey]?.state !== "saved");
   const importableBlocks = readyImportEntries.length;
-  const savedPupilCount = new Set([
-    ...Object.entries(draftSaveStates).filter(([, state]) => state.state === "saved").map(([key]) => key),
-    ...Object.entries(importResultStates).filter(([, state]) => state.state === "saved").map(([key]) => key),
-  ]).size;
   const activeImportEntry = importEntries.find((entry) => entry.studentKey === activeImportEntryKey);
   const activeWorkbookDraftKey = importWorkbookKey && selectedImportSheet
     ? `${importWorkbookKey}:${selectedImportSheet}`
