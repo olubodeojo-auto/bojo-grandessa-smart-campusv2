@@ -1245,7 +1245,7 @@ describe("Report Center period discovery and readiness", () => {
     expect(reportCardsPage).toContain("All reports");
     expect(reportCardsPage).toContain("Published student list");
     expect(reportCardsPage).toContain("Imports awaiting reconciliation");
-    expect(reportCardsPage).toContain("Draft pupil results");
+    expect(reportCardsPage).toContain("Reports needing attention");
     expect(reportCardsPage).toContain("Reconcile this pupil");
     expect(reportCardsPage).toContain("getImportReviewWorkbooks()");
     expect(reportCardsPage).toContain("getImportReviewDrafts(workbook.workbookKey, workbook.ownerId)");
@@ -3646,7 +3646,7 @@ describe("results workflow migration contract", () => {
     expect(reportCardsPage).toContain("Choose the correct registered pupil. If the worksheet class number differs from the registered class, keep this entry in drafts until the class is reconciled.");
     expect(reportCardsPage).toContain("Report type to confirm");
     expect(reportCardsPage).toContain("No outstanding imports to reconcile.");
-    expect(reportCardsPage).toContain("Draft pupil results");
+    expect(reportCardsPage).toContain("Reports needing attention");
     expect(reportCardsPage).toContain("Published student list");
     expect(resultsPage).toContain("completedEntries.length > 0");
     expect(resultsPage).toContain("All pupil entries in this workbook have already been imported");
