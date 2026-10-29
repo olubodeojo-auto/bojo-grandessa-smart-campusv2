@@ -2900,6 +2900,10 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain('gridTemplateColumns: activeImportEntryKey ? "minmax(min(230px, 30vw), min(300px, 34vw)) minmax(0, 1fr)" : "minmax(0, 1fr)"');
     expect(resultsPage).toContain('maxWidth: "none"');
     expect(resultsPage).toContain('gridColumn: isActivePupil ? "2" : "1"');
+    expect(resultsPage).toContain("grandessa-import-review-grid has-active-pupil");
+    expect(resultsPage).toContain("grandessa-import-active-pupil");
+    expect(resultsPage).toContain('gridRow: isActivePupil ? "1" : undefined');
+    expect(resultsPage).not.toContain('position: isActivePupil ? "fixed" : "relative"');
     expect(resultsPage).not.toContain("Back to top of review");
     expect(resultsPage).toMatch(/>\s*Cancel\s*<\/Button>/);
     expect(resultsPage).toContain("Review summary before saving");
