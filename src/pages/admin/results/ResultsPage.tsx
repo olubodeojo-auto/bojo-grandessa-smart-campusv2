@@ -109,63 +109,60 @@ type PublishSavedPeriodParams = {
 type PendingImportPupilStatus = { label: string; explanation: string };
 
 function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingImportPupilStatus {
-  const classConflict = entry.warnings.some((warning) =>
+  const classWarning = entry.warnings.find((warning) =>
     /selected student is not currently|worksheet says|workbook class differs|class differs|worksheet class/i.test(warning),
   );
-  if (classConflict) {
+  if (classWarning) {
+    const details = classWarning.match(/registered pupil is in (.+?), but the worksheet says (.+?)(?:\.|$)/i);
     return {
-      label: "Class mismatch — keep in draft",
-      explanation: "The selected pupil and worksheet class do not match. Keep this entry in drafts until the correct class is confirmed; do not move marks into a different class.",
+      label: "Class needs checking",
+      explanation: details
+        ? `Worksheet: ${details[2]} · school record: ${details[1]}. Choose the correct pupil or update the class record.`
+        : "The worksheet class and school record differ. Check the pupil and class record before publishing.",
     };
   }
-  if (entry.matchStatus === "manual-review") {
-    return { label: "Confirm pupil", explanation: "Choose the exact registered pupil from the dropdown and press Confirm this pupil." };
-  }
-  if (entry.matchStatus === "unmatched" || !entry.selectedStudentId) {
-    return { label: "Pupil match needed", explanation: "Choose the exact registered pupil from the dropdown and press Confirm this pupil. Name differences alone do not prevent a manual match." };
+  if (entry.matchStatus === "manual-review" || entry.matchStatus === "unmatched" || !entry.selectedStudentId) {
+    return { label: "Choose a pupil", explanation: "Select the pupil from Students below. If no school record exists yet, create the pupil first." };
   }
   if (entry.reportKind === "Unclear") {
-    return { label: "Report type to confirm", explanation: "Choose Midterm (CA) or End-of-Term before importing." };
+    return { label: "Choose report type", explanation: "Select Midterm (CA) or End-of-Term in report settings." };
   }
   if (!entry.academicYear.trim()) {
-    return { label: "Session to confirm", explanation: "Open session and report settings, then choose the correct academic session." };
+    return { label: "Choose session", explanation: "Select the academic session in report settings." };
   }
   if (!entry.term) {
-    return { label: "Term to confirm", explanation: "Open session and report settings, then choose the correct school term." };
+    return { label: "Choose term", explanation: "Select the school term in report settings." };
   }
   if (entry.items.length === 0) {
-    return { label: "No subject rows", explanation: "No subject rows were found. Add the required subjects and marks, or set this pupil aside. Other pupils can still proceed." };
+    return { label: "Add subjects", explanation: "No subjects were found for this pupil. Add a subject row, choose the subject, and enter its marks." };
   }
 
   const itemsToSave = getImportItemsForSave(entry);
   const unresolvedSubject = itemsToSave.find((item) => !item.subjectId || !item.classId);
   if (unresolvedSubject) {
-    return { label: "Subject or class to confirm", explanation: `Resolve "${unresolvedSubject.subjectName}" in the subject grid. Use Go to next issue to bring its row into view.` };
+    return { label: "Match subject", explanation: `Choose the official subject for “${unresolvedSubject.subjectName}” in the table below.` };
   }
   if (itemsToSave.length === 0) {
     return {
-      label: "Set aside — no complete marks",
-      explanation: "There are no complete subject marks for this pupil yet. Set this pupil aside until subjects and marks are entered. This will not block other pupils from being saved or published.",
+      label: "Enter marks",
+      explanation: "Add marks to at least one subject. Other complete pupil results can be saved while you finish this entry.",
     };
   }
 
   const scoreWarnings = getImportScoreWarnings({ ...entry, items: itemsToSave });
   if (scoreWarnings.length > 0 || itemsToSave.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
-    return { label: "Correct invalid marks", explanation: "A subject contains a nonblank invalid or out-of-range mark. Use Go to next issue to find the row, correct the value, and try again." };
+    return { label: "Check marks", explanation: "One or more scores needs correcting. Use the action below to jump to the subject row." };
   }
 
-  const skippedItems = [
-    ...(entry.skippedItems ?? []),
-    ...entry.items.filter(isImportItemSkippableForMissingMarks),
-  ];
+  const skippedItems = [...(entry.skippedItems ?? []), ...entry.items.filter(isImportItemSkippableForMissingMarks)];
   if (skippedItems.length > 0) {
     const names = [...new Set(skippedItems.map((item) => item.subjectName).filter(Boolean))].join(", ");
     return {
-      label: "Ready — missing marks skipped",
-      explanation: `Complete subject rows can be saved and published now. Blank-mark subjects (${names || "listed in the subject grid"}) will remain out of this pass and can be entered later.`,
+      label: "Ready — some marks left blank",
+      explanation: `Complete subjects can be published now. Blank subjects (${names || "shown below"}) will be left out and can be completed later.`,
     };
   }
-  return { label: "Ready to review", explanation: "The required subject rows have complete marks. Save the pupil's results or publish them now." };
+  return { label: "Ready to publish", explanation: "All entered subjects have complete marks." };
 }
 
 function importItemKey(entry: ResultImportPreviewEntry, itemIndex: number): string {
@@ -344,6 +341,10 @@ function SynchronizedHorizontalScroll({ id, label, children }: { id: string; lab
           maxWidth: "100%",
           height: 24,
           marginBottom: 5,
+          position: "sticky",
+          top: 0,
+          zIndex: 5,
+          flex: "0 0 auto",
           overflowX: "auto",
           overflowY: "hidden",
           overscrollBehaviorX: "contain",
@@ -1336,7 +1337,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
 
   const handleDiscardImportDraft = async (entry: ResultImportPreviewEntry): Promise<void> => {
     if (!activeWorkbookDraftKey || !window.confirm(
-      `Discard ${entry.studentName}'s saved review and remove this pupil from the current workbook review?`,
+      `Delete ${entry.studentName}'s saved review? This removes the saved review only; results already saved are not deleted.`,
     )) return;
     const saveKey = `${activeWorkbookDraftKey}:${entry.studentKey}`;
     const pendingSave = draftSaveQueue.current.get(saveKey);
@@ -2310,11 +2311,11 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                           <h3 style={{ margin: 0, fontSize: 16, overflowWrap: "anywhere" }}>{displayName}</h3>
                           <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13 }}>
                             {entry.matchStatus === "matched" && confirmedPupil ? (
-                              <>Registered class: {officialClass?.class_name || confirmedPupil.class_name || "Needs confirmation"} · Class teacher: {officialTeacherName || "Not assigned in the class record"}</>
+                              <>Registered class: {officialClass?.class_name || confirmedPupil.class_name || "Needs confirmation"}</>
                             ) : possiblePupil ? (
-                              <>Worksheet class: {entry.className || "Needs confirmation"} · Possible registered class: {officialClass?.class_name || possiblePupil.class_name || "Needs confirmation"} · Class teacher: {officialTeacherName || "Not assigned in the class record"}</>
+                              <>Worksheet class: {entry.className || "Needs confirmation"} · School record class: {officialClass?.class_name || possiblePupil.class_name || "Needs confirmation"}</>
                             ) : (
-                              <>Class: {officialClass?.class_name || entry.className || "Needs confirmation"} · Class teacher: {officialTeacherName || "Not assigned in the class record"}</>
+                              <>Class: {officialClass?.class_name || entry.className || "Needs confirmation"}</>
                             )}
                           </p>
                           <p style={{ margin: "3px 0 0", color: "#64748b", fontSize: 13 }}>
@@ -2324,7 +2325,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                             <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 12 }}>Name on worksheet: {worksheetName}</p>
                           ) : null}
                           {entry.matchStatus !== "matched" && possiblePupil ? (
-                            <p style={{ margin: "4px 0 0", color: "#92400e", fontSize: 13 }}>Possible registered match: {possiblePupil.first_name} {possiblePupil.last_name}. Confirm before importing.</p>
+                            <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 12 }}>Suggested school record: {possiblePupil.first_name} {possiblePupil.last_name}</p>
                           ) : null}
                         </div>
                         <span style={statusBadgeStyle(progress.label)}>{progress.label}</span>
@@ -2332,21 +2333,13 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                       <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>{progress.explanation}</p>
                       {entry.matchStatus !== "matched" || possiblePupil ? (
                         <details style={{ border: "1px solid #fde68a", borderRadius: 8, padding: "8px 10px", background: "#fffbeb" }}>
-                          <summary style={{ cursor: "pointer", color: "#92400e", fontSize: 13, fontWeight: 700 }}>Why this pupil needs review</summary>
+                          <summary style={{ cursor: "pointer", color: "#334155", fontSize: 13, fontWeight: 700 }}>Pupil and class details</summary>
                           <div style={{ display: "grid", gap: 5, marginTop: 8, fontSize: 13, color: "#78350f", overflowWrap: "anywhere" }}>
                             <div><strong>Name on worksheet:</strong> {worksheetName || "Not detected"}</div>
                             <div><strong>Registered pupil:</strong> {possiblePupil ? [possiblePupil.first_name, possiblePupil.middle_name, possiblePupil.last_name].filter(Boolean).join(" ") : confirmedPupil ? [confirmedPupil.first_name, confirmedPupil.middle_name, confirmedPupil.last_name].filter(Boolean).join(" ") : "No pupil has been confirmed yet"}</div>
                             <div><strong>Worksheet class:</strong> {entry.className || "Not detected"}</div>
                             <div><strong>Registered class:</strong> {officialClass?.class_name || rosterCandidate?.class_name || "Not confirmed"}</div>
-                            {entry.warnings.length > 0 ? (
-                              <div><strong>Reason recorded by the import check:</strong>
-                                <ul style={{ margin: "4px 0 0", paddingLeft: 20 }}>
-                                  {entry.warnings.map((warning, warningIndex) => <li key={`${warning}-${warningIndex}`}>{warning}</li>)}
-                                </ul>
-                              </div>
-                            ) : (
-                              <div>The system could not confirm the pupil from the worksheet name alone. Check the school register and admission number before importing.</div>
-                            )}
+                            <div>Use the class and admission number above to confirm the school record.</div>
                           </div>
                         </details>
                       ) : null}
@@ -2977,6 +2970,11 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               const pendingStudent = studentsMap.get(pendingStudentId);
               const matchedCandidate = studentsMap.get(entry.matchedStudentId ?? "");
               const pupilStatus = getPendingImportPupilStatus(entry);
+              const hasClassConflict = entry.warnings.some((warning) =>
+                /selected student is not currently|worksheet says|workbook class differs|class differs|worksheet class/i.test(warning),
+              );
+              const needsPupilMatch = entry.matchStatus !== "matched" || !entry.selectedStudentId;
+              const hasSkippableSubjectRows = [...(entry.skippedItems ?? []), ...entry.items.filter(isImportItemSkippableForMissingMarks)].length > 0;
               const subjectRowsNeedingAction = getImportSubjectRowsNeedingAction(entry);
               const importScoreWarnings = getImportScoreWarnings({ ...entry, items: getImportItemsForSave(entry) });
               const hasNoCompleteSubjectMarks = entry.items.length === 0 || getImportItemsForSave(entry).length === 0;
@@ -3150,8 +3148,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                           {registeredStudent
                             ? [registeredStudent.first_name, registeredStudent.middle_name, registeredStudent.last_name].filter(Boolean).join(" ")
                             : matchedCandidate
-                              ? `Possible match — ${[matchedCandidate.first_name, matchedCandidate.middle_name, matchedCandidate.last_name].filter(Boolean).join(" ")} (not confirmed)`
-                              : "Not yet matched to a school record"}
+                              ? `Suggested school record: ${[matchedCandidate.first_name, matchedCandidate.middle_name, matchedCandidate.last_name].filter(Boolean).join(" ")}`
+                              : "No school record selected yet"}
                         </div>
                       </div>
                       <div>
@@ -3165,6 +3163,93 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                       <div>
                         <div style={{ color: "#64748b" }}>Official class</div>
                         <div style={{ fontWeight: 600 }}>{registeredStudent?.class_name || entry.className || "Not confirmed"}</div>
+                      </div>
+                    </div>
+                  </section>
+                  <section aria-label="Next action for this pupil" style={{ margin: "0 0 12px", padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: 9, background: "#fff", display: "grid", gap: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
+                      <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, color: "#172b4d" }}>{pupilStatus.label}</div>
+                        <div style={{ marginTop: 3, color: "#64748b", fontSize: 13, lineHeight: 1.45 }}>{pupilStatus.explanation}</div>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                        {hasClassConflict ? (
+                          <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById(`registered-pupil-${entry.studentKey}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}>
+                            Check pupil and class
+                          </Button>
+                        ) : null}
+                        {needsPupilMatch && matchedCandidate ? (
+                          <Button type="button" size="sm" onClick={() => void handleImportSelection(index, matchedCandidate.id)}>
+                            Use suggested pupil
+                          </Button>
+                        ) : null}
+                        {needsPupilMatch ? (
+                          <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById(`registered-pupil-${entry.studentKey}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}>
+                            Choose pupil
+                          </Button>
+                        ) : null}
+                        {needsPupilMatch && isAdmin && !entry.selectedStudentId ? (
+                          <Button type="button" size="sm" variant="secondary" onClick={() => handleAddStudentToImport(index)}>
+                            Create pupil record
+                          </Button>
+                        ) : null}
+                        {entry.items.length === 0 ? (
+                          <Button type="button" size="sm" onClick={() => {
+                            handleAddImportSubjectRow(index);
+                            window.requestAnimationFrame(() => document.getElementById(`subject-mappings-${index}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+                          }}>
+                            Add subject & marks
+                          </Button>
+                        ) : null}
+                        {entry.items.length > 0 && hasNoCompleteSubjectMarks ? (
+                          <Button type="button" size="sm" onClick={() => document.getElementById(`subject-mappings-${index}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                            Enter marks
+                          </Button>
+                        ) : null}
+                        {subjectRowsNeedingAction.length > 0 ? (
+                          <Button type="button" size="sm" variant="secondary" onClick={() => handleNextUnresolvedSubject(entry)}>
+                            Fix next subject
+                          </Button>
+                        ) : null}
+                        {hasSkippableSubjectRows && !hasNoCompleteSubjectMarks && !hasClassConflict && isImportEntryReady(entry) ? (
+                          <>
+                            <Button type="button" size="sm" variant="secondary" onClick={() => {
+                              const missingIndex = entry.items.findIndex(isImportItemSkippableForMissingMarks);
+                              if (missingIndex >= 0) {
+                                const rowKey = getImportSubjectRowKey(entry, missingIndex);
+                                setActiveSubjectRowKey(rowKey);
+                                window.requestAnimationFrame(() => document.getElementById(rowKey)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+                              } else {
+                                document.getElementById(`subject-mappings-${index}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                              }
+                            }}>
+                              Edit missing subjects
+                            </Button>
+                            {isAdmin ? (
+                              <Button type="button" size="sm" onClick={() => void handleConfirmImport(true, entry.studentKey)}>
+                                Publish completed subjects now
+                              </Button>
+                            ) : null}
+                          </>
+                        ) : null}
+                        {["Choose report type", "Choose session", "Choose term"].includes(pupilStatus.label) ? (
+                          <Button type="button" size="sm" variant="secondary" onClick={() => {
+                            const settings = document.getElementById(`import-settings-${entry.studentKey}`);
+                            settings?.setAttribute("open", "");
+                            settings?.scrollIntoView({ behavior: "smooth", block: "center" });
+                          }}>
+                            Edit report settings
+                          </Button>
+                        ) : null}
+                        {getImportReportDateErrors(entry).length > 0 ? (
+                          <Button type="button" size="sm" variant="secondary" onClick={() => {
+                            const details = document.getElementById(`import-report-details-${entry.studentKey}`);
+                            details?.setAttribute("open", "");
+                            details?.scrollIntoView({ behavior: "smooth", block: "center" });
+                          }}>
+                            Fix report dates
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   </section>
@@ -3183,7 +3268,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>Save options for {entry.studentName || "this pupil"}</div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       <Button type="button" size="sm" variant="secondary" onClick={() => void handleSaveProgress()}>
-                        {draftSaveStates[entry.studentKey]?.state === "saving" ? "Saving review…" : "Save review progress"}
+                        {draftSaveStates[entry.studentKey]?.state === "saving" ? "Saving…" : "Save progress"}
                       </Button>
                       <Button
                         type="button"
@@ -3202,12 +3287,12 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                           disabled={importSubmitting || !isImportEntryReady(entry)}
                           style={{ background: "#047857", borderColor: "#047857", color: "#fff", fontWeight: 900 }}
                         >
-                          Save & publish this pupil
+                          Publish this pupil now
                         </Button>
                       ) : null}
                       {draftSaveStates[entry.studentKey]?.state === "saved" ? (
                         <Button type="button" size="sm" variant="secondary" onClick={() => void handleDiscardImportDraft(entry)}>
-                          Discard this saved review
+                          Delete saved review
                         </Button>
                       ) : null}
                     </div>
@@ -3270,15 +3355,18 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                       </label>
                     </div>
                   </details>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12, color: "#334155" }}>
-                    <strong>{entry.items.length} subject row(s)</strong>
-                    <Button type="button" size="sm" variant="secondary" onClick={() => handleAddImportSubjectRow(index)}>
-                      Add subject row
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10, color: "#334155" }}>
+                    <strong>{entry.items.length} subject{entry.items.length === 1 ? "" : "s"}</strong>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => {
+                      handleAddImportSubjectRow(index);
+                      window.requestAnimationFrame(() => document.getElementById(`subject-mappings-${index}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+                    }}>
+                      {entry.items.length === 0 ? "Add subject & marks" : "Add subject"}
                     </Button>
                   </div>
                   {entry.items.length === 0 ? (
-                    <div role="status" style={{ padding: 12, marginBottom: 12, border: "1px dashed #94a3b8", borderRadius: 10, background: "#f8fafc", color: "#475569" }}>
-                      No subject scores were found in the worksheet. Add a subject row below, choose the official subject, and enter the mark. This pupil remains a draft until the class and marks are checked.
+                    <div role="status" style={{ padding: "10px 12px", marginBottom: 10, border: "1px solid #e2e8f0", borderRadius: 8, background: "#f8fafc", color: "#475569" }}>
+                      No subjects yet. Add a subject above, then enter the pupil’s marks.
                     </div>
                   ) : null}
 
@@ -3374,7 +3462,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     </div>
                     {pendingStudentId && pendingStudentId !== studentId && pendingStudent ? (
                       <div role="status" style={{ marginTop: 8, padding: 8, borderRadius: 8, background: "#fffbeb", color: "#92400e", fontSize: 13, overflowWrap: "anywhere" }}>
-                        <strong>Selected but not yet confirmed:</strong> {[pendingStudent.first_name, pendingStudent.middle_name, pendingStudent.last_name].filter(Boolean).join(" ")} · Admission {pendingStudent.admission_number || "not recorded"} · Class {pendingStudent.class_name || "not assigned"}. Press <strong>{studentId ? "Confirm change of pupil" : "Confirm this pupil"}</strong> above to apply this selection.
+                        <strong>Selected pupil:</strong> {[pendingStudent.first_name, pendingStudent.middle_name, pendingStudent.last_name].filter(Boolean).join(" ")} · Admission {pendingStudent.admission_number || "not recorded"} · Class {pendingStudent.class_name || "not assigned"}. Select <strong>{studentId ? "Confirm change of pupil" : "Use this pupil"}</strong> to continue.
                       </div>
                     ) : registeredStudent ? (
                       <div role="status" style={{ marginTop: 8, color: "#166534", fontSize: 13, overflowWrap: "anywhere" }}>
@@ -3388,11 +3476,16 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                   </section>
 
                   {entry.warnings.length > 0 || importScoreWarnings.length > 0 ? (
-                    <div style={{ marginBottom: 12, color: "#b45309", fontSize: 13, overflowWrap: "anywhere" }}>
-                      {[...entry.warnings, ...importScoreWarnings].map((warning) => (
-                        <div key={warning}>{warning}</div>
-                      ))}
-                    </div>
+                    <details style={{ marginBottom: 10, border: "1px solid #e2e8f0", borderRadius: 8, padding: "8px 10px", background: "#fff" }}>
+                      <summary style={{ cursor: "pointer", color: "#475569", fontSize: 12, fontWeight: 600 }}>
+                        Additional notes ({new Set([...entry.warnings, ...importScoreWarnings]).size})
+                      </summary>
+                      <div style={{ display: "grid", gap: 4, marginTop: 8, color: "#64748b", fontSize: 12, overflowWrap: "anywhere" }}>
+                        {[...new Set([...entry.warnings, ...importScoreWarnings])].filter((warning) =>
+                          !/selected student is not currently|worksheet says|workbook class differs|class differs|worksheet class/i.test(warning),
+                        ).map((warning) => <div key={warning}>{warning}</div>)}
+                      </div>
+                    </details>
                   ) : null}
                   {visibleNotices.length > 0 ? (
                     <div role="status" style={{ marginBottom: 12, padding: 10, borderRadius: 8, background: "#eff6ff", color: "#1e40af", fontSize: 13 }}>
@@ -3402,66 +3495,6 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     </div>
                   ) : null}
 
-                  <div role="status" style={{ margin: "4px 0 12px", padding: 12, borderRadius: 10, border: isImportEntryReady(entry) ? "1px solid #86efac" : "1px solid #cbd5e1", background: isImportEntryReady(entry) ? "#f0fdf4" : "#f8fafc", color: isImportEntryReady(entry) ? "#166534" : "#334155", overflowWrap: "anywhere" }}>
-                    <strong>{isImportEntryReady(entry) ? "Ready to save" : pupilStatus.label}</strong>
-                    <div style={{ marginTop: 4 }}>{pupilStatus.explanation}</div>
-                    {(hasNoCompleteSubjectMarks || pupilStatus.label.startsWith("Class mismatch")) ? (
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                        {hasNoCompleteSubjectMarks ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => handleImportInclusionChange(index, false)}
-                          >
-                            Set aside until subjects and marks are entered
-                          </Button>
-                        ) : null}
-                        {pupilStatus.label.startsWith("Class mismatch") ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => handleImportInclusionChange(index, false)}
-                          >
-                            Set aside until class is confirmed
-                          </Button>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                  {pupilStatus.label === "Session to confirm" || pupilStatus.label === "Term to confirm" || pupilStatus.label === "Report type to confirm" ? (
-                    <div style={{ marginBottom: 8 }}>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => {
-                          const settings = document.getElementById(`import-settings-${entry.studentKey}`);
-                          settings?.setAttribute("open", "");
-                          settings?.scrollIntoView({ behavior: "smooth", block: "center" });
-                        }}
-                      >
-                        Open session and report settings
-                      </Button>
-                    </div>
-                  ) : null}
-                  {getImportReportDateErrors(entry).length > 0 ? (
-                    <div style={{ marginBottom: 8 }}>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => {
-                          const reportDetails = document.getElementById(`import-report-details-${entry.studentKey}`);
-                          reportDetails?.setAttribute("open", "");
-                          reportDetails?.scrollIntoView({ behavior: "smooth", block: "center" });
-                        }}
-                      >
-                        Open report-card date fields
-                      </Button>
-                    </div>
-                  ) : null}
                   {getImportReportDateErrors(entry).map((dateError) => (
                     <div key={dateError} role="alert" style={{ color: "#b91c1c", fontSize: 13, marginBottom: 8, overflowWrap: "anywhere" }}>
                       {dateError}
