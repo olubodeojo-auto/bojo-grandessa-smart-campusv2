@@ -3641,8 +3641,8 @@ describe("results workflow migration contract", () => {
     expect(importReviewIntegrityMigration).toContain("result_import_review_drafts_completed_entry_integrity_check");
     expect(importStatusHardeningMigration).toContain("More than one saved result exists for a pupil subject");
     expect(importStatusHardeningMigration).toContain("The saved subject rows have missing or invalid marks");
-    expect(resultsPage).toContain("Add subject row");
-    expect(resultsPage).toContain("No subject scores were found in the worksheet.");
+    expect(resultsPage).toContain("Add subject & marks");
+    expect(resultsPage).toContain("No subjects yet. Add a subject above, then enter the pupil’s marks.");
     expect(reportCardService).toContain("publishedSubjectRowCount");
     expect(reportCardService).toContain("draftImportedSubjectRowCount");
     expect(reportCardService).toContain("linkedPupilNames");
@@ -3652,7 +3652,7 @@ describe("results workflow migration contract", () => {
     expect(reportCardService).toContain("reportTypeReviewPupilNames");
     expect(reportCardService).toContain("missingScorePupilNames");
     expect(reportCardsPage).toContain("Imports awaiting reconciliation");
-    expect(reportCardsPage).toContain("Choose the correct registered pupil. If the worksheet class number differs from the registered class, keep this entry in drafts until the class is reconciled.");
+    expect(reportCardsPage).toContain("The worksheet class and school record differ. Check the pupil and class record before publishing.");
     expect(reportCardsPage).toContain("Report type to confirm");
     expect(reportCardsPage).toContain("No outstanding imports to reconcile.");
     expect(reportCardsPage).toContain("Unpublished pupil reports");
