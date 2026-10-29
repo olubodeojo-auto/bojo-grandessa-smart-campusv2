@@ -1080,8 +1080,8 @@ describe("Report Center period discovery and readiness", () => {
   });
 
   it("uses one Results and reports workspace for entering, reviewing and publishing", () => {
-    expect(reportCardsPage).toContain(">Results &amp; reports</h1>");
-    expect(workspacePage).toContain("Results &amp; reports");
+    expect(reportCardsPage).toContain(">Student Results</h1>");
+    expect(workspacePage).toContain("Student Results");
     expect(workspacePage).toContain('id="results-entry-section"');
     expect(workspacePage).toContain('id="review-publish-section"');
     expect(workspacePage).toContain("Enter marks, fix pupil or subject mismatches, then publish reports.");

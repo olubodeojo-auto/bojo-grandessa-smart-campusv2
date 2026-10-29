@@ -45,7 +45,7 @@ export default function ResultsWorkspacePage() {
       >
         <div style={{ minWidth: 0, flex: "1 1 420px" }}>
           <h1 style={{ margin: 0, color: "#172b4d", fontFamily: "Fredoka", fontSize: "clamp(25px, 2.6vw, 32px)", lineHeight: 1.15, letterSpacing: "-0.02em" }}>
-            Results &amp; reports
+            Student Results
           </h1>
           <p style={{ margin: "6px 0 0", color: "#526277", fontSize: 14, lineHeight: 1.45 }}>
             Enter marks, fix pupil or subject mismatches, then publish reports.

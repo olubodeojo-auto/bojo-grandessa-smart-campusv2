@@ -898,7 +898,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
       const completedEntries = mergedEntries.filter((entry) => Boolean(entry.workflowStatus));
       const restoredEntries = mergedEntries.filter((entry) => !entry.workflowStatus);
       setImportSummary(completedEntries.length > 0
-        ? `${completedEntries.length} pupil review(s) were skipped because their results have already been imported. Check Results & reports for their saved status.`
+        ? `${completedEntries.length} pupil review(s) were skipped because their results have already been imported. Check Student Results for their saved status.`
         : "");
       setImportEntries(withSelectedDuplicateWarnings(restoredEntries));
       setDraftSaveStates(Object.fromEntries(savedEntries.filter((entry) => !entry.workflowStatus).map((entry) => [entry.studentKey, { state: "saved" as const }])));
@@ -945,7 +945,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
       const completedEntries = entries.filter((entry) => Boolean(entry.workflowStatus));
       const pendingEntries = entries.filter((entry) => !entry.workflowStatus);
       if (pendingEntries.length === 0) {
-        setImportSummary("All pupil entries in this workbook have already been imported. Their publication status is shown in Results & reports; no duplicate import was started.");
+        setImportSummary("All pupil entries in this workbook have already been imported. Their publication status is shown in Student Results; no duplicate import was started.");
         return;
       }
       const reconciledEntries = reconcileSavedImportStudentMatches(

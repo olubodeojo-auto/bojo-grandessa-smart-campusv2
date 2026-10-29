@@ -1511,7 +1511,7 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
       {!embedded ? (
       <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div style={{ minWidth: 0, flex: "1 1 340px" }}>
-          <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>Results &amp; reports</h1>
+          <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>Student Results</h1>
           <p style={{ color: "#475569", marginTop: 8 }}>
             Review pupil reports, clear any blockers, and confirm what has already been published.
           </p>
