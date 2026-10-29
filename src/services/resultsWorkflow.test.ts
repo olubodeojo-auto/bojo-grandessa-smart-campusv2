@@ -1062,7 +1062,7 @@ describe("Report Center period discovery and readiness", () => {
 
   it("confirms the selected report identity, status, and affected count while retaining older delete actions", () => {
     expect(reportCardsPage).toContain("{canDeleteReport ? (");
-    expect(reportCardsPage).toContain("Delete Report Card");
+    expect(reportCardsPage).toContain("Delete report card");
     expect(reportCardsPage).toContain("Admission number: ${admissionNumber}");
     expect(reportCardsPage).toContain("Class: ${className}");
     expect(reportCardsPage).toContain("Academic session: ${period.academicYear}");
@@ -1073,14 +1073,18 @@ describe("Report Center period discovery and readiness", () => {
     expect(reportCardsPage).toContain("This permanently deletes the listed subject-result records");
     expect(reportCardsPage).toContain("Existing subject-result audit history is retained.");
     expect(reportCardsPage).toContain("if (outcome.cancelled) return;");
-    expect(reportCardsPage).toContain("Delete Draft");
+    expect(reportCardsPage).toContain("Delete draft");
     expect(groupedResults).toContain("<Trash2 size={16} /> Delete");
   });
 
-  it("labels the publishing workspace Publish Drafts and Results and keeps the Results module distinct", () => {
-    expect(reportCardsPage).toContain(">Publish Drafts and Results</h1>");
-    expect(workspacePage).toContain(">Publish Drafts and Results</h1>");
-    expect(resultsPage).toContain('embedded ? "Enter or import results" : "Results"');
+  it("uses one Results and reports workspace for entering, reviewing and publishing", () => {
+    expect(reportCardsPage).toContain(">Results &amp; reports</h1>");
+    expect(workspacePage).toContain("Results &amp; reports");
+    expect(workspacePage).toContain('id="results-entry-section"');
+    expect(workspacePage).toContain('id="review-publish-section"');
+    expect(workspacePage).toContain("One workspace from marks to published reports");
+    expect(workspacePage).not.toContain("useState<WorkspaceView");
+    expect(resultsPage).toContain('embedded ? "Enter or import marks" : "Results"');
     expect(workspacePage).toContain("<ReportCardsPage embedded />");
     expect(workspacePage).toContain("<ResultsPage embedded />");
     expect(workspacePage).not.toContain(">Results</h1>");
@@ -1237,10 +1241,11 @@ describe("Report Center period discovery and readiness", () => {
   });
 
   it("shows two pupil lists and reconciles one saved import entry at a time", () => {
-    expect(reportCardsPage).toContain("Draft student list");
+    expect(reportCardsPage).toContain("Unpublished");
+    expect(reportCardsPage).toContain("All reports");
     expect(reportCardsPage).toContain("Published student list");
     expect(reportCardsPage).toContain("Imports awaiting reconciliation");
-    expect(reportCardsPage).toContain("Draft pupil results");
+    expect(reportCardsPage).toContain("Unpublished pupil reports");
     expect(reportCardsPage).toContain("Reconcile this pupil");
     expect(reportCardsPage).toContain("getImportReviewWorkbooks()");
     expect(reportCardsPage).toContain("getImportReviewDrafts(workbook.workbookKey, workbook.ownerId)");
@@ -3507,8 +3512,9 @@ describe("results workflow migration contract", () => {
     expect(reportCardsPage).toContain('onClick={() => navigateToResults(period)}');
     expect(reportCardsPage).toContain("getReportCenterPublishBlockReason(period, results, isAdministrator, publicationEvidence)");
     expect(reportCardsPage).toContain("getReportCenterPublishActionState(");
-    expect(reportCardsPage).toContain("PUBLISH THIS REPORT");
-    expect(reportCardsPage).toContain("PUBLISH ALL READY REPORTS");
+    expect(reportCardsPage).toContain("Publish report");
+    expect(reportCardsPage).toContain("More actions");
+    expect(reportCardsPage).toContain("Publish all ready reports");
     expect(reportCardsPage).toContain('aria-labelledby="results-progress-heading"');
     expect(reportCardsPage).toContain("Imports to review");
     expect(reportCardsPage).toContain("All pupil reports in this workspace are published.");
@@ -3640,7 +3646,7 @@ describe("results workflow migration contract", () => {
     expect(reportCardsPage).toContain("Choose the correct registered pupil. If the worksheet class number differs from the registered class, keep this entry in drafts until the class is reconciled.");
     expect(reportCardsPage).toContain("Report type to confirm");
     expect(reportCardsPage).toContain("No outstanding imports to reconcile.");
-    expect(reportCardsPage).toContain("Draft pupil results");
+    expect(reportCardsPage).toContain("Unpublished pupil reports");
     expect(reportCardsPage).toContain("Published student list");
     expect(resultsPage).toContain("completedEntries.length > 0");
     expect(resultsPage).toContain("All pupil entries in this workbook have already been imported");
@@ -3841,7 +3847,7 @@ describe("uncertain result save feedback", () => {
 });
 
 
-describe("unified Results / Publish Drafts and Results workflow", () => {
+describe("unified Results and reports workflow", () => {
   it("routes Results, subject entry, and report publishing into one workspace", () => {
     expect(appSource).toContain('path="results" element={<ProtectedRoute allowedRoles={resultsRoles}><ResultsWorkspacePage /></ProtectedRoute>}');
     expect(appSource).toContain('path="result-records" element={<ProtectedRoute allowedRoles={resultsRoles}><RedirectLegacyResultsRoute /></ProtectedRoute>}');
