@@ -73,6 +73,7 @@ import ResultForm from "./ResultForm";
 import ResultBatchEntry from "./ResultBatchEntry";
 import ResultTableGrouped from "./ResultTableGrouped";
 import ResultsNotificationBell from "./ResultsNotificationBell";
+import ResultsScrollRegion from "./ResultsScrollRegion";
 import type { ResultNotice } from "./ResultsNotificationBell";
 import type { ResultRow } from "./ResultTable";
 import { grandessaGradingScale } from "../../../config/grandessaGrading";
@@ -297,94 +298,12 @@ function Detail({ label, value }: { label: string; value: string }) {
 }
 
 function SynchronizedHorizontalScroll({ id, label, children }: { id: string; label: string; children: ReactNode }) {
-  const topScrollRef = useRef<HTMLDivElement | null>(null);
-  const tableScrollRef = useRef<HTMLDivElement | null>(null);
-  const [contentWidth, setContentWidth] = useState(1050);
-
-  useEffect(() => {
-    const container = tableScrollRef.current;
-    const table = container?.querySelector("table");
-    if (!container || !table) return;
-
-    const measureWidth = (): void => {
-      const width = Math.max(table.scrollWidth, table.getBoundingClientRect().width, container.clientWidth);
-      setContentWidth((current) => current === width ? current : width);
-    };
-    measureWidth();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measureWidth);
-    observer?.observe(table);
-    observer?.observe(container);
-    window.addEventListener("resize", measureWidth);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", measureWidth);
-    };
-  }, []);
-
+  // ResultsScrollRegion keeps a horizontal scrollbar available above the content
+  // and provides independent vertical and horizontal scrolling within this layer.
   return (
-    <>
-      <div
-        ref={topScrollRef}
-        role="region"
-        aria-label={`${label} horizontal scrollbar`}
-        tabIndex={0}
-        onScroll={(event) => {
-          const tableContainer = tableScrollRef.current;
-          if (tableContainer && tableContainer.scrollLeft !== event.currentTarget.scrollLeft) {
-            tableContainer.scrollLeft = event.currentTarget.scrollLeft;
-          }
-        }}
-        style={{
-          boxSizing: "border-box",
-          minWidth: 0,
-          width: "100%",
-          maxWidth: "100%",
-          height: 24,
-          marginBottom: 5,
-          position: "sticky",
-          top: 0,
-          zIndex: 5,
-          flex: "0 0 auto",
-          overflowX: "auto",
-          overflowY: "hidden",
-          overscrollBehaviorX: "contain",
-          WebkitOverflowScrolling: "touch",
-          background: "#f8fafc",
-          borderBottom: "1px solid #cbd5e1",
-        }}
-      >
-        <div aria-hidden="true" style={{ width: contentWidth, height: 1 }} />
-      </div>
-      <div
-        ref={tableScrollRef}
-        id={id}
-        role="region"
-        aria-label={`${label}; scroll horizontally to access every column`}
-        tabIndex={0}
-        onScroll={(event) => {
-          const topContainer = topScrollRef.current;
-          if (topContainer && topContainer.scrollLeft !== event.currentTarget.scrollLeft) {
-            topContainer.scrollLeft = event.currentTarget.scrollLeft;
-          }
-        }}
-        style={{
-          display: "block",
-          boxSizing: "border-box",
-          minWidth: 0,
-          width: "100%",
-          maxWidth: "100%",
-          overflowX: "auto",
-          overflowY: "hidden",
-          scrollbarGutter: "stable",
-          overscrollBehaviorX: "contain",
-          WebkitOverflowScrolling: "touch",
-          paddingBottom: 10,
-          borderBottom: "2px solid #cbd5e1",
-        }}
-      >
-        {children}
-      </div>
-    </>
+    <ResultsScrollRegion id={id} label={label} maxHeight="min(58vh, 560px)">
+      {children}
+    </ResultsScrollRegion>
   );
 }
 
