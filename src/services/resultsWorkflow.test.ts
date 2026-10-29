@@ -1246,7 +1246,7 @@ describe("Report Center period discovery and readiness", () => {
     expect(reportCardsPage).toContain("Published student list");
     expect(reportCardsPage).toContain("Imports awaiting reconciliation");
     expect(reportCardsPage).toContain("Unpublished pupil reports");
-    expect(reportCardsPage).toContain("Reconcile this pupil");
+    expect(reportCardsPage).toContain("Open pupil review");
     expect(reportCardsPage).toContain("getImportReviewWorkbooks()");
     expect(reportCardsPage).toContain("getImportReviewDrafts(workbook.workbookKey, workbook.ownerId)");
     expect(reportCardsPage).toContain("resumeWorkbook: review.workbookKey");
@@ -1762,7 +1762,7 @@ describe("result workbook import preview", () => {
     });
     expect(classConflict).toMatchObject({ matchStatus: "manual-review", matchedStudentId: "student-1" });
     expect(classConflict.selectedStudentId).toBeUndefined();
-    expect(classConflict.warnings.join(" ")).toContain("Keep this entry in drafts");
+    expect(classConflict.warnings.join(" ")).toContain("Worksheet class is Basic 2; school record class is Basic 4");
   });
 
   it("normalizes case-only class differences to the roster class but preserves real class conflicts", () => {
@@ -1804,8 +1804,8 @@ describe("result workbook import preview", () => {
     ], [rosterStudent]);
     expect(classConflict.matchStatus).toBe("manual-review");
     expect(classConflict.selectedStudentId).toBeUndefined();
-    expect(classConflict.warnings.join(" ")).toContain("worksheet says Basic 1");
-    expect(classConflict.warnings.join(" ")).toContain("Keep this entry in drafts");
+    expect(classConflict.warnings.join(" ")).toContain("Worksheet class is Basic 1; school record class is Basic 3");
+    expect(classConflict.warnings.join(" ")).toContain("Check the pupil and class record before publishing");
   });
 
   it("normalizes legacy Combined rows to confirmed Midterm CA without converting blank scores to zero", () => {
