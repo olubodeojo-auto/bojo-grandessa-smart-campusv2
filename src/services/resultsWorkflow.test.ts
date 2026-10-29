@@ -2886,7 +2886,7 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain('overflowY: "auto"');
     expect(resultsPage).toContain('id="import-review-pupils"');
     expect(resultsPage).toContain('aria-label="Pupil review list and active pupil editor"');
-    expect(resultsPage).toContain("Currently editing · Pupil");
+    expect(resultsPage).toContain("Pupil {Math.max(1, reviewPosition + 1)} of {reviewableEntries.length}");
     expect(resultsPage).toContain("Save options for");
     expect(resultsPage).toContain("Save review progress");
     expect(resultsPage).toContain("Publish this pupil now");
@@ -3697,7 +3697,7 @@ describe("results workflow migration contract", () => {
     expect(resultsPage).toContain("subjectRowKey: activeSubjectRowKey");
     expect(resultsPage).toContain("const [activeImportEntryKey, setActiveImportEntryKey] = useState<string | null>(null)");
     expect(resultsPage).toContain("Review summary before saving");
-    expect(resultsPage).toContain("Save review");
+    expect(resultsPage).toContain("Save progress");
     expect(resultsPage).toContain("Publish this pupil now");
     expect(resultsPage).toContain("Save marks as draft");
     expect(resultsPage).toContain("Set aside");
