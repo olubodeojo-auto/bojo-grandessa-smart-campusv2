@@ -27,7 +27,7 @@ function scrollToSection(id: string): void {
 
 export default function ResultsWorkspacePage() {
   return (
-    <main style={{ display: "grid", gap: 24, width: "100%", maxWidth: 1600, margin: "0 auto", paddingBottom: 24 }}>
+    <main className="results-workspace-root" style={{ display: "grid", gap: 24, width: "100%", maxWidth: 1600, minWidth: 0, overflowX: "hidden", margin: "0 auto", paddingBottom: 24 }}>
       <header
         className="card"
         style={{
