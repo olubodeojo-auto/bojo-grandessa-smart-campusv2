@@ -1538,7 +1538,12 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
 
   const handleRemoveImportSubjectRow = (entryIndex: number, itemIndex: number): void => {
     const currentEntry = importEntries[entryIndex];
-    if (!currentEntry?.items[itemIndex]?.manualEntry) return;
+    const item = currentEntry?.items[itemIndex];
+    if (!currentEntry || !item) return;
+    const subjectName = item.subjectName || "this subject";
+    if (!window.confirm(
+      `Remove the ${subjectName} row from ${currentEntry.studentName}'s import review?\n\nOnly this row in this pupil's pending import review will be removed. Other subjects and pupils will remain unchanged. This does not delete an already-saved result record.`,
+    )) return;
     markDraftDirty(currentEntry.studentKey);
     setImportEntries((current) => withSelectedDuplicateWarnings(updateImportEntryByKey(current, currentEntry.studentKey, (entry) =>
       validateImportMappings({
@@ -3511,11 +3516,9 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                                 {!item.subjectId ? (
                                   <Button type="button" size="sm" variant="secondary" onClick={() => setActiveSubjectRowKey(rowKey)}>Review mapping</Button>
                                 ) : null}
-                                {item.manualEntry ? (
-                                  <Button type="button" size="sm" variant="secondary" onClick={() => handleRemoveImportSubjectRow(index, itemIndex)}>
-                                    Remove added row
-                                  </Button>
-                                ) : null}
+                                <Button type="button" size="sm" variant="secondary" onClick={() => handleRemoveImportSubjectRow(index, itemIndex)}>
+                                  Delete subject row
+                                </Button>
                               </td>
                               <td style={cellStyle}>
                                 <select aria-label={`Subject record for ${item.subjectName}`} value={item.subjectId ?? ""} onChange={(event) => handleImportEntityChange(index, itemIndex, "subjectId", event.target.value)}>
