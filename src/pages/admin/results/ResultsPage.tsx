@@ -3235,6 +3235,10 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                               </Button>
                             ) : null}
                           </>
+                        ) : isAdmin && isImportEntryReady(entry) && !hasClassConflict && !hasSkippableSubjectRows ? (
+                          <Button type="button" size="sm" onClick={() => void handleConfirmImport(true, entry.studentKey)}>
+                            Publish this pupil now
+                          </Button>
                         ) : null}
                         {["Choose report type", "Choose session", "Choose term"].includes(pupilStatus.label) ? (
                           <Button type="button" size="sm" variant="secondary" onClick={() => {
@@ -3283,7 +3287,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                       >
                         Save marks as draft
                       </Button>
-                      {isAdmin && !(hasSkippableSubjectRows && !hasNoCompleteSubjectMarks && !hasClassConflict && isImportEntryReady(entry)) ? (
+                      {isAdmin && !(isImportEntryReady(entry) && !hasClassConflict) ? (
                         <Button
                           type="button"
                           size="sm"
