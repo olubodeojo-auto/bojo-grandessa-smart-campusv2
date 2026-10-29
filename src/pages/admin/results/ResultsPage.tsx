@@ -2784,36 +2784,26 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
         ) : (
           <div style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0, overflow: "hidden", width: "100%", gap: 6 }}>
         <style>{`
-          .grandessa-import-review-grid.has-active-pupil {
-            grid-template-columns: minmax(220px, 27%) minmax(0, 1fr) !important;
+          .grandessa-import-review-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
             grid-auto-flow: row;
             align-content: start;
           }
           .grandessa-import-active-pupil {
-            position: sticky !important;
+            order: -1 !important;
+            grid-column: 1 !important;
             grid-row: 1 !important;
-            top: 0 !important;
+            position: relative !important;
+            top: auto !important;
             right: auto !important;
             bottom: auto !important;
             width: 100% !important;
-            max-height: 100% !important;
+            max-height: none !important;
             min-height: 0;
-            overflow-y: auto !important;
+            overflow: visible !important;
             align-self: start;
-            z-index: 2 !important;
+            z-index: auto !important;
             box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08) !important;
-          }
-          @media (max-width: 900px) {
-            .grandessa-import-review-grid.has-active-pupil {
-              grid-template-columns: minmax(0, 1fr) !important;
-            }
-            .grandessa-import-active-pupil {
-              grid-column: 1 !important;
-              grid-row: auto !important;
-              position: relative !important;
-              max-height: none !important;
-              overflow: visible !important;
-            }
           }
         `}</style>
         <div style={{ marginBottom: 0, flex: "0 0 auto", display: "flex", flexDirection: "column", gap: 5 }}>
@@ -2875,7 +2865,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           tabIndex={0}
           style={{
             display: "grid",
-            gridTemplateColumns: activeImportEntryKey ? "minmax(min(230px, 30vw), min(300px, 34vw)) minmax(0, 1fr)" : "minmax(0, 1fr)",
+            gridTemplateColumns: "minmax(0, 1fr)",
             gridAutoFlow: "row",
             alignItems: "start",
             gap: 10,
@@ -3063,7 +3053,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     padding: isActivePupil ? 18 : 10,
                     background: "#ffffff",
                     boxShadow: isActivePupil ? "0 18px 44px rgba(15, 23, 42, 0.16)" : "none",
-                    gridColumn: isActivePupil ? "2" : "1",
+                    gridColumn: "1",
                     position: "relative",
                     boxSizing: "border-box",
                     gridRow: isActivePupil ? "1" : undefined,
