@@ -2888,7 +2888,7 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain('aria-label="Pupil review list and active pupil editor"');
     expect(resultsPage).toContain("Pupil {Math.max(1, reviewPosition + 1)} of {reviewableEntries.length}");
     expect(resultsPage).toContain("Save options for");
-    expect(resultsPage).toContain("Save review progress");
+    expect(resultsPage).toContain("Save progress");
     expect(resultsPage).toContain("Publish this pupil now");
     expect(resultsPage).toContain("window.requestAnimationFrame");
     expect(resultsPage).toContain('overflowX: "hidden"');
