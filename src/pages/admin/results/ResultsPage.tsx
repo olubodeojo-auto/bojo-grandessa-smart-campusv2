@@ -2292,7 +2292,6 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     : possiblePupil
                       ? undefined
                       : classes.find((candidate) => candidate.id === entry.items.find((item) => item.classId)?.classId);
-                  const officialTeacherName = [officialClass?.class_teacher?.first_name, officialClass?.class_teacher?.last_name].filter(Boolean).join(" ");
                   const progress = getPendingImportPupilStatus(entry);
                   const reportTypeLabel = entry.reportKind === "Midterm / Continuous Assessment"
                     ? "Midterm (CA)"
