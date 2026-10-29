@@ -99,6 +99,8 @@ const resultsMigration = Object.values(migrationFiles)[0] ?? "";
 const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
 const workspacePage = readFileSync(resolve(process.cwd(), "src/pages/admin/results/ResultsWorkspacePage.tsx"), "utf8");
 const batchEntrySource = readFileSync(resolve(process.cwd(), "src/pages/admin/results/ResultBatchEntry.tsx"), "utf8");
+const groupedResultsSource = readFileSync(resolve(process.cwd(), "src/pages/admin/results/ResultTableGrouped.tsx"), "utf8");
+const resultsScrollRegionSource = readFileSync(resolve(process.cwd(), "src/pages/admin/results/ResultsScrollRegion.tsx"), "utf8");
 const reportMigrationFiles = import.meta.glob<string>(
   "../../supabase/migrations/20261016000000_report_card_details.sql",
   { eager: true, query: "?raw", import: "default" },
@@ -2913,6 +2915,14 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain("Save marks as draft");
     expect(resultsPage).toContain("function SynchronizedHorizontalScroll");
     expect(resultsPage).toContain("horizontal scrollbar");
+    expect(resultsScrollRegionSource).toContain('aria-label={`${label} horizontal scrollbar`}');
+    expect(resultsScrollRegionSource).toContain('overflowX: "auto"');
+    expect(resultsScrollRegionSource).toContain('overflowY: "auto"');
+    expect(resultsScrollRegionSource).toContain('maxHeight');
+    expect(resultsPage).toContain('<ResultsScrollRegion');
+    expect(batchEntrySource).toContain('<ResultsScrollRegion');
+    expect(groupedResultsSource).toContain('<ResultsScrollRegion');
+    expect(reportCardsPage).toContain('ResultsScrollRegion label="Report card preview"');
     expect(resultsPage).toContain('position: "sticky"');
     expect(resultsPage).toContain("Next action for this pupil");
     expect(resultsPage).toContain("Publish completed subjects now");
