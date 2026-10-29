@@ -20,7 +20,11 @@ const scrollButtonStyle: CSSProperties = {
 };
 
 function scrollToSection(id: string): void {
-  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const requested = document.getElementById(id);
+  const fallback = id === "imports-awaiting-reconciliation-results"
+    ? document.getElementById("all-subject-records")
+    : null;
+  (requested ?? fallback)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 export default function ResultsWorkspacePage() {
