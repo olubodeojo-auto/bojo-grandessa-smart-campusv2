@@ -3126,11 +3126,11 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
 
                   {activeImportEntryKey === entry.studentKey ? (
                   <div style={{ marginTop: 14, borderTop: "1px solid #dbeafe", paddingTop: 16 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14, padding: "12px 14px", borderRadius: 12, background: "#eff6ff", border: "1px solid #bfdbfe" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12, padding: "10px 12px", borderRadius: 8, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
                     <div>
-                      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", color: "#1d4ed8", textTransform: "uppercase" }}>Currently editing · Pupil {Math.max(1, reviewPosition + 1)} of {reviewableEntries.length}</div>
-                      <div style={{ fontSize: 19, fontWeight: 800, color: "#0f172a", marginTop: 3 }}>{entry.studentName || "Unknown pupil"}</div>
-                      <div style={{ fontSize: 13, color: "#334155", marginTop: 3 }}>Admission: {registeredStudent?.admission_number || entry.admissionNumber || "Not matched"} · Class: {registeredStudent?.class_name || entry.className || "Not confirmed"}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>Pupil {Math.max(1, reviewPosition + 1)} of {reviewableEntries.length}</div>
+                      <div style={{ fontSize: 19, fontWeight: 700, color: "#172b4d", marginTop: 2 }}>{entry.studentName || "Unknown pupil"}</div>
+                      <div style={{ fontSize: 13, color: "#475569", marginTop: 2 }}>Admission: {registeredStudent?.admission_number || entry.admissionNumber || "Not matched"} · Class: {registeredStudent?.class_name || entry.className || "Not set"}</div>
                     </div>
                     <span role="status" style={{ color: draftSaveStates[entry.studentKey]?.state === "failed" ? "#b91c1c" : "#475569" }}>
                       {draftSaveStates[entry.studentKey]?.state === "saving" ? "Saving…"
@@ -3139,8 +3139,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                             : "Unsaved changes"}
                     </span>
                   </div>
-                  <section aria-label="Pupil identity and safe editing" style={{ marginBottom: 14, padding: 12, border: "1px solid #cbd5e1", borderRadius: 10, background: "#f8fafc" }}>
-                    <div style={{ fontWeight: 700, marginBottom: 6 }}>Pupil record check</div>
+                  <section aria-label="School record" style={{ marginBottom: 14, padding: 12, border: "1px solid #cbd5e1", borderRadius: 10, background: "#f8fafc" }}>
+                    <div style={{ fontWeight: 700, marginBottom: 6 }}>School record</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 8, fontSize: 13 }}>
                       <div>
                         <div style={{ color: "#64748b" }}>Registered pupil</div>
@@ -3173,6 +3173,11 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                         <div style={{ marginTop: 3, color: "#64748b", fontSize: 13, lineHeight: 1.45 }}>{pupilStatus.explanation}</div>
                       </div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                        {draftSaveStates[entry.studentKey]?.state === "saved" ? (
+                          <Button type="button" size="sm" variant="secondary" onClick={() => void handleDiscardImportDraft(entry)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
+                            Delete saved review
+                          </Button>
+                        ) : null}
                         {hasClassConflict ? (
                           <Button type="button" size="sm" variant="secondary" onClick={() => document.getElementById(`registered-pupil-${entry.studentKey}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}>
                             Check pupil and class
@@ -3279,22 +3284,18 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                       >
                         Save marks as draft
                       </Button>
-                      {isAdmin ? (
+                      {isAdmin && !(hasSkippableSubjectRows && !hasNoCompleteSubjectMarks && !hasClassConflict && isImportEntryReady(entry)) ? (
                         <Button
                           type="button"
                           size="sm"
                           onClick={() => void handleConfirmImport(true, entry.studentKey)}
                           disabled={importSubmitting || !isImportEntryReady(entry)}
-                          style={{ background: "#047857", borderColor: "#047857", color: "#fff", fontWeight: 900 }}
+                          style={{ background: "#0f766e", borderColor: "#0f766e", color: "#fff", fontWeight: 700 }}
                         >
                           Publish this pupil now
                         </Button>
                       ) : null}
-                      {draftSaveStates[entry.studentKey]?.state === "saved" ? (
-                        <Button type="button" size="sm" variant="secondary" onClick={() => void handleDiscardImportDraft(entry)}>
-                          Delete saved review
-                        </Button>
-                      ) : null}
+
                     </div>
                   </section>
 
@@ -3504,7 +3505,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
                     <strong>{entry.items.filter((item) => item.subjectId).length} subjects mapped · {entry.items.filter((item) => !item.subjectId).length} unresolved</strong>
                     <Button type="button" size="sm" variant="secondary" onClick={() => handleNextUnresolvedSubject(entry)} disabled={subjectRowsNeedingAction.length === 0}>
-                      Go to next issue
+                      Fix next subject
                     </Button>
                   </div>
                   {completedSubjectMappingEntryKey === entry.studentKey ? (
