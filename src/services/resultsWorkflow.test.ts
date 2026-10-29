@@ -3074,7 +3074,9 @@ describe("result lifecycle permissions", () => {
     expect(resultsPage).toMatch(/>\s*Unpublish\s*<\/Button>/);
     expect(resultForm).toContain('status: mode === "edit" ? result?.status ?? "Draft" : "Draft"');
     expect(resultsPage).toContain('aria-label="Result details; scroll vertically to view all fields"');
-    expect(resultsPage).toContain('style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable" }}');
+    expect(resultsPage).toContain('<ResultsScrollRegion label="Result form"');
+    expect(resultsPage).toContain('<ResultsScrollRegion label="Batch result entry"');
+    expect(resultsPage).toContain('<ResultsScrollRegion label="Result details"');
     expect(canAdministratorEditResult(result({ status: "Returned" }))).toBe(true);
     expect(canAdministratorEditResult(result({ status: "Published" }))).toBe(false);
   });
@@ -3885,7 +3887,7 @@ describe("unified Results and reports workflow", () => {
     expect(resultsPage).toContain("onSaveAndPublish={publishSavedResultPeriod}");
     expect(batchEntrySource).toContain("SAVE & PUBLISH");
     expect(batchEntrySource).toContain("onSaveAndPublish");
-    expect(resultsPage).toContain('overflowX: "auto"');
+    expect(resultsScrollRegionSource).toContain('overflowX: "auto"');
     expect(resultsPage).toContain("function SynchronizedHorizontalScroll");
   });
 });
