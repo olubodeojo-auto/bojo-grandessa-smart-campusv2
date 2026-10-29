@@ -1062,7 +1062,7 @@ describe("Report Center period discovery and readiness", () => {
 
   it("confirms the selected report identity, status, and affected count while retaining older delete actions", () => {
     expect(reportCardsPage).toContain("{canDeleteReport ? (");
-    expect(reportCardsPage).toContain("Delete Report Card");
+    expect(reportCardsPage).toContain("Delete report card");
     expect(reportCardsPage).toContain("Admission number: ${admissionNumber}");
     expect(reportCardsPage).toContain("Class: ${className}");
     expect(reportCardsPage).toContain("Academic session: ${period.academicYear}");
@@ -1073,7 +1073,7 @@ describe("Report Center period discovery and readiness", () => {
     expect(reportCardsPage).toContain("This permanently deletes the listed subject-result records");
     expect(reportCardsPage).toContain("Existing subject-result audit history is retained.");
     expect(reportCardsPage).toContain("if (outcome.cancelled) return;");
-    expect(reportCardsPage).toContain("Delete Draft");
+    expect(reportCardsPage).toContain("Delete draft");
     expect(groupedResults).toContain("<Trash2 size={16} /> Delete");
   });
 
