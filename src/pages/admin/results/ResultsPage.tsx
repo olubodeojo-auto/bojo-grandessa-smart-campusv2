@@ -2055,7 +2055,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
 
   return (
     <>
-      <motion.div id="results-entry-workspace" style={{ scrollMarginTop: 18 }} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+      <motion.div id="results-entry-workspace" style={{ scrollMarginTop: 18, width: "100%", maxWidth: "100%", minWidth: 0, overflowX: "hidden" }} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <div
           className="card"
           style={{
