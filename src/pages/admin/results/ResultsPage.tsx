@@ -2704,16 +2704,19 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
 
       <AppModal
         open={isImportOpen}
-        title={isAddingImportStudent ? "Add Student" : isFinalImportPreview ? "Final check — save or publish" : "Review pupil results"}
+        title={isAddingImportStudent ? "Add pupil" : isFinalImportPreview ? "Confirm results" : "Review imported marks"}
         size="xl"
         dialogStyle={{
+          width: "100%",
+          maxWidth: "none",
           height: "calc(100dvh - 32px)",
           maxHeight: "calc(100dvh - 32px)",
           minHeight: 0,
           display: "flex",
           flexDirection: "column",
           boxSizing: "border-box",
-          padding: 16,
+          padding: "10px 12px 8px",
+          borderRadius: 12,
         }}
         bodyStyle={{
           flex: "1 1 auto",
@@ -2721,6 +2724,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
+          width: "100%",
         }}
         footerStyle={{
           flex: "0 0 auto",
@@ -2728,8 +2732,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           bottom: 0,
           background: "#fff",
           borderTop: "1px solid #e2e8f0",
-          paddingTop: 12,
-          marginTop: 12,
+          paddingTop: 8,
+          marginTop: 8,
         }}
         onClose={() => void handleCloseImport()}
         footer={!isAddingImportStudent ? (
@@ -2753,14 +2757,6 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               </>
             ) : (
               <>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => document.getElementById("import-review-pupils")?.scrollTo({ top: 0, behavior: "smooth" })}
-                >
-                  Back to top of review
-                </Button>
                 <Button
                   type="button"
                   size="sm"
@@ -2798,12 +2794,17 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             onSaved={handleImportStudentSaved}
           />
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0, overflow: "hidden" }}>
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Results Run · {importFileName || "Uploaded file"}</div>
-          <p style={{ margin: "6px 0 8px", color: "#475569", fontSize: 13 }}>
-            Review one pupil at a time. Each pupil stays in a compact row until you open it. Save review progress to keep your checks, save marks as a draft to keep them unpublished, or explicitly publish only the pupil shown in the highlighted editor. Subject mappings you confirm are remembered for the same class on future uploads.
-          </p>
+          <div style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0, overflow: "hidden", width: "100%", gap: 8 }}>
+        <div style={{ marginBottom: 0, flex: "0 0 auto", display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "#172b4d", overflowWrap: "anywhere" }}>{importFileName || "Uploaded file"}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", color: "#64748b", fontSize: 12 }}>
+              <span>{importCounts.totalStudents} pupils</span>
+              <span>{readyImportEntries.length} ready</span>
+              <span>{importCounts.unresolvedStudents} unresolved</span>
+              <span>{importCounts.duplicateRecords} duplicates</span>
+            </div>
+          </div>
           {importWorkbookSheets.length > 1 ? (
             <label style={{ display: "grid", gap: 4, maxWidth: 420, margin: "8px 0" }}>
               Worksheet
@@ -2830,8 +2831,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             </label>
           ) : null}
           {selectedSheetMetadata ? (
-            <div style={{ color: "#475569", marginBottom: 6 }}>
-              Selected sheet: <strong>{selectedSheetMetadata.name}</strong> · Session: {selectedSheetMetadata.academicYear || "not detected"} · First heading: {selectedSheetMetadata.term ? `${selectedSheetMetadata.term} Term` : "not detected"} · Terms in sheet: {selectedSheetMetadata.terms.map((availableTerm) => `${availableTerm} Term`).join(", ") || "not detected"}
+            <div style={{ color: "#64748b", fontSize: 12, marginBottom: 0 }}>
+              Sheet: <strong style={{ color: "#334155" }}>{selectedSheetMetadata.name}</strong> · Session: {selectedSheetMetadata.academicYear || "not detected"} · Term: {selectedSheetMetadata.term ? `${selectedSheetMetadata.term} Term` : "not detected"}
             </div>
           ) : null}
           {importPeriodConflict ? (
@@ -2839,15 +2840,12 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               This worksheet does not match the requested {session ? `session ${session}` : ""}{session && term !== "All" ? " and " : ""}{term !== "All" ? `${term} Term` : ""}. Choose a worksheet that matches the requested period before importing.
             </div>
           ) : null}
-          <div style={{ color: "#475569" }}>
-            {importCounts.totalStudents} detected · {importCounts.matchedStudents} included matched · {importCounts.unresolvedStudents} included unresolved · {importCounts.ignoredStudents} ignored · {importCounts.duplicateRecords} duplicate record(s).
+          <div style={{ color: "#64748b", fontSize: 12, display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
+            <span>{importCounts.matchedStudents} matched</span>
+            <span>{importCounts.ignoredStudents} set aside</span>
+            <span>{savedPupilCount} saved</span>
+            <span>{importCounts.totalStudents > 0 ? Math.round((readyImportEntries.length / importCounts.totalStudents) * 100) : 0}% ready</span>
           </div>
-          <div style={{ color: "#166534", fontWeight: 700, marginTop: 4 }}>
-            {savedPupilCount} review draft(s) or import(s) saved · {readyImportEntries.length} ready to import
-          </div>
-          <p style={{ margin: "8px 0 0", color: "#475569", fontSize: 13 }}>
-            You can ignore pupils you’re not ready to process. Add missing students later using Add Student, then import their results.
-          </p>
           {error ? (
             <div role="alert" style={{ marginTop: 8, padding: 10, borderRadius: 8, background: "#fef2f2", color: "#991b1b" }}>
               {error}
@@ -2858,9 +2856,6 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           ) : null}
         </div>
 
-        <div role="status" style={{ margin: "0 0 12px", padding: "12px 14px", border: "1px solid #dbeafe", borderRadius: 12, background: "#eff6ff", color: "#1e3a8a", lineHeight: 1.5 }}>
-          <strong>One pupil at a time.</strong> The open pupil is moved to the bottom of this list, with their details and marks directly under their name. Before saving, check the name and class shown in the highlighted editor.
-        </div>
         <div
           id="import-review-pupils"
           role="region"
@@ -2868,7 +2863,10 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           tabIndex={0}
           style={{
             display: "grid",
-            gap: 12,
+            gridTemplateColumns: activeImportEntryKey ? "minmax(245px, 0.32fr) minmax(0, 1fr)" : "minmax(0, 1fr)",
+            gridAutoFlow: "row",
+            alignItems: "start",
+            gap: 10,
             flex: "1 1 auto",
             minWidth: 0,
             minHeight: 0,
@@ -2876,8 +2874,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             width: "100%",
             maxWidth: "100%",
             overflowX: "hidden",
-            paddingRight: 4,
-            paddingBottom: 12,
+            paddingRight: 3,
+            paddingBottom: 4,
           }}
         >
           {isFinalImportPreview ? (
@@ -3042,12 +3040,24 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                   id={isActivePupil ? "active-import-pupil-editor" : undefined}
                   aria-label={`Review item for ${entry.studentName || "pupil"}`}
                   style={{
-                    border: isActivePupil ? "2px solid #2563eb" : "1px solid #e2e8f0",
-                    borderRadius: 12,
-                    padding: isActivePupil ? 16 : 12,
-                    background: isActivePupil ? "#ffffff" : "#fbfcfe",
-                    boxShadow: isActivePupil ? "0 4px 16px rgba(37, 99, 235, 0.10)" : "none",
-                    scrollMarginTop: 12,
+                    border: isActivePupil ? "1px solid #cbd5e1" : "1px solid #e2e8f0",
+                    borderRadius: 10,
+                    padding: isActivePupil ? 14 : 10,
+                    background: isActivePupil ? "#ffffff" : "#ffffff",
+                    boxShadow: "none",
+                    gridColumn: isActivePupil ? "2" : "1",
+                    position: isActivePupil ? "fixed" : "relative",
+                    top: isActivePupil ? 200 : undefined,
+                    right: isActivePupil ? 24 : undefined,
+                    width: isActivePupil ? "calc(100vw - max(245px, 24vw) - 52px)" : undefined,
+                    boxSizing: "border-box",
+                    zIndex: isActivePupil ? 1001 : undefined,
+                    alignSelf: "start",
+                    minWidth: 0,
+                    minHeight: 0,
+                    maxHeight: isActivePupil ? "calc(100dvh - clamp(300px, 40vh, 350px))" : undefined,
+                    overflowY: isActivePupil ? "auto" : "visible",
+                    scrollMarginTop: 4,
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -3157,9 +3167,6 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                         <div style={{ fontWeight: 600 }}>{registeredStudent?.class_name || entry.className || "Not confirmed"}</div>
                       </div>
                     </div>
-                    <div style={{ marginTop: 8, color: "#475569", fontSize: 13 }}>
-                      Only this pupil is being edited. Saving here keeps the entry in review; it does not publish results. Class numbers must match the school record, even when the class-name capitalisation differs.
-                    </div>
                   </section>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
                     <Button type="button" size="sm" variant="secondary" onClick={() => {
@@ -3174,9 +3181,6 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                   </div>
                   <section aria-label={`Save actions for ${entry.studentName || "this pupil"}`} style={{ border: "1px solid #cbd5e1", borderRadius: 12, padding: 14, marginBottom: 16, background: "#f8fafc" }}>
                     <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>Save options for {entry.studentName || "this pupil"}</div>
-                    <p style={{ margin: "5px 0 12px", color: "#475569", fontSize: 13, lineHeight: 1.5 }}>
-                      Save review progress keeps your matching and checks. Save marks as draft records the marks but does not publish them. Publishing releases only this pupil's results.
-                    </p>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       <Button type="button" size="sm" variant="secondary" onClick={() => void handleSaveProgress()}>
                         {draftSaveStates[entry.studentKey]?.state === "saving" ? "Saving review…" : "Save review progress"}
@@ -3209,18 +3213,15 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     </div>
                   </section>
 
-                  <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 9, background: "#f8fafc", color: "#334155", fontSize: 13 }}>
-                    <strong>Results context:</strong>{" "}
+                  <div style={{ marginBottom: 8, color: "#64748b", fontSize: 12 }}>
+                    <strong style={{ color: "#334155" }}>Result period:</strong>{" "}
                     {entry.academicYear || "Session to confirm"} · {entry.term ? `${entry.term} Term` : "Term to confirm"} ·{" "}
                     {entry.reportKind === "Midterm / Continuous Assessment"
                       ? "Midterm (CA)"
                       : entry.reportKind === "End-of-Term / Year Report Card"
                         ? "End-of-Term"
                         : "Report type to confirm"} ·{" "}
-                    {entry.items[0]?.calculationMode === "Automatic" ? "Automatic scoring" : "Manual scoring"}
-                    <div style={{ marginTop: 4, color: "#64748b" }}>
-                      These values are read from the worksheet. Open settings only when this pupil's sheet needs a correction.
-                    </div>
+                    {entry.items[0]?.calculationMode === "Automatic" ? "Automatic" : "Manual scoring"}
                   </div>
                   <details id={`import-settings-${entry.studentKey}`} style={{ marginBottom: 12 }}>
                     <summary style={{ cursor: "pointer", fontWeight: 700 }}>Change period, report type, teacher or scoring settings (only if needed)</summary>
@@ -3270,11 +3271,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     </div>
                   </details>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12, color: "#334155" }}>
-                    <div>
-                      <strong>{entry.items.length} subject row(s)</strong>. {entry.items[0]?.calculationMode === "Automatic"
-                        ? "Valid marks use the shared calculator; review the preview before importing."
-                        : "Scores stay editable and are saved as drafts until publication is explicitly confirmed."}
-                    </div>
+                    <strong>{entry.items.length} subject row(s)</strong>
                     <Button type="button" size="sm" variant="secondary" onClick={() => handleAddImportSubjectRow(index)}>
                       Add subject row
                     </Button>
@@ -3384,8 +3381,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                         <strong>Confirmed school record:</strong> {[registeredStudent.first_name, registeredStudent.middle_name, registeredStudent.last_name].filter(Boolean).join(" ")} · Admission {registeredStudent.admission_number || "not recorded"} · Class {registeredStudent.class_name || "not assigned"}
                       </div>
                     ) : (
-                      <div style={{ marginTop: 8, color: "#475569", fontSize: 13 }}>
-                        This dropdown lists the registered pupil records. Choose the pupil who actually owns these marks, then press <strong>Confirm this pupil</strong>. The worksheet name may differ in order or wording; the school record is what will be used.
+                      <div style={{ marginTop: 8, color: "#64748b", fontSize: 12 }}>
+                        Choose the registered pupil, then confirm the match.
                       </div>
                     )}
                   </section>

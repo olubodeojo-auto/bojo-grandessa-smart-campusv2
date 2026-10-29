@@ -2876,7 +2876,7 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain("onSaved={handleImportStudentSaved}");
   });
 
-  it("keeps Cancel, Preview and Confirm reachable while pupil cards scroll internally", () => {
+  it("uses a full-screen split workspace and keeps save actions reachable", () => {
     expect(appModal).toContain("const onCloseRef = useRef(onClose)");
     expect(appModal).toContain("onCloseRef.current = onClose");
     expect(appModal).toContain("onCloseRef.current()");
@@ -2897,8 +2897,10 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain('overflowX: "hidden"');
     expect(resultsPage).toContain('minWidth: 0');
     expect(resultsPage).not.toContain('maxWidth: "100%", overflowX: "scroll"');
-    expect(resultsPage).toContain('onClick={() => document.getElementById("import-review-pupils")?.scrollTo({ top: 0, behavior: "smooth" })}');
-    expect(resultsPage).toContain("Back to top of review");
+    expect(resultsPage).toContain('gridTemplateColumns: activeImportEntryKey ? "minmax(245px, 0.32fr) minmax(0, 1fr)" : "minmax(0, 1fr)"');
+    expect(resultsPage).toContain('maxWidth: "none"');
+    expect(resultsPage).toContain('gridColumn: isActivePupil ? "2" : "1"');
+    expect(resultsPage).not.toContain("Back to top of review");
     expect(resultsPage).toMatch(/>\s*Cancel\s*<\/Button>/);
     expect(resultsPage).toContain("Review summary before saving");
     expect(resultsPage).toContain("Save & publish this pupil");
@@ -3890,7 +3892,7 @@ describe("pupil matching is a direct registered-record confirmation", () => {
 
 describe("pupil review keeps the important context visible and advanced settings out of the way", () => {
   it("shows the pupil period summary and keeps exception-only settings collapsed", () => {
-    expect(resultsPage).toContain("<strong>Results context:</strong>");
+    expect(resultsPage).toContain('<strong style={{ color: "#334155" }}>Result period:</strong>');
     expect(resultsPage).toContain("Change period, report type, teacher or scoring settings (only if needed)");
     expect(resultsPage).toContain('<option value="Unclear">Choose report type</option>');
     expect(resultsPage).not.toContain('aria-label={`Class for ${item.subjectName}`}');
