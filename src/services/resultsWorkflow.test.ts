@@ -3083,9 +3083,9 @@ describe("result lifecycle permissions", () => {
 
   it("keeps result grids and report-card tables keyboard-scrollable", () => {
     expect(groupedResults).toContain('aria-expanded={isExpanded}');
-    expect(groupedResults).toContain('aria-label="Pupil results; scroll horizontally to view all subject columns"');
+    expect(groupedResults).toContain('label="Pupil results overview"');
     expect(groupedResults).toContain('minWidth: 1050');
-    expect(batchEntry).toContain('aria-label="Batch subject results; scroll horizontally to see all columns"');
+    expect(batchEntry).toContain('label="Batch subject results"');
     expect(batchEntry).toContain('minWidth: 900');
     expect(resultsPage).toContain('label={`Subject mappings for ${entry.studentName}`}');
     expect(resultsScrollRegionSource).toContain('aria-label={`${label}; scroll vertically and horizontally to access all content`}');
