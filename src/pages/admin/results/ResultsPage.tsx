@@ -3049,7 +3049,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     position: isActivePupil ? "fixed" : "relative",
                     top: isActivePupil ? "clamp(165px, 24vh, 218px)" : undefined,
                     right: isActivePupil ? 24 : undefined,
-                    width: isActivePupil ? "68vw" : undefined,
+                    width: isActivePupil ? "calc(100vw - max(245px, 24vw) - 52px)" : undefined,
                     boxSizing: "border-box",
                     zIndex: isActivePupil ? 1001 : undefined,
                     alignSelf: "start",
@@ -3167,9 +3167,6 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                         <div style={{ fontWeight: 600 }}>{registeredStudent?.class_name || entry.className || "Not confirmed"}</div>
                       </div>
                     </div>
-                    <div style={{ marginTop: 8, color: "#475569", fontSize: 13 }}>
-                      Only this pupil is being edited. Saving here keeps the entry in review; it does not publish results. Class numbers must match the school record, even when the class-name capitalisation differs.
-                    </div>
                   </section>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
                     <Button type="button" size="sm" variant="secondary" onClick={() => {
@@ -3184,9 +3181,6 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                   </div>
                   <section aria-label={`Save actions for ${entry.studentName || "this pupil"}`} style={{ border: "1px solid #cbd5e1", borderRadius: 12, padding: 14, marginBottom: 16, background: "#f8fafc" }}>
                     <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>Save options for {entry.studentName || "this pupil"}</div>
-                    <p style={{ margin: "5px 0 12px", color: "#475569", fontSize: 13, lineHeight: 1.5 }}>
-                      Save review progress keeps your matching and checks. Save marks as draft records the marks but does not publish them. Publishing releases only this pupil's results.
-                    </p>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       <Button type="button" size="sm" variant="secondary" onClick={() => void handleSaveProgress()}>
                         {draftSaveStates[entry.studentKey]?.state === "saving" ? "Saving review…" : "Save review progress"}
@@ -3219,18 +3213,15 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     </div>
                   </section>
 
-                  <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 9, background: "#f8fafc", color: "#334155", fontSize: 13 }}>
-                    <strong>Results context:</strong>{" "}
+                  <div style={{ marginBottom: 8, color: "#64748b", fontSize: 12 }}>
+                    <strong style={{ color: "#334155" }}>Result period:</strong>{" "}
                     {entry.academicYear || "Session to confirm"} · {entry.term ? `${entry.term} Term` : "Term to confirm"} ·{" "}
                     {entry.reportKind === "Midterm / Continuous Assessment"
                       ? "Midterm (CA)"
                       : entry.reportKind === "End-of-Term / Year Report Card"
                         ? "End-of-Term"
                         : "Report type to confirm"} ·{" "}
-                    {entry.items[0]?.calculationMode === "Automatic" ? "Automatic scoring" : "Manual scoring"}
-                    <div style={{ marginTop: 4, color: "#64748b" }}>
-                      These values are read from the worksheet. Open settings only when this pupil's sheet needs a correction.
-                    </div>
+                    {entry.items[0]?.calculationMode === "Automatic" ? "Automatic" : "Manual scoring"}
                   </div>
                   <details id={`import-settings-${entry.studentKey}`} style={{ marginBottom: 12 }}>
                     <summary style={{ cursor: "pointer", fontWeight: 700 }}>Change period, report type, teacher or scoring settings (only if needed)</summary>
@@ -3280,11 +3271,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     </div>
                   </details>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12, color: "#334155" }}>
-                    <div>
-                      <strong>{entry.items.length} subject row(s)</strong>. {entry.items[0]?.calculationMode === "Automatic"
-                        ? "Valid marks use the shared calculator; review the preview before importing."
-                        : "Scores stay editable and are saved as drafts until publication is explicitly confirmed."}
-                    </div>
+                    <strong>{entry.items.length} subject row(s)</strong>
                     <Button type="button" size="sm" variant="secondary" onClick={() => handleAddImportSubjectRow(index)}>
                       Add subject row
                     </Button>
@@ -3394,8 +3381,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                         <strong>Confirmed school record:</strong> {[registeredStudent.first_name, registeredStudent.middle_name, registeredStudent.last_name].filter(Boolean).join(" ")} · Admission {registeredStudent.admission_number || "not recorded"} · Class {registeredStudent.class_name || "not assigned"}
                       </div>
                     ) : (
-                      <div style={{ marginTop: 8, color: "#475569", fontSize: 13 }}>
-                        This dropdown lists the registered pupil records. Choose the pupil who actually owns these marks, then press <strong>Confirm this pupil</strong>. The worksheet name may differ in order or wording; the school record is what will be used.
+                      <div style={{ marginTop: 8, color: "#64748b", fontSize: 12 }}>
+                        Choose the registered pupil, then confirm the match.
                       </div>
                     )}
                   </section>
