@@ -2776,29 +2776,30 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           ) : null}
         </div>
 
-        <div
+        <ResultsScrollRegion
           id="import-review-pupils"
-          className={`grandessa-import-review-grid${activeImportEntryKey ? " has-active-pupil" : ""}`}
-          role="region"
-          aria-label="Pupil review list and active pupil editor"
-          tabIndex={0}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr)",
-            gridAutoFlow: "row",
-            alignItems: "start",
-            gap: 10,
-            flex: "1 1 auto",
-            minWidth: 0,
-            minHeight: 0,
-            overflowY: "auto",
-            width: "100%",
-            maxWidth: "100%",
-            overflowX: "hidden",
-            paddingRight: 3,
-            paddingBottom: 4,
-          }}
+          label="Pupil review list and active pupil editor"
+          maxHeight="min(68vh, 760px)"
         >
+          <div
+            className={`grandessa-import-review-grid${activeImportEntryKey ? " has-active-pupil" : ""}`}
+            role="region"
+            aria-label="Pupil review list and active pupil editor"
+            tabIndex={0}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr)",
+              gridAutoFlow: "row",
+              alignItems: "start",
+              gap: 10,
+              minWidth: 0,
+              minHeight: 0,
+              width: "100%",
+              maxWidth: "100%",
+              paddingRight: 3,
+              paddingBottom: 4,
+            }}
+          >
           {isFinalImportPreview ? (
             readyImportEntries.length === 0 ? (
               <EmptyState
@@ -3597,7 +3598,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               );
             })
           )}
-        </div>
+          </div>
+        </ResultsScrollRegion>
           </div>
         )}
       </AppModal>
