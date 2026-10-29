@@ -1385,7 +1385,7 @@ function getImportClassConflict(
     normalizeMatchValue(className) !== officialKey
   );
   return conflictingClass
-    ? `The registered pupil is in ${officialClass}, but the worksheet says ${conflictingClass}. Keep this entry in drafts until the class is confirmed.`
+    ? `Worksheet class is ${conflictingClass}; school record class is ${officialClass}. Check the pupil and class record before publishing.`
     : null;
 }
 
