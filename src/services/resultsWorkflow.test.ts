@@ -2897,9 +2897,15 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain('overflowX: "hidden"');
     expect(resultsPage).toContain('minWidth: 0');
     expect(resultsPage).not.toContain('maxWidth: "100%", overflowX: "scroll"');
-    expect(resultsPage).toContain('gridTemplateColumns: activeImportEntryKey ? "minmax(min(230px, 30vw), min(300px, 34vw)) minmax(0, 1fr)" : "minmax(0, 1fr)"');
+    expect(resultsPage).toContain('gridTemplateColumns: "minmax(0, 1fr)"');
     expect(resultsPage).toContain('maxWidth: "none"');
-    expect(resultsPage).toContain('gridColumn: isActivePupil ? "2" : "1"');
+    expect(resultsPage).toContain('gridColumn: "1"');
+    expect(resultsPage).toContain("order: -1 !important");
+    expect(resultsPage).toContain("grandessa-import-review-grid");
+    expect(resultsPage).toContain("has-active-pupil");
+    expect(resultsPage).toContain("grandessa-import-active-pupil");
+    expect(resultsPage).toContain('gridRow: isActivePupil ? "1" : undefined');
+    expect(resultsPage).not.toContain('position: isActivePupil ? "fixed" : "relative"');
     expect(resultsPage).not.toContain("Back to top of review");
     expect(resultsPage).toMatch(/>\s*Cancel\s*<\/Button>/);
     expect(resultsPage).toContain("Review summary before saving");

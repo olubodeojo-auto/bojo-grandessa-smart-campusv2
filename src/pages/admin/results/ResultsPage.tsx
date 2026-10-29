@@ -2782,8 +2782,31 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             onSaved={handleImportStudentSaved}
           />
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0, overflow: "hidden", width: "100%", gap: 8 }}>
-        <div style={{ marginBottom: 0, flex: "0 0 auto", display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0, overflow: "hidden", width: "100%", gap: 6 }}>
+        <style>{`
+          .grandessa-import-review-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+            grid-auto-flow: row;
+            align-content: start;
+          }
+          .grandessa-import-active-pupil {
+            order: -1 !important;
+            grid-column: 1 !important;
+            grid-row: 1 !important;
+            position: relative !important;
+            top: auto !important;
+            right: auto !important;
+            bottom: auto !important;
+            width: 100% !important;
+            max-height: none !important;
+            min-height: 0;
+            overflow: visible !important;
+            align-self: start;
+            z-index: auto !important;
+            box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08) !important;
+          }
+        `}</style>
+        <div style={{ marginBottom: 0, flex: "0 0 auto", display: "flex", flexDirection: "column", gap: 5 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <div style={{ fontWeight: 750, fontSize: 14, color: "#172b4d", overflowWrap: "anywhere" }}>{importFileName || "Uploaded file"}</div>
@@ -2836,12 +2859,13 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
 
         <div
           id="import-review-pupils"
+          className={`grandessa-import-review-grid${activeImportEntryKey ? " has-active-pupil" : ""}`}
           role="region"
           aria-label="Pupil review list and active pupil editor"
           tabIndex={0}
           style={{
             display: "grid",
-            gridTemplateColumns: activeImportEntryKey ? "minmax(min(230px, 30vw), min(300px, 34vw)) minmax(0, 1fr)" : "minmax(0, 1fr)",
+            gridTemplateColumns: "minmax(0, 1fr)",
             gridAutoFlow: "row",
             alignItems: "start",
             gap: 10,
@@ -3020,6 +3044,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               return (
                 <div
                   key={getImportEntryKey(entry)}
+                  className={isActivePupil ? "grandessa-import-active-pupil" : undefined}
                   id={isActivePupil ? "active-import-pupil-editor" : undefined}
                   aria-label={`Review item for ${entry.studentName || "pupil"}`}
                   style={{
@@ -3028,19 +3053,15 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     padding: isActivePupil ? 18 : 10,
                     background: "#ffffff",
                     boxShadow: isActivePupil ? "0 18px 44px rgba(15, 23, 42, 0.16)" : "none",
-                    gridColumn: isActivePupil ? "2" : "1",
-                    position: isActivePupil ? "fixed" : "relative",
-                    top: isActivePupil ? "clamp(150px, 17vh, 178px)" : undefined,
-                    right: isActivePupil ? 24 : undefined,
-                    bottom: isActivePupil ? 78 : undefined,
-                    width: isActivePupil ? "calc(100vw - min(300px, 34vw) - 52px)" : undefined,
+                    gridColumn: "1",
+                    position: "relative",
                     boxSizing: "border-box",
-                    zIndex: isActivePupil ? 1001 : undefined,
+                    gridRow: isActivePupil ? "1" : undefined,
                     alignSelf: "start",
                     minWidth: 0,
                     minHeight: 0,
-                    maxHeight: isActivePupil ? "none" : undefined,
-                    overflowY: isActivePupil ? "auto" : "visible",
+                    maxHeight: undefined,
+                    overflowY: "visible",
                     scrollMarginTop: 4,
                   }}
                 >
