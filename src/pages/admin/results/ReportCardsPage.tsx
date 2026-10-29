@@ -1417,7 +1417,7 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
                       </p>
                     </div>
 
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       {showPublishAction ? (
                         <Button
                           type="button"
@@ -1427,45 +1427,52 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
                           onClick={() => void publishReportPeriod(period)}
                           disabled={publishAction.disabled}
                           title={publishAction.reason ? formatPublicationBlocker(publishAction.reason) : "Publish this pupil's report after all checks pass."}
-                          style={{ flex: "1 1 240px", minHeight: 56, padding: "16px 24px", borderRadius: 14, background: "#047857", borderColor: "#047857", color: "#fff", fontSize: 16, fontWeight: 900, letterSpacing: "0.02em", boxShadow: "0 0 0 4px #d1fae5, 0 8px 20px rgba(4,120,87,0.30)" }}
+                          style={{ minHeight: 46, padding: "12px 18px", borderRadius: 12, background: "#0f766e", borderColor: "#0f766e", color: "#fff", fontSize: 14, fontWeight: 800, boxShadow: "none" }}
                         >
-                          {isPublishing ? "PUBLISHING REPORT…" : "PUBLISH THIS REPORT →"}
+                          {isPublishing ? "Publishing report…" : "Publish report"}
                         </Button>
                       ) : null}
                       <Button type="button" variant="secondary" onClick={() => void openReportPeriod(period)} disabled={period.results.length === 0} title={period.results.length === 0 ? "Subject results are required to preview a report card." : undefined}>
                         Preview report
                       </Button>
-                      <Button type="button" variant="secondary" onClick={() => void openReportPeriod(period, true)} disabled={period.results.length === 0 || !isAdministrator} title={!isAdministrator ? "Only an administrator can edit report-card details." : period.results.length === 0 ? "Subject results are required to open report-card details." : undefined}>
-                        Edit report details
-                      </Button>
-                      <Button type="button" variant="secondary" onClick={() => navigateToResults(period)} disabled={period.results.length === 0} title={period.results.length === 0 ? "No subject results are available to edit." : undefined}>
-                        Edit subject marks
-                      </Button>
-                      {canUnpublish ? (
-                        <Button type="button" variant="secondary" onClick={() => void unpublishReportPeriod(period)} disabled={Boolean(unpublishingKey) || Boolean(publishingKey) || Boolean(unpublishVerificationErrors[period.key])} title={unpublishVerificationErrors[period.key] || "Move each published subject result to Returned through the existing review workflow."}>
-                          {isUnpublishing ? "Unpublishing…" : "Unpublish results"}
-                        </Button>
-                      ) : null}
-                      {canDeleteReport ? (
-                        <Button type="button" variant="secondary" onClick={() => void deleteReportPeriod(period)} disabled={Boolean(deletingKey) || Boolean(publishingKey) || Boolean(unpublishingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
-                          {isDeleting ? "Deleting report card…" : "Delete Report Card"}
-                        </Button>
-                      ) : null}
-                      {canDeleteDraft ? (
-                        <Button type="button" variant="secondary" onClick={() => void deleteDraftPeriod(period)} disabled={Boolean(deletingKey) || Boolean(publishingKey) || Boolean(unpublishingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
-                          {isDeleting ? "Deleting draft…" : "Delete Draft"}
-                        </Button>
-                      ) : null}
-                      {isAdministrator && period.results.length === 0 && period.savedReport ? (
-                        <Button type="button" variant="secondary" onClick={() => void deleteSavedReportDetails(period)} disabled={Boolean(deletingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
-                          {isDeleting ? "Deleting details…" : "Delete Saved Details"}
-                        </Button>
-                      ) : null}
-                      {isAdministrator && (publishVerificationErrors[period.key] || unpublishVerificationErrors[period.key]) ? (
-                        <Button type="button" variant="secondary" onClick={() => void verifyPublishStatus(period)} disabled={Boolean(publishingKey)}>
-                          Verify saved status
-                        </Button>
-                      ) : null}
+                      <details style={{ position: "relative", minWidth: 150 }}>
+                        <summary style={{ listStyle: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 42, padding: "10px 13px", border: "1px solid #d6dee8", borderRadius: 11, background: "#fff", color: "#334155", fontWeight: 750, fontSize: 13, cursor: "pointer" }}>
+                          More actions
+                        </summary>
+                        <div style={{ display: "grid", gap: 7, marginTop: 8, padding: 12, border: "1px solid #dbe3ec", borderRadius: 12, background: "#fff", boxShadow: "0 6px 18px rgba(23,43,77,0.07)" }}>
+                          <Button type="button" variant="secondary" onClick={() => void openReportPeriod(period, true)} disabled={period.results.length === 0 || !isAdministrator} title={!isAdministrator ? "Only an administrator can edit report-card details." : period.results.length === 0 ? "Subject results are required to open report-card details." : undefined}>
+                            Edit report details
+                          </Button>
+                          <Button type="button" variant="secondary" onClick={() => navigateToResults(period)} disabled={period.results.length === 0} title={period.results.length === 0 ? "No subject results are available to edit." : undefined}>
+                            Edit subject marks
+                          </Button>
+                          {canUnpublish ? (
+                            <Button type="button" variant="secondary" onClick={() => void unpublishReportPeriod(period)} disabled={Boolean(unpublishingKey) || Boolean(publishingKey) || Boolean(unpublishVerificationErrors[period.key])} title={unpublishVerificationErrors[period.key] || "Move each published subject result to Returned through the existing review workflow."}>
+                              {isUnpublishing ? "Unpublishing…" : "Unpublish results"}
+                            </Button>
+                          ) : null}
+                          {canDeleteReport ? (
+                            <Button type="button" variant="secondary" onClick={() => void deleteReportPeriod(period)} disabled={Boolean(deletingKey) || Boolean(publishingKey) || Boolean(unpublishingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
+                              {isDeleting ? "Deleting report card…" : "Delete report card"}
+                            </Button>
+                          ) : null}
+                          {canDeleteDraft ? (
+                            <Button type="button" variant="secondary" onClick={() => void deleteDraftPeriod(period)} disabled={Boolean(deletingKey) || Boolean(publishingKey) || Boolean(unpublishingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
+                              {isDeleting ? "Deleting draft…" : "Delete draft"}
+                            </Button>
+                          ) : null}
+                          {isAdministrator && period.results.length === 0 && period.savedReport ? (
+                            <Button type="button" variant="secondary" onClick={() => void deleteSavedReportDetails(period)} disabled={Boolean(deletingKey)} style={{ color: "#b91c1c", borderColor: "#fecaca" }}>
+                              {isDeleting ? "Deleting details…" : "Delete saved details"}
+                            </Button>
+                          ) : null}
+                          {isAdministrator && (publishVerificationErrors[period.key] || unpublishVerificationErrors[period.key]) ? (
+                            <Button type="button" variant="secondary" onClick={() => void verifyPublishStatus(period)} disabled={Boolean(publishingKey)}>
+                              Verify saved status
+                            </Button>
+                          ) : null}
+                        </div>
+                      </details>
                     </div>
 
                     {isAdministrator && statusLabel !== "Published" && publishAction.disabled && publishBlockReason && publishBlockReason !== completeness.reason ? (
