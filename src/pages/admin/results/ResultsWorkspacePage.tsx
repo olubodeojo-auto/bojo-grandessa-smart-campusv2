@@ -1,8 +1,9 @@
 import { ArrowDown, ArrowRight, CheckCircle2, ClipboardCheck, FileSpreadsheet, PencilLine } from "lucide-react";
+import type { CSSProperties } from "react";
 import ReportCardsPage from "./ReportCardsPage";
 import ResultsPage from "./ResultsPage";
 
-const scrollButtonStyle: React.CSSProperties = {
+const scrollButtonStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
