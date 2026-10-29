@@ -1,4 +1,4 @@
-import { ArrowDown, ClipboardCheck, FileSpreadsheet, PencilLine } from "lucide-react";
+import { ArrowDown, FileSpreadsheet, PencilLine } from "lucide-react";
 import type { CSSProperties } from "react";
 import ReportCardsPage from "./ReportCardsPage";
 import ResultsPage from "./ResultsPage";
