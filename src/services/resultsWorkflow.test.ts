@@ -1082,7 +1082,7 @@ describe("Report Center period discovery and readiness", () => {
     expect(workspacePage).toContain("Results &amp; reports");
     expect(workspacePage).toContain('id="results-entry-section"');
     expect(workspacePage).toContain('id="review-publish-section"');
-    expect(workspacePage).toContain("One workspace from marks to published reports");
+    expect(workspacePage).toContain("Enter marks, fix pupil or subject mismatches, then publish reports.");
     expect(workspacePage).not.toContain("useState<WorkspaceView");
     expect(resultsPage).toContain('embedded ? "Enter or import marks" : "Results"');
     expect(workspacePage).toContain("<ReportCardsPage embedded />");
@@ -2897,7 +2897,7 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain('overflowX: "hidden"');
     expect(resultsPage).toContain('minWidth: 0');
     expect(resultsPage).not.toContain('maxWidth: "100%", overflowX: "scroll"');
-    expect(resultsPage).toContain('gridTemplateColumns: activeImportEntryKey ? "minmax(245px, 0.32fr) minmax(0, 1fr)" : "minmax(0, 1fr)"');
+    expect(resultsPage).toContain('gridTemplateColumns: activeImportEntryKey ? "minmax(min(230px, 30vw), min(300px, 34vw)) minmax(0, 1fr)" : "minmax(0, 1fr)"');
     expect(resultsPage).toContain('maxWidth: "none"');
     expect(resultsPage).toContain('gridColumn: isActivePupil ? "2" : "1"');
     expect(resultsPage).not.toContain("Back to top of review");

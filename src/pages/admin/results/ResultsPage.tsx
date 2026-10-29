@@ -694,10 +694,6 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
   const readyImportEntries = getImportableResultEntries(importEntries)
     .filter((entry) => importResultStates[entry.studentKey]?.state !== "saved");
   const importableBlocks = readyImportEntries.length;
-  const savedPupilCount = new Set([
-    ...Object.entries(draftSaveStates).filter(([, state]) => state.state === "saved").map(([key]) => key),
-    ...Object.entries(importResultStates).filter(([, state]) => state.state === "saved").map(([key]) => key),
-  ]).size;
   const activeImportEntry = importEntries.find((entry) => entry.studentKey === activeImportEntryKey);
   const activeWorkbookDraftKey = importWorkbookKey && selectedImportSheet
     ? `${importWorkbookKey}:${selectedImportSheet}`
@@ -2789,18 +2785,22 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           <div style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0, overflow: "hidden", width: "100%", gap: 8 }}>
         <div style={{ marginBottom: 0, flex: "0 0 auto", display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <div style={{ fontWeight: 700, fontSize: 14, color: "#172b4d", overflowWrap: "anywhere" }}>{importFileName || "Uploaded file"}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", color: "#64748b", fontSize: 12 }}>
+            <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 750, fontSize: 14, color: "#172b4d", overflowWrap: "anywhere" }}>{importFileName || "Uploaded file"}</div>
+              {selectedSheetMetadata ? <span style={{ color: "#64748b", fontSize: 12 }}>{selectedSheetMetadata.name} · {selectedSheetMetadata.academicYear || "Session to confirm"} · {selectedSheetMetadata.term ? `${selectedSheetMetadata.term} Term` : "Term to confirm"}</span> : null}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", color: "#64748b", fontSize: 12 }}>
               <span>{importCounts.totalStudents} pupils</span>
               <span>{readyImportEntries.length} ready</span>
-              <span>{importCounts.unresolvedStudents} unresolved</span>
-              <span>{importCounts.duplicateRecords} duplicates</span>
+              {importCounts.unresolvedStudents > 0 ? <span>{importCounts.unresolvedStudents} to check</span> : null}
+              {importCounts.duplicateRecords > 0 ? <span>{importCounts.duplicateRecords} duplicates</span> : null}
             </div>
           </div>
           {importWorkbookSheets.length > 1 ? (
-            <label style={{ display: "grid", gap: 4, maxWidth: 420, margin: "8px 0" }}>
-              Worksheet
+            <label style={{ display: "flex", alignItems: "center", gap: 8, maxWidth: "100%", margin: "4px 0", color: "#475569", fontSize: 12 }}>
+              <span style={{ flex: "0 0 auto", fontWeight: 700 }}>Worksheet</span>
               <select
+                style={{ minWidth: 0, maxWidth: "min(620px, 100%)", padding: "7px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff" }}
                 value={selectedImportSheet}
                 onChange={async (event) => {
                   const nextSheet = event.target.value;
@@ -2822,29 +2822,15 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               </select>
             </label>
           ) : null}
-          {selectedSheetMetadata ? (
-            <div style={{ color: "#64748b", fontSize: 12, marginBottom: 0 }}>
-              Sheet: <strong style={{ color: "#334155" }}>{selectedSheetMetadata.name}</strong> · Session: {selectedSheetMetadata.academicYear || "not detected"} · Term: {selectedSheetMetadata.term ? `${selectedSheetMetadata.term} Term` : "not detected"}
-            </div>
-          ) : null}
           {importPeriodConflict ? (
-            <div role="alert" style={{ margin: "8px 0", padding: 10, borderRadius: 8, background: "#fff7ed", color: "#9a3412" }}>
+            <div role="alert" style={{ margin: "4px 0", padding: "7px 10px", borderRadius: 8, background: "#fff7ed", color: "#9a3412", fontSize: 12 }}>
               This worksheet does not match the requested {session ? `session ${session}` : ""}{session && term !== "All" ? " and " : ""}{term !== "All" ? `${term} Term` : ""}. Choose a worksheet that matches the requested period before importing.
             </div>
           ) : null}
-          <div style={{ color: "#64748b", fontSize: 12, display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
-            <span>{importCounts.matchedStudents} matched</span>
-            <span>{importCounts.ignoredStudents} set aside</span>
-            <span>{savedPupilCount} saved</span>
-            <span>{importCounts.totalStudents > 0 ? Math.round((readyImportEntries.length / importCounts.totalStudents) * 100) : 0}% ready</span>
-          </div>
           {error ? (
-            <div role="alert" style={{ marginTop: 8, padding: 10, borderRadius: 8, background: "#fef2f2", color: "#991b1b" }}>
+            <div role="alert" style={{ marginTop: 4, padding: "7px 10px", borderRadius: 8, background: "#fef2f2", color: "#991b1b", fontSize: 12 }}>
               {error}
             </div>
-          ) : null}
-          {importableBlocks > 0 && importableBlocks < importEntries.length ? (
-            <div style={{ marginTop: 8, color: "#166534" }}>{importableBlocks} included pupil block(s) are ready; unresolved or ignored pupils will not block this import.</div>
           ) : null}
         </div>
 
@@ -2855,7 +2841,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           tabIndex={0}
           style={{
             display: "grid",
-            gridTemplateColumns: activeImportEntryKey ? "minmax(245px, 0.32fr) minmax(0, 1fr)" : "minmax(0, 1fr)",
+            gridTemplateColumns: activeImportEntryKey ? "minmax(min(230px, 30vw), min(300px, 34vw)) minmax(0, 1fr)" : "minmax(0, 1fr)",
             gridAutoFlow: "row",
             alignItems: "start",
             gap: 10,
@@ -3038,21 +3024,22 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                   aria-label={`Review item for ${entry.studentName || "pupil"}`}
                   style={{
                     border: isActivePupil ? "1px solid #cbd5e1" : "1px solid #e2e8f0",
-                    borderRadius: 10,
-                    padding: isActivePupil ? 14 : 10,
-                    background: isActivePupil ? "#ffffff" : "#ffffff",
-                    boxShadow: "none",
+                    borderRadius: isActivePupil ? 14 : 10,
+                    padding: isActivePupil ? 18 : 10,
+                    background: "#ffffff",
+                    boxShadow: isActivePupil ? "0 18px 44px rgba(15, 23, 42, 0.16)" : "none",
                     gridColumn: isActivePupil ? "2" : "1",
                     position: isActivePupil ? "fixed" : "relative",
-                    top: isActivePupil ? 200 : undefined,
+                    top: isActivePupil ? "clamp(150px, 17vh, 178px)" : undefined,
                     right: isActivePupil ? 24 : undefined,
-                    width: isActivePupil ? "calc(100vw - max(245px, 24vw) - 52px)" : undefined,
+                    bottom: isActivePupil ? 78 : undefined,
+                    width: isActivePupil ? "calc(100vw - min(300px, 34vw) - 52px)" : undefined,
                     boxSizing: "border-box",
                     zIndex: isActivePupil ? 1001 : undefined,
                     alignSelf: "start",
                     minWidth: 0,
                     minHeight: 0,
-                    maxHeight: isActivePupil ? "calc(100dvh - clamp(300px, 40vh, 350px))" : undefined,
+                    maxHeight: isActivePupil ? "none" : undefined,
                     overflowY: isActivePupil ? "auto" : "visible",
                     scrollMarginTop: 4,
                   }}
@@ -3124,7 +3111,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                   </div>
 
                   {activeImportEntryKey === entry.studentKey ? (
-                  <div style={{ marginTop: 14, borderTop: "1px solid #dbeafe", paddingTop: 16 }}>
+                  <div style={{ marginTop: 8, borderTop: "1px solid #e2e8f0", paddingTop: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12, padding: "10px 12px", borderRadius: 8, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>Pupil {Math.max(1, reviewPosition + 1)} of {reviewableEntries.length}</div>
@@ -3138,7 +3125,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                             : "Unsaved changes"}
                     </span>
                   </div>
-                  <section aria-label="School record" style={{ marginBottom: 14, padding: 12, border: "1px solid #cbd5e1", borderRadius: 10, background: "#f8fafc" }}>
+                  <section aria-label="School record" style={{ marginBottom: 10, padding: 10, border: "1px solid #e2e8f0", borderRadius: 9, background: "#f8fafc" }}>
                     <div style={{ fontWeight: 700, marginBottom: 6 }}>School record</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 8, fontSize: 13 }}>
                       <div>
@@ -3165,7 +3152,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                       </div>
                     </div>
                   </section>
-                  <section aria-label="Next action for this pupil" style={{ margin: "0 0 12px", padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: 9, background: "#fff", display: "grid", gap: 8 }}>
+                  <section aria-label="Next action for this pupil" style={{ margin: "0 0 10px", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 9, background: "#fff", display: "grid", gap: 6 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
                       <div style={{ flex: "1 1 220px", minWidth: 0 }}>
                         <div style={{ fontWeight: 700, color: "#172b4d" }}>{pupilStatus.label}</div>
@@ -3272,7 +3259,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                       if (next) void handleMoveToPupil(next);
                     }} disabled={reviewPosition < 0 || reviewPosition >= reviewableEntries.length - 1}>Next pupil →</Button>
                   </div>
-                  <section aria-label={`Save actions for ${entry.studentName || "this pupil"}`} style={{ border: "1px solid #cbd5e1", borderRadius: 12, padding: 14, marginBottom: 16, background: "#f8fafc" }}>
+                  <section aria-label={`Save actions for ${entry.studentName || "this pupil"}`} style={{ border: "1px solid #e2e8f0", borderRadius: 9, padding: "8px 10px", marginBottom: 10, background: "#f8fafc" }}>
                     <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>Save options for {entry.studentName || "this pupil"}</div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       <Button type="button" size="sm" variant="secondary" onClick={() => void handleSaveProgress()}>
