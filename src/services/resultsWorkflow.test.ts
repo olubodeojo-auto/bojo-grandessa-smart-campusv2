@@ -99,6 +99,8 @@ const resultsMigration = Object.values(migrationFiles)[0] ?? "";
 const appSource = readFileSync(resolve(process.cwd(), "src/App.tsx"), "utf8");
 const workspacePage = readFileSync(resolve(process.cwd(), "src/pages/admin/results/ResultsWorkspacePage.tsx"), "utf8");
 const batchEntrySource = readFileSync(resolve(process.cwd(), "src/pages/admin/results/ResultBatchEntry.tsx"), "utf8");
+const groupedResultsSource = readFileSync(resolve(process.cwd(), "src/pages/admin/results/ResultTableGrouped.tsx"), "utf8");
+const resultsScrollRegionSource = readFileSync(resolve(process.cwd(), "src/pages/admin/results/ResultsScrollRegion.tsx"), "utf8");
 const reportMigrationFiles = import.meta.glob<string>(
   "../../supabase/migrations/20261016000000_report_card_details.sql",
   { eager: true, query: "?raw", import: "default" },
@@ -2913,6 +2915,14 @@ describe("result workbook import preview", () => {
     expect(resultsPage).toContain("Save marks as draft");
     expect(resultsPage).toContain("function SynchronizedHorizontalScroll");
     expect(resultsPage).toContain("horizontal scrollbar");
+    expect(resultsScrollRegionSource).toContain('aria-label={`${label} horizontal scrollbar`}');
+    expect(resultsScrollRegionSource).toContain('overflowX: "auto"');
+    expect(resultsScrollRegionSource).toContain('overflowY: "auto"');
+    expect(resultsScrollRegionSource).toContain('maxHeight');
+    expect(resultsPage).toContain('<ResultsScrollRegion');
+    expect(batchEntrySource).toContain('<ResultsScrollRegion');
+    expect(groupedResultsSource).toContain('<ResultsScrollRegion');
+    expect(reportCardsPage).toContain('ResultsScrollRegion label="Report card preview"');
     expect(resultsPage).toContain('position: "sticky"');
     expect(resultsPage).toContain("Next action for this pupil");
     expect(resultsPage).toContain("Publish completed subjects now");
@@ -3063,20 +3073,22 @@ describe("result lifecycle permissions", () => {
     expect(resultsPage).toContain('reviewResult(row.id, decision, trimmedReason)');
     expect(resultsPage).toMatch(/>\s*Unpublish\s*<\/Button>/);
     expect(resultForm).toContain('status: mode === "edit" ? result?.status ?? "Draft" : "Draft"');
-    expect(resultsPage).toContain('aria-label="Result details; scroll vertically to view all fields"');
-    expect(resultsPage).toContain('style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable" }}');
+    expect(resultsPage).toContain('<ResultsScrollRegion label="Result details"');
+    expect(resultsPage).toContain('<ResultsScrollRegion label="Result form"');
+    expect(resultsPage).toContain('<ResultsScrollRegion label="Batch result entry"');
+    expect(resultsPage).toContain('<ResultsScrollRegion label="Result details"');
     expect(canAdministratorEditResult(result({ status: "Returned" }))).toBe(true);
     expect(canAdministratorEditResult(result({ status: "Published" }))).toBe(false);
   });
 
   it("keeps result grids and report-card tables keyboard-scrollable", () => {
     expect(groupedResults).toContain('aria-expanded={isExpanded}');
-    expect(groupedResults).toContain('aria-label="Pupil results; scroll horizontally to view all subject columns"');
+    expect(groupedResults).toContain('label="Pupil results overview"');
     expect(groupedResults).toContain('minWidth: 1050');
-    expect(batchEntry).toContain('aria-label="Batch subject results; scroll horizontally to see all columns"');
+    expect(batchEntry).toContain('label="Batch subject results"');
     expect(batchEntry).toContain('minWidth: 900');
     expect(resultsPage).toContain('label={`Subject mappings for ${entry.studentName}`}');
-    expect(resultsPage).toContain('aria-label={`${label}; scroll horizontally to access every column`}');
+    expect(resultsScrollRegionSource).toContain('aria-label={`${label}; scroll vertically and horizontally to access all content`}');
     expect(resultsPage).toContain('overflowX: "hidden"');
     expect(reportCardDocument).toContain('role="region"');
     expect(reportCardStyles).toContain('min-width: 620px');
@@ -3875,7 +3887,7 @@ describe("unified Results and reports workflow", () => {
     expect(resultsPage).toContain("onSaveAndPublish={publishSavedResultPeriod}");
     expect(batchEntrySource).toContain("SAVE & PUBLISH");
     expect(batchEntrySource).toContain("onSaveAndPublish");
-    expect(resultsPage).toContain('overflowX: "auto"');
+    expect(resultsScrollRegionSource).toContain('overflowX: "auto"');
     expect(resultsPage).toContain("function SynchronizedHorizontalScroll");
   });
 });

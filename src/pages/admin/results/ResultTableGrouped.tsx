@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronUp, CornerUpLeft, Eye, Pencil, Send, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 import type { CSSProperties } from "react";
+import ResultsScrollRegion from "./ResultsScrollRegion";
 import EmptyState from "../../../components/ui/EmptyState";
 import type { ResultStatus } from "../../../types/result";
 import type { ResultRow } from "./ResultTable";
@@ -102,14 +103,12 @@ export default function ResultTableGrouped({
   }
 
   return (
-    <div
-      className="card"
-      role="region"
-      aria-label="Pupil results; scroll horizontally to view all subject columns"
-      tabIndex={0}
-      style={{ minWidth: 0, overflowX: "auto" }}
+    <ResultsScrollRegion
+      label="Pupil results overview"
+      maxHeight="min(65vh, 680px)"
     >
-      <div style={{ display: "grid", gap: 0 }}>
+      <div className="card" style={{ minWidth: 980 }}>
+      <div style={{ display: "grid", gap: 0, minWidth: 980 }}>
         {groups.map((group) => {
           const groupKey = group.studentId;
           const isExpanded = expandedGroups.has(groupKey);
@@ -171,6 +170,10 @@ export default function ResultTableGrouped({
               {/* Expanded Subject Results */}
               {isExpanded && (
                 <div id={`result-subjects-${groupKey}`} style={{ background: "#fafafa", borderTop: "1px solid #e5e7eb" }}>
+                  <ResultsScrollRegion
+                    label={`Subject results for ${group.studentName}`}
+                    maxHeight="min(48vh, 440px)"
+                  >
                   <table style={{ width: "100%", minWidth: 1050, borderCollapse: "collapse" }}>
                     <thead>
                       <tr>
@@ -266,13 +269,15 @@ export default function ResultTableGrouped({
                       ))}
                     </tbody>
                   </table>
+                  </ResultsScrollRegion>
                 </div>
               )}
             </div>
           );
         })}
       </div>
-    </div>
+      </div>
+    </ResultsScrollRegion>
   );
 }
 

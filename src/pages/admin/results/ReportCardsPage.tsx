@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import ReportCardDocument from "../../../components/reports/ReportCardDocument";
 import ReportCardToolbar from "../../../components/reports/ReportCardToolbar";
 import AppModal from "../../../components/modals/AppModal";
+import ResultsScrollRegion from "./ResultsScrollRegion";
 import EmptyState from "../../../components/ui/EmptyState";
 import FormField, { inputStyle } from "../../../components/forms/FormField";
 import SectionCard from "../../../components/ui/SectionCard";
@@ -2016,11 +2017,9 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
             onClose={cancelReportDetails}
           >
             {error ? <div role="alert" style={{ marginBottom: 12, padding: 10, background: "#fef2f2", color: "#991b1b", borderRadius: 8 }}>{error}</div> : null}
-            <div
-              role="region"
-              aria-label="Report-card details form; scroll vertically to view all fields"
-              tabIndex={0}
-              style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable", paddingRight: 4 }}
+            <ResultsScrollRegion
+              label="Report-card details form"
+              maxHeight="calc(100dvh - 190px)"
             >
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
               <FormField label="Calculation mode">
@@ -2100,11 +2099,13 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
                 </FormField>
               </div>
             </div>
-            </div>
+            </ResultsScrollRegion>
           </AppModal>
           : null}
 
-          <ReportCardDocument report={report} />
+          <ResultsScrollRegion label="Report card preview" maxHeight="min(75vh, 820px)">
+            <ReportCardDocument report={report} />
+          </ResultsScrollRegion>
         </div>
       ) : (
         <EmptyState title="Choose a report period" description="Search for a pupil above, then preview an available period from their existing results." />

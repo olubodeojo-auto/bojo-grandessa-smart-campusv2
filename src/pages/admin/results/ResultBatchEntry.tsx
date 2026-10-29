@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import Button from "../../../components/ui/Button";
+import ResultsScrollRegion from "./ResultsScrollRegion";
 import type { Result } from "../../../types/result";
 import type { SchoolClass } from "../../../types/class";
 import type { Student } from "../../../types/student";
@@ -497,11 +498,9 @@ export default function ResultBatchEntry({
       {error ? <div role="alert" style={{ color: "#991b1b" }}>{error}</div> : null}
 
       {selectedStudent && subjects.length > 0 ? (
-        <div
-          role="region"
-          aria-label="Batch subject results; scroll horizontally to see all columns"
-          tabIndex={0}
-          style={{ minWidth: 0, overflowX: "scroll", overflowY: "hidden", scrollbarGutter: "stable", overscrollBehaviorX: "contain", paddingBottom: 8 }}
+        <ResultsScrollRegion
+          label="Batch subject results"
+          maxHeight="min(58vh, 560px)"
         >
           <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
             <thead>
@@ -627,7 +626,7 @@ export default function ResultBatchEntry({
               })}
             </tbody>
           </table>
-        </div>
+        </ResultsScrollRegion>
       ) : (
         <p>Select a student with a class to enter all subject results.</p>
       )}

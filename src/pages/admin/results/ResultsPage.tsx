@@ -73,6 +73,7 @@ import ResultForm from "./ResultForm";
 import ResultBatchEntry from "./ResultBatchEntry";
 import ResultTableGrouped from "./ResultTableGrouped";
 import ResultsNotificationBell from "./ResultsNotificationBell";
+import ResultsScrollRegion from "./ResultsScrollRegion";
 import type { ResultNotice } from "./ResultsNotificationBell";
 import type { ResultRow } from "./ResultTable";
 import { grandessaGradingScale } from "../../../config/grandessaGrading";
@@ -297,94 +298,12 @@ function Detail({ label, value }: { label: string; value: string }) {
 }
 
 function SynchronizedHorizontalScroll({ id, label, children }: { id: string; label: string; children: ReactNode }) {
-  const topScrollRef = useRef<HTMLDivElement | null>(null);
-  const tableScrollRef = useRef<HTMLDivElement | null>(null);
-  const [contentWidth, setContentWidth] = useState(1050);
-
-  useEffect(() => {
-    const container = tableScrollRef.current;
-    const table = container?.querySelector("table");
-    if (!container || !table) return;
-
-    const measureWidth = (): void => {
-      const width = Math.max(table.scrollWidth, table.getBoundingClientRect().width, container.clientWidth);
-      setContentWidth((current) => current === width ? current : width);
-    };
-    measureWidth();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measureWidth);
-    observer?.observe(table);
-    observer?.observe(container);
-    window.addEventListener("resize", measureWidth);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", measureWidth);
-    };
-  }, []);
-
+  // ResultsScrollRegion keeps a horizontal scrollbar available above the content
+  // and provides independent vertical and horizontal scrolling within this layer.
   return (
-    <>
-      <div
-        ref={topScrollRef}
-        role="region"
-        aria-label={`${label} horizontal scrollbar`}
-        tabIndex={0}
-        onScroll={(event) => {
-          const tableContainer = tableScrollRef.current;
-          if (tableContainer && tableContainer.scrollLeft !== event.currentTarget.scrollLeft) {
-            tableContainer.scrollLeft = event.currentTarget.scrollLeft;
-          }
-        }}
-        style={{
-          boxSizing: "border-box",
-          minWidth: 0,
-          width: "100%",
-          maxWidth: "100%",
-          height: 24,
-          marginBottom: 5,
-          position: "sticky",
-          top: 0,
-          zIndex: 5,
-          flex: "0 0 auto",
-          overflowX: "auto",
-          overflowY: "hidden",
-          overscrollBehaviorX: "contain",
-          WebkitOverflowScrolling: "touch",
-          background: "#f8fafc",
-          borderBottom: "1px solid #cbd5e1",
-        }}
-      >
-        <div aria-hidden="true" style={{ width: contentWidth, height: 1 }} />
-      </div>
-      <div
-        ref={tableScrollRef}
-        id={id}
-        role="region"
-        aria-label={`${label}; scroll horizontally to access every column`}
-        tabIndex={0}
-        onScroll={(event) => {
-          const topContainer = topScrollRef.current;
-          if (topContainer && topContainer.scrollLeft !== event.currentTarget.scrollLeft) {
-            topContainer.scrollLeft = event.currentTarget.scrollLeft;
-          }
-        }}
-        style={{
-          display: "block",
-          boxSizing: "border-box",
-          minWidth: 0,
-          width: "100%",
-          maxWidth: "100%",
-          overflowX: "auto",
-          overflowY: "hidden",
-          scrollbarGutter: "stable",
-          overscrollBehaviorX: "contain",
-          WebkitOverflowScrolling: "touch",
-          paddingBottom: 10,
-          borderBottom: "2px solid #cbd5e1",
-        }}
-      >
-        {children}
-      </div>
-    </>
+    <ResultsScrollRegion id={id} label={label} maxHeight="min(58vh, 560px)">
+      {children}
+    </ResultsScrollRegion>
   );
 }
 
@@ -2136,7 +2055,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
 
   return (
     <>
-      <motion.div id="results-entry-workspace" style={{ scrollMarginTop: 18 }} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+      <motion.div id="results-entry-workspace" style={{ scrollMarginTop: 18, width: "100%", maxWidth: "100%", minWidth: 0, overflowX: "hidden" }} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <div
           className="card"
           style={{
@@ -2618,12 +2537,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           setEditingResult(null);
         }}
       >
-        <div
-          role="region"
-          aria-label="Result form; scroll vertically to view all fields"
-          tabIndex={0}
-          style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable" }}
-        >
+        <ResultsScrollRegion label="Result form" maxHeight="calc(100dvh - 170px)">
           <ResultForm
             key={`${formMode}-${editingResult?.id ?? "new"}`}
             mode={formMode}
@@ -2639,7 +2553,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             }}
             onSaved={loadData}
           />
-        </div>
+        </ResultsScrollRegion>
       </AppModal>
 
       <AppModal
@@ -2662,12 +2576,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
         }}
         onClose={() => setIsBatchOpen(false)}
       >
-        <div
-          role="region"
-          aria-label="Batch result entry; scroll vertically to view all fields"
-          tabIndex={0}
-          style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable" }}
-        >
+        <ResultsScrollRegion label="Batch result entry" maxHeight="calc(100dvh - 170px)">
           <ResultBatchEntry
             key={resumeBatchResult?.id ?? "new-batch-entry"}
             students={students}
@@ -2687,7 +2596,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               setIsFormOpen(true);
             }}
           />
-        </div>
+        </ResultsScrollRegion>
       </AppModal>
 
       <AppModal
@@ -2857,29 +2766,30 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           ) : null}
         </div>
 
-        <div
+        <ResultsScrollRegion
           id="import-review-pupils"
-          className={`grandessa-import-review-grid${activeImportEntryKey ? " has-active-pupil" : ""}`}
-          role="region"
-          aria-label="Pupil review list and active pupil editor"
-          tabIndex={0}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr)",
-            gridAutoFlow: "row",
-            alignItems: "start",
-            gap: 10,
-            flex: "1 1 auto",
-            minWidth: 0,
-            minHeight: 0,
-            overflowY: "auto",
-            width: "100%",
-            maxWidth: "100%",
-            overflowX: "hidden",
-            paddingRight: 3,
-            paddingBottom: 4,
-          }}
+          label="Pupil review list and active pupil editor"
+          maxHeight="min(68vh, 760px)"
         >
+          <div
+            className={`grandessa-import-review-grid${activeImportEntryKey ? " has-active-pupil" : ""}`}
+            role="region"
+            aria-label="Pupil review list and active pupil editor"
+            tabIndex={0}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr)",
+              gridAutoFlow: "row",
+              alignItems: "start",
+              gap: 10,
+              minWidth: 0,
+              minHeight: 0,
+              width: "100%",
+              maxWidth: "100%",
+              paddingRight: 3,
+              paddingBottom: 4,
+            }}
+          >
           {isFinalImportPreview ? (
             readyImportEntries.length === 0 ? (
               <EmptyState
@@ -3678,7 +3588,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               );
             })
           )}
-        </div>
+          </div>
+        </ResultsScrollRegion>
           </div>
         )}
       </AppModal>
@@ -3723,14 +3634,9 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           </div>
         }
       >
-        <div
-          role="region"
-          aria-label="Result details; scroll vertically to view all fields"
-          tabIndex={0}
-          style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarGutter: "stable" }}
-        >
+        <ResultsScrollRegion label="Result details" maxHeight="calc(100dvh - 170px)">
           <ResultDetails row={selectedRow} />
-        </div>
+        </ResultsScrollRegion>
       </AppModal>
     </>
   );
