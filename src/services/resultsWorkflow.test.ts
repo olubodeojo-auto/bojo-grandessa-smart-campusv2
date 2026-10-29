@@ -3073,7 +3073,7 @@ describe("result lifecycle permissions", () => {
     expect(resultsPage).toContain('reviewResult(row.id, decision, trimmedReason)');
     expect(resultsPage).toMatch(/>\s*Unpublish\s*<\/Button>/);
     expect(resultForm).toContain('status: mode === "edit" ? result?.status ?? "Draft" : "Draft"');
-    expect(resultsPage).toContain('aria-label="Result details; scroll vertically to view all fields"');
+    expect(resultsPage).toContain('<ResultsScrollRegion label="Result details"');
     expect(resultsPage).toContain('<ResultsScrollRegion label="Result form"');
     expect(resultsPage).toContain('<ResultsScrollRegion label="Batch result entry"');
     expect(resultsPage).toContain('<ResultsScrollRegion label="Result details"');
@@ -3088,7 +3088,7 @@ describe("result lifecycle permissions", () => {
     expect(batchEntry).toContain('aria-label="Batch subject results; scroll horizontally to see all columns"');
     expect(batchEntry).toContain('minWidth: 900');
     expect(resultsPage).toContain('label={`Subject mappings for ${entry.studentName}`}');
-    expect(resultsPage).toContain('aria-label={`${label}; scroll horizontally to access every column`}');
+    expect(resultsScrollRegionSource).toContain('aria-label={`${label}; scroll vertically and horizontally to access all content`}');
     expect(resultsPage).toContain('overflowX: "hidden"');
     expect(reportCardDocument).toContain('role="region"');
     expect(reportCardStyles).toContain('min-width: 620px');
