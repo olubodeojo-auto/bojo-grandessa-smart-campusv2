@@ -982,7 +982,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
       const completedEntries = mergedEntries.filter((entry) => Boolean(entry.workflowStatus));
       const restoredEntries = mergedEntries.filter((entry) => !entry.workflowStatus);
       setImportSummary(completedEntries.length > 0
-        ? `${completedEntries.length} pupil review(s) were skipped because their results have already been imported. Check Publish Drafts and Results for their saved status.`
+        ? `${completedEntries.length} pupil review(s) were skipped because their results have already been imported. Check Results & reports for their saved status.`
         : "");
       setImportEntries(withSelectedDuplicateWarnings(restoredEntries));
       setDraftSaveStates(Object.fromEntries(savedEntries.filter((entry) => !entry.workflowStatus).map((entry) => [entry.studentKey, { state: "saved" as const }])));
@@ -1029,7 +1029,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
       const completedEntries = entries.filter((entry) => Boolean(entry.workflowStatus));
       const pendingEntries = entries.filter((entry) => !entry.workflowStatus);
       if (pendingEntries.length === 0) {
-        setImportSummary("All pupil entries in this workbook have already been imported. Their publication status is shown in Publish Drafts and Results; no duplicate import was started.");
+        setImportSummary("All pupil entries in this workbook have already been imported. Their publication status is shown in Results & reports; no duplicate import was started.");
         return;
       }
       const reconciledEntries = reconcileSavedImportStudentMatches(
@@ -1046,7 +1046,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
         ? restoredEntries.find((entry) => entry.studentKey === entryKeyOverride)
         : restoredEntries.find((entry) => entry.studentKey === savedCursor?.entryKey) ?? restoredEntries[0];
       if (entryKeyOverride && !activeEntry) {
-        setError("This pupil's import is no longer awaiting reconciliation. Return to the Draft student list and refresh.");
+        setError("This pupil's import is no longer awaiting reconciliation. Return to report review and refresh the list.");
         return;
       }
       const unresolvedIndex = activeEntry?.items.findIndex((item) => !item.subjectId) ?? -1;
@@ -1099,7 +1099,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
       workbook.workbookKey === requestedWorkbookKey && (!requestedOwnerId || workbook.ownerId === requestedOwnerId));
     if (!workbookExists) {
       autoResumeHandled.current = autoResumeKey;
-      setError("The saved workbook linked from Publish Drafts and Results is not available to this account. Refresh the saved-work list and try again.");
+      setError("This saved import review is not available to this account. Refresh the review list and try again.");
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
         next.delete("resumeWorkbook");
@@ -2139,7 +2139,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
 
   return (
     <>
-      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+      <motion.div id="results-entry-workspace" style={{ scrollMarginTop: 18 }} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <div
           className="card"
           style={{
@@ -2152,9 +2152,9 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           }}
         >
           <div>
-            <h1 style={{ margin: 0, fontFamily: "Fredoka", fontSize: 30 }}>{embedded ? "Enter or import results" : "Results"}</h1>
-            <p style={{ marginTop: 8, color: "#666", fontFamily: "Poppins" }}>
-              {embedded ? "Use manual entry or import Excel. Publish buttons and report status are above on this same page." : "Enter, review, import and publish pupil results in one workspace."}
+            <h2 style={{ margin: 0, color: "#172b4d", fontFamily: "Fredoka", fontSize: 25 }}>{embedded ? "Enter or import marks" : "Results"}</h2>
+            <p style={{ marginTop: 7, marginBottom: 0, color: "#64748b", fontFamily: "Poppins", lineHeight: 1.6, maxWidth: 680 }}>
+              {embedded ? "Use a spreadsheet or enter marks manually. Both go through the same pupil review and report-publishing flow below." : "Manage pupil marks and publication status in one workspace."}
             </p>
           </div>
 
@@ -2188,7 +2188,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               <input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => void handleImportFile(event)} hidden />
               <span style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", borderRadius: 12, background: "#e2e8f0", color: "#0f172a", fontWeight: 700, cursor: "pointer" }}>
                 <Upload size={16} />
-                Import Excel
+                Import spreadsheet
               </span>
             </label>
             <Button type="button" onClick={() => {
@@ -2196,7 +2196,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               setIsBatchOpen(true);
             }} disabled={loading || (isTeacher && !isAdmin && teacherAssignments.length === 0)}>
               <FilePlus2 size={16} />
-              Add Results
+              Enter marks
             </Button>
             <Button
               type="button"
@@ -2204,7 +2204,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               onClick={handleAdd}
               disabled={loading || (isTeacher && !isAdmin && teacherAssignments.length === 0)}
             >
-              Add Single Subject
+              Add one subject
             </Button>
           </div>
         </div>
@@ -2529,54 +2529,83 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
 
         ) : null}
 
-        <ResultFilters
-          search={search}
-          term={term}
-          session={session}
-          sessions={academicYears}
-          classId={classId}
-          classes={classes.filter((schoolClass) => isAdmin || !isTeacher || teacherAssignments.some((assignment) => assignment.class_id === schoolClass.id))}
-          report={reportType}
-          status={status}
-          onSearchChange={setSearch}
-          onTermChange={setTerm}
-          onSessionChange={setSession}
-          onClassChange={setClassId}
-          onReportChange={setReportType}
-          onStatusChange={setStatus}
-        />
+        <details
+          id="all-subject-records"
+          className="card"
+          open={Boolean(search.trim() || term !== "All" || session.trim() || classId || reportType !== "All" || status !== "All")}
+          style={{ padding: 18, border: "1px solid #dfe7ef", borderRadius: 16, scrollMarginTop: 18 }}
+        >
+          <summary
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 14,
+              flexWrap: "wrap",
+              cursor: "pointer",
+              listStylePosition: "outside",
+              color: "#172b4d",
+            }}
+          >
+            <span style={{ display: "grid", gap: 4 }}>
+              <span style={{ fontSize: 18, fontWeight: 850 }}>All subject records</span>
+              <span style={{ color: "#64748b", fontSize: 13, lineHeight: 1.5 }}>
+                Optional detailed list for finding or editing one subject row. Normal review and publishing happens in the report list below.
+              </span>
+            </span>
+            <span style={{ borderRadius: 999, padding: "6px 10px", background: "#f1f5f9", color: "#475569", fontSize: 12, fontWeight: 750 }}>
+              {rows.length} matching subject row(s)
+            </span>
+          </summary>
+          <div style={{ display: "grid", gap: 14, marginTop: 18 }}>
+            <ResultFilters
+              search={search}
+              term={term}
+              session={session}
+              sessions={academicYears}
+              classId={classId}
+              classes={classes.filter((schoolClass) => isAdmin || !isTeacher || teacherAssignments.some((assignment) => assignment.class_id === schoolClass.id))}
+              report={reportType}
+              status={status}
+              onSearchChange={setSearch}
+              onTermChange={setTerm}
+              onSessionChange={setSession}
+              onClassChange={setClassId}
+              onReportChange={setReportType}
+              onStatusChange={setStatus}
+            />
 
-        <div style={{ marginTop: 24 }}>
-          <ResultTableGrouped
-            rows={rows}
-            loading={loading}
-            canEdit={(row) => {
-              const result = results.find((candidate) => candidate.id === row.id);
-              return Boolean(result && (isAdmin
-                ? canAdministratorEditResult(result)
-                : isTeacher && user && canTeacherEditResult(result, user.id, teacherAssignments)));
-            }}
-            canDelete={(row) => {
-              const result = results.find((candidate) => candidate.id === row.id);
-              return Boolean(result && canAdministratorDeleteResult(isAdmin));
-            }}
-            canSubmit={(row) => {
-              const result = results.find((candidate) => candidate.id === row.id);
-              return Boolean(result && user && isTeacher && !isAdmin && canTeacherSubmitResult(result, user.id, teacherAssignments));
-            }}
-            canReturn={(row) => isAdmin && row.status === "Submitted"}
-            canPublish={(row) => {
-              const result = results.find((candidate) => candidate.id === row.id);
-              return Boolean(result && canPublishResult(result, isAdmin));
-            }}
-            canUnpublish={(row) => row.status === "Published" && isAdmin}
-            onView={handleView}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onSubmit={handleSubmitResult}
-            onReview={handleReview}
-          />
-        </div>
+            <ResultTableGrouped
+              rows={rows}
+              loading={loading}
+              canEdit={(row) => {
+                const result = results.find((candidate) => candidate.id === row.id);
+                return Boolean(result && (isAdmin
+                  ? canAdministratorEditResult(result)
+                  : isTeacher && user && canTeacherEditResult(result, user.id, teacherAssignments)));
+              }}
+              canDelete={(row) => {
+                const result = results.find((candidate) => candidate.id === row.id);
+                return Boolean(result && canAdministratorDeleteResult(isAdmin));
+              }}
+              canSubmit={(row) => {
+                const result = results.find((candidate) => candidate.id === row.id);
+                return Boolean(result && user && isTeacher && !isAdmin && canTeacherSubmitResult(result, user.id, teacherAssignments));
+              }}
+              canReturn={(row) => isAdmin && row.status === "Submitted"}
+              canPublish={(row) => {
+                const result = results.find((candidate) => candidate.id === row.id);
+                return Boolean(result && canPublishResult(result, isAdmin));
+              }}
+              canUnpublish={(row) => row.status === "Published" && isAdmin}
+              onView={handleView}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onSubmit={handleSubmitResult}
+              onReview={handleReview}
+            />
+          </div>
+        </details>
       </motion.div>
 
       <AppModal
