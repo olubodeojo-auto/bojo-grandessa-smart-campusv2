@@ -41,3 +41,22 @@ export function findLatestReportPeriod(
 
   return null;
 }
+
+/**
+ * Prefer the requested report type, but fall back to the latest available
+ * published period when a pupil has only Midterm or only End-of-Term results.
+ */
+export function findLatestAvailableReportPeriod(
+  history: ReportHistoryBySession[],
+  preferredReportType: ReportType,
+): { academicYear: string; period: ReportHistoryItem } | null {
+  const preferred = findLatestReportPeriod(history, preferredReportType);
+  if (preferred) return preferred;
+
+  for (const session of history) {
+    const period = session.entries[0];
+    if (period) return { academicYear: session.academicYear, period };
+  }
+
+  return null;
+}
