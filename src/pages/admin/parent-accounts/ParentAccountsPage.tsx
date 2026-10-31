@@ -2,7 +2,7 @@ import { ExternalLink, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { createParentPortalAccount, linkExistingParentPortalAccount, resendParentPortalInvite } from "../../../services/parentAccountService";
+import { createParentPortalAccount, linkExistingParentPortalAccount, resendParentPortalInvite, reuseExistingParentPortalAccount } from "../../../services/parentAccountService";
 import {
   getParentAccountDirectory,
   type ParentAccountDirectoryEntry,
@@ -17,7 +17,7 @@ const statusLabels: Record<ParentAccountStatus | "all", string> = {
   active: "Active",
   link_missing: "Student Link Missing",
   account_exists_unlinked: "Existing Account — Link Required",
-  account_conflict: "Duplicate Contact Needs Review",
+  account_conflict: "Existing Parent Account Found",
 };
 
 const statusColors: Record<ParentAccountStatus, { background: string; color: string }> = {
@@ -88,11 +88,14 @@ export default function ParentAccountsPage() {
   }, [entries, search, statusFilter]);
 
   async function manageAccount(entry: ParentAccountDirectoryEntry): Promise<void> {
+    if (entry.account_status === "account_conflict" && !window.confirm(`An existing portal account already uses ${entry.contact.email}. Reuse that account for ${entry.students.map(studentDisplayName).join(", ")}? No new invitation will be sent.`)) return;
     setWorkingContactId(entry.contact.id);
     setError("");
 
     try {
-      if (entry.account_status === "not_created") {
+      if (entry.account_status === "account_conflict") {
+        await reuseExistingParentPortalAccount(entry.contact.id);
+      } else if (entry.account_status === "not_created") {
         await createParentPortalAccount(entry.contact.id);
       } else if (entry.account_status === "account_exists_unlinked" || entry.account_status === "link_missing") {
         await linkExistingParentPortalAccount(entry.contact.id);
@@ -132,7 +135,7 @@ export default function ParentAccountsPage() {
             ["Needs an account", entries.filter((entry) => entry.account_status === "not_created").length, "#475569", "#f8fafc"],
             ["Existing account to link", entries.filter((entry) => entry.account_status === "account_exists_unlinked").length, "#1d4ed8", "#eff6ff"],
             ["Missing child link", entries.filter((entry) => entry.account_status === "link_missing").length, "#92400e", "#fffbeb"],
-            ["Needs contact review", entries.filter((entry) => entry.account_status === "account_conflict" || entry.account_status === "inactive").length, "#991b1b", "#fef2f2"],
+            ["Needs account attention", entries.filter((entry) => entry.account_status === "inactive").length, "#991b1b", "#fef2f2"],
           ] as const).map(([label, count, color, background]) => (
             <div key={label} style={{ padding: 14, borderRadius: 10, background, border: "1px solid #e2e8f0" }}>
               <p style={{ margin: 0, color, fontSize: 13, fontWeight: 700 }}>{label}</p>
@@ -217,10 +220,6 @@ export default function ParentAccountsPage() {
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                           {entry.account_status === "active" ? (
                             <span style={{ color: "#166534", fontSize: 13, fontWeight: 700 }}>Portal linked</span>
-                          ) : entry.account_status === "account_conflict" ? (
-                            <span title="This email account is already associated with another contact. Review duplicate contact records before changing links." style={{ color: "#991b1b", fontSize: 13, maxWidth: 180 }}>
-                              Review duplicate contact
-                            </span>
                           ) : (
                             <button
                               type="button"
@@ -229,6 +228,7 @@ export default function ParentAccountsPage() {
                               title={!entry.contact.email?.trim() ? "Add an email address to this contact before creating or linking an account." : undefined}
                             >
                               {working ? "Working..." :
+                                entry.account_status === "account_conflict" ? "Use existing parent account" :
                                 entry.account_status === "invited" ? "Resend invitation" :
                                   entry.account_status === "account_exists_unlinked" ? "Link existing account" :
                                     entry.account_status === "link_missing" ? "Repair child link" :
