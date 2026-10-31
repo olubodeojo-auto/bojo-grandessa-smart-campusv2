@@ -192,3 +192,27 @@
   .parent-child-card { align-items: flex-start; }
   .parent-student-detail__grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+
+.parent-dashboard-children { display: grid; gap: 18px; }
+.parent-dashboard-child { display: grid; gap: 18px; padding: 22px; border: 1px solid #e1ebe4; border-radius: 20px; background: #fff; box-shadow: 0 10px 28px rgba(21, 73, 47, .05); }
+.parent-dashboard-child__identity { display: flex; align-items: center; gap: 16px; }
+.parent-dashboard-child__identity h3 { margin: 0; color: #18352a; font: 700 23px Fredoka, sans-serif; }
+.parent-dashboard-child__identity p:last-child { margin: 5px 0 0; color: #64746c; font-size: 13px; }
+.parent-dashboard-child__reports { padding-top: 16px; border-top: 1px solid #edf1ed; }
+.parent-dashboard-child__reports-heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 12px; color: #18352a; }
+.parent-dashboard-child__reports-heading span { color: #718078; font-size: 12px; }
+.parent-dashboard-session + .parent-dashboard-session { margin-top: 14px; padding-top: 14px; border-top: 1px solid #edf1ed; }
+.parent-dashboard-session h4 { margin: 0 0 10px; color: #315443; font: 700 15px Poppins, sans-serif; }
+.parent-dashboard-term { display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: center; padding: 8px 0; }
+.parent-dashboard-term__name { color: #64746c; font-size: 13px; font-weight: 700; }
+.parent-dashboard-result-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.parent-dashboard-result-link { display: inline-flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid #dce9df; border-radius: 10px; background: #f7fbf7; color: #0f6b35; font-size: 12px; font-weight: 700; text-decoration: none; }
+.parent-dashboard-result-link:hover, .parent-dashboard-result-link:focus-visible { border-color: #0f6b35; background: #edf7ef; outline: none; }
+.parent-dashboard-no-results { margin: 0; color: #718078; font-size: 13px; }
+@media (max-width: 560px) {
+  .parent-dashboard-child { padding: 16px; }
+  .parent-dashboard-term { grid-template-columns: 1fr; gap: 7px; }
+  .parent-dashboard-result-links { display: grid; grid-template-columns: 1fr; }
+  .parent-dashboard-result-link { justify-content: space-between; }
+}
