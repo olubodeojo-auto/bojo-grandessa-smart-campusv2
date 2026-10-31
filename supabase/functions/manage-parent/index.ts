@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 type ParentRequest = {
-  action?: "create" | "resend_invitation" | "status" | "directory" | "link" | "link_existing" | "unlink" | "accounts" | "links";
+  action?: "create" | "resend_invitation" | "status" | "directory" | "link" | "link_existing" | "unlink" | "accounts" | "links" | "reuse_existing";
   contact_id?: string;
   student_id?: string;
   auth_user_id?: string;
@@ -383,6 +383,96 @@ async function handleLinks(adminClient: ReturnType<typeof createClient>, request
   return response({ links });
 }
 
+
+async function handleReuseExistingParentAccount(
+  adminClient: ReturnType<typeof createClient>,
+  request: ParentRequest,
+): Promise<Response> {
+  if (!request.contact_id) return errorResponse("A contact id is required.", 400);
+  const { data: contact, error: contactError } = await adminClient
+    .from("contacts")
+    .select("id, email, relationship")
+    .eq("id", request.contact_id)
+    .maybeSingle();
+  if (contactError) throw contactError;
+  if (!contact) return errorResponse("Contact not found.", 404);
+
+  const email = contact.email?.trim().toLowerCase();
+  if (!email) return errorResponse("This contact needs an email address before an existing account can be matched.", 400);
+
+  let matchingUserId: string | null = null;
+  let page = 1;
+  while (true) {
+    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw error;
+    const matches = data.users.filter((user) => user.email?.trim().toLowerCase() === email);
+    if (matches.length > 1) return errorResponse("More than one login uses this email. Review the accounts before linking.", 409);
+    if (matches.length === 1) {
+      matchingUserId = matches[0].id;
+      break;
+    }
+    if (data.users.length < 1000) break;
+    page += 1;
+  }
+  if (!matchingUserId) return errorResponse("No existing login uses this contact email. Create an invitation only if the school confirms no account exists.", 404);
+
+  const { data: canonicalContacts, error: canonicalError } = await adminClient
+    .from("contacts")
+    .select("id, relationship")
+    .eq("auth_user_id", matchingUserId);
+  if (canonicalError) throw canonicalError;
+  const canonical = (canonicalContacts ?? []).find((row) => row.id !== contact.id);
+  if (!canonical) return errorResponse("The matching login is not yet attached to a verified school contact. Review the account before reusing it.", 409);
+
+  const parentRole = await getParentRole(adminClient);
+  const [{ data: parentUser, error: parentUserError }, { data: roleRows, error: roleRowsError }] = await Promise.all([
+    adminClient.from("users").select("id, status").eq("id", matchingUserId).maybeSingle(),
+    adminClient.from("user_roles").select("id").eq("user_id", matchingUserId).eq("role_id", parentRole.id).eq("is_active", true).limit(1),
+  ]);
+  if (parentUserError) throw parentUserError;
+  if (roleRowsError) throw roleRowsError;
+  if (!parentUser || parentUser.status !== "Active" || !roleRows?.length) {
+    return errorResponse("The matching login is not an active Parent portal account. Review its access before reusing it.", 409);
+  }
+
+  const { data: students, error: studentsError } = await adminClient
+    .from("students")
+    .select("id, primary_contact_id, secondary_contact_id")
+    .or(`primary_contact_id.eq.${contact.id},secondary_contact_id.eq.${contact.id}`);
+  if (studentsError) throw studentsError;
+  if (!students?.length) return response({ ok: true, linked_students: 0, message: "No students currently use this contact record." });
+
+  for (const student of students) {
+    const updates: Record<string, string> = {};
+    if (student.primary_contact_id === contact.id) updates.primary_contact_id = canonical.id;
+    if (student.secondary_contact_id === contact.id) updates.secondary_contact_id = canonical.id;
+    if (Object.keys(updates).length > 0) {
+      const { error } = await adminClient.from("students").update(updates).eq("id", student.id);
+      if (error) throw error;
+    }
+  }
+
+  const { error: linksError } = await adminClient
+    .from("parent_student_links")
+    .upsert(
+      students.map((student) => ({
+        student_id: student.id,
+        auth_user_id: matchingUserId,
+        relationship: contact.relationship ?? canonical.relationship ?? null,
+      })),
+      { onConflict: "student_id,auth_user_id", ignoreDuplicates: true },
+    );
+  if (linksError) throw linksError;
+
+  return response({
+    ok: true,
+    linked_students: students.length,
+    auth_user_id: matchingUserId,
+    canonical_contact_id: canonical.id,
+    message: "Existing parent account reused. Student contact records and portal links have been aligned.",
+  });
+}
+
 async function handleLinkExisting(
   adminClient: ReturnType<typeof createClient>,
   request: ParentRequest,
@@ -653,6 +743,7 @@ Deno.serve(async (request) => {
     const payload = (await request.json()) as ParentRequest;
     if (payload.action === "create") return await handleCreate(adminClient, payload);
     if (payload.action === "link_existing") return await handleLinkExisting(adminClient, payload);
+    if (payload.action === "reuse_existing") return await handleReuseExistingParentAccount(adminClient, payload);
     if (payload.action === "resend_invitation") return await handleResend(authClient, adminClient, payload);
     if (payload.action === "status") return await handleStatus(adminClient, payload);
     if (payload.action === "directory") return await handleDirectory(adminClient);
