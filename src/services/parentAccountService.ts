@@ -35,7 +35,11 @@ export function createParentPortalAccount(contactId: string): Promise<ParentAcco
   return invokeParentAccount({ action: "create", contact_id: contactId, redirect_to: PARENT_ACCOUNT_REDIRECT_URL });
 }
 
-export function reuseExistingParentPortalAccount(contactId: string): Promise<{ ok: boolean; linked_students: number; message: string }> {\n  return invokeParentAccount({ action: "reuse_existing", contact_id: contactId });\n}\n\nexport function linkExistingParentPortalAccount(contactId: string): Promise<ParentAccountResponse> {
+export function reuseExistingParentPortalAccount(contactId: string): Promise<{ ok: boolean; linked_students: number; message: string }> {
+  return invokeParentAccount({ action: "reuse_existing", contact_id: contactId });
+}
+
+export function linkExistingParentPortalAccount(contactId: string): Promise<ParentAccountResponse> {
   return invokeParentAccount({ action: "link_existing", contact_id: contactId });
 }
 
