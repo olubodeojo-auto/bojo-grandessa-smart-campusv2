@@ -220,10 +220,6 @@ export default function ParentAccountsPage() {
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                           {entry.account_status === "active" ? (
                             <span style={{ color: "#166534", fontSize: 13, fontWeight: 700 }}>Portal linked</span>
-                          ) : entry.account_status === "account_conflict" ? (
-                            <span title="This email account is already associated with another contact. Review duplicate contact records before changing links." style={{ color: "#991b1b", fontSize: 13, maxWidth: 180 }}>
-                              Review duplicate contact
-                            </span>
                           ) : (
                             <button
                               type="button"
