@@ -7,6 +7,7 @@ import { getAssignmentsForParent } from "../../services/assignmentService";
 import { getReportHistoryByStudent } from "../../services/reportCardService";
 import type { Student } from "../../types/student";
 import type { Assignment } from "../../types/assignment";
+import type { ReportHistoryBySession } from "../../types/reportCard";
 import { getPublishedAnnouncements } from "../../services/announcementService";
 import type { Announcement } from "../../types/announcement";
 
@@ -19,25 +20,33 @@ function studentName(student: Student): string {
   return [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ");
 }
 
+function reportLink(studentId: string, academicYear: string, term: string, reportType: string, classId: string): string {
+  const params = new URLSearchParams({ studentId, academicYear, term, reportType, classId });
+  return `/portal/reports?${params.toString()}`;
+}
+
 export default function ParentHomePage() {
   const { fullName } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
+  const [reportHistories, setReportHistories] = useState<Record<string, ReportHistoryBySession[]>>({});
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [selectedId, setSelectedId] = useState("");
-  const [latestPublishedReport, setLatestPublishedReport] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
     void Promise.all([getParentStudents(), getAssignmentsForParent(), getPublishedAnnouncements(3)])
-      .then(([studentRows, assignmentRows, announcementRows]) => {
+      .then(async ([studentRows, assignmentRows, announcementRows]) => {
         if (!active) return;
         setStudents(studentRows);
         setAssignments(assignmentRows);
         setAnnouncements(announcementRows);
-        setSelectedId(studentRows[0]?.id ?? "");
+        const historyRows = await Promise.all(studentRows.map(async (student) => {
+          const history = await getReportHistoryByStudent(student.id, { parentScoped: true });
+          return [student.id, history] as const;
+        }));
+        if (active) setReportHistories(Object.fromEntries(historyRows));
       })
       .catch((loadError) => {
         if (active) setError(loadError instanceof Error ? loadError.message : "Unable to load your portal summary.");
@@ -48,58 +57,79 @@ export default function ParentHomePage() {
     return () => { active = false; };
   }, []);
 
-  const child = students.find((student) => student.id === selectedId) ?? students[0];
-  const pendingAssignments = assignments.length;
-
-  useEffect(() => {
-    if (!child) {
-      setLatestPublishedReport("");
-      return;
-    }
-
-    let active = true;
-    void getReportHistoryByStudent(child.id, { parentScoped: true }).then((history) => {
-      if (!active) return;
-      const latest = history
-        .flatMap((session) => session.entries.filter((entry) => entry.publishedCount > 0).map((entry) => `${session.academicYear} · ${entry.term}`))
-        .at(0) ?? "";
-      setLatestPublishedReport(latest);
-    }).catch(() => {
-      if (active) setLatestPublishedReport("");
-    });
-
-    return () => { active = false; };
-  }, [child]);
-
   return (
     <main className="parent-portal-page">
       <section className="parent-portal-hero">
         <p className="parent-portal-eyebrow">Grandessa Smart Campus</p>
         <h1>{greeting()}, {fullName || "there"}</h1>
-        <p>Here&apos;s what&apos;s happening with {child ? studentName(child) : "your child"}.</p>
+        <p>Here are your linked students and their published school results.</p>
       </section>
 
       {error ? <div className="parent-portal-alert" role="alert">{error}</div> : null}
-      {loading ? <div className="parent-portal-state">Loading your portal...</div> : child ? (
+      {loading ? <div className="parent-portal-state">Loading your family dashboard...</div> : students.length > 0 ? (
         <>
-          {students.length > 1 ? <label className="parent-portal-select-label">Viewing
-            <select value={child.id} onChange={(event) => setSelectedId(event.target.value)}>{students.map((student) => <option key={student.id} value={student.id}>{studentName(student)}</option>)}</select>
-          </label> : null}
-          <section className="parent-child-card">
-            <div className="parent-child-card__mark"><UsersRound size={24} /></div>
-            <div>
-              <p className="parent-portal-eyebrow">My Student</p>
-              <h2>{studentName(child)}</h2>
-              <p>{child.class_name || "Class not assigned"}</p>
-              <span>Class Teacher: {child.class_teacher ? [child.class_teacher.first_name, child.class_teacher.last_name].filter(Boolean).join(" ") || "Not assigned" : "Not assigned"}</span>
+          <section aria-labelledby="parent-children-heading">
+            <div className="parent-section-heading"><h2 id="parent-children-heading">Your Students</h2><Link to="/portal/students">View student details</Link></div>
+            <div className="parent-dashboard-children">
+              {students.map((student) => {
+                const history = reportHistories[student.id] ?? [];
+                const reportCount = history.reduce((total, session) => total + session.entries.length, 0);
+                return (
+                  <article className="parent-dashboard-child" key={student.id}>
+                    <div className="parent-dashboard-child__identity">
+                      <div className="parent-child-card__mark"><UsersRound size={22} /></div>
+                      <div>
+                        <p className="parent-portal-eyebrow">Linked Student</p>
+                        <h3>{studentName(student)}</h3>
+                        <p>{student.class_name || "Class not assigned"} · {student.admission_number || "Admission number unavailable"}</p>
+                      </div>
+                    </div>
+                    <div className="parent-dashboard-child__reports">
+                      <div className="parent-dashboard-child__reports-heading">
+                        <strong>Published Results</strong>
+                        <span>{reportCount} {reportCount === 1 ? "report" : "reports"}</span>
+                      </div>
+                      {history.length > 0 ? history.map((session) => (
+                        <div className="parent-dashboard-session" key={session.academicYear}>
+                          <h4>{session.academicYear}</h4>
+                          {(["First", "Second", "Third"] as const).map((term) => {
+                            const entries = session.entries.filter((entry) => entry.term === term);
+                            if (entries.length === 0) return null;
+                            return (
+                              <div className="parent-dashboard-term" key={term}>
+                                <span className="parent-dashboard-term__name">{term} Term</span>
+                                <div className="parent-dashboard-result-links">
+                                  {(["Midterm", "End-of-Term"] as const).map((type) => {
+                                    const matching = entries.filter((entry) => entry.reportType === type);
+                                    return matching.map((entry) => (
+                                      <Link
+                                        className="parent-dashboard-result-link"
+                                        key={`${entry.classId}-${type}`}
+                                        to={reportLink(student.id, session.academicYear, term, type, entry.classId)}
+                                      >
+                                        <BookOpen size={15} />
+                                        <span>{type === "Midterm" ? "Midterm (CA)" : "End-of-Term"}</span>
+                                        <ArrowRight size={14} />
+                                      </Link>
+                                    ));
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )) : <p className="parent-dashboard-no-results">No published results are available yet.</p>}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
-            <Link className="parent-portal-arrow-link" to="/portal/students" aria-label="View my student"><ArrowRight size={20} /></Link>
           </section>
 
           <section className="parent-portal-stat-grid">
-            <Link to="/portal/assignments" className="parent-portal-stat-card"><ClipboardList size={22} /><strong>{pendingAssignments}</strong><span>Published assignments</span></Link>
-            <Link to="/portal/reports" className="parent-portal-stat-card"><BookOpen size={22} /><strong>{latestPublishedReport || "View"}</strong><span>{latestPublishedReport ? "Latest published report" : "Reports and progress"}</span></Link>
+            <Link to="/portal/assignments" className="parent-portal-stat-card"><ClipboardList size={22} /><strong>{assignments.length}</strong><span>Published assignments</span></Link>
             <Link to="/announcements" className="parent-portal-stat-card"><Megaphone size={22} /><strong>School</strong><span>Latest updates</span></Link>
+            <Link to="/portal/students" className="parent-portal-stat-card"><UsersRound size={22} /><strong>{students.length}</strong><span>Linked {students.length === 1 ? "student" : "students"}</span></Link>
           </section>
           <section>
             <div className="parent-section-heading"><h2>School Updates</h2><Link to="/announcements">View all</Link></div>
@@ -111,7 +141,7 @@ export default function ParentHomePage() {
           </section>
         </>
       ) : (
-        <div className="parent-portal-state">No linked student is available for this account yet.</div>
+        <div className="parent-portal-state">No linked students are available for this account yet. Please contact the school to confirm your parent account is linked.</div>
       )}
     </main>
   );
