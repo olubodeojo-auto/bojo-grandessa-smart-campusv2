@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import Button from "../../components/ui/Button";
 import ReportCardDocument from "../../components/reports/ReportCardDocument";
@@ -17,6 +18,7 @@ import type { Student } from "../../types/student";
 
 export default function ParentReportsPage() {
   const { isAuthenticated } = useAuth();
+  const [searchParams] = useSearchParams();
   const [studentCode, setStudentCode] = useState("");
   const [student, setStudent] = useState<Student | null>(null);
   const [linkedStudents, setLinkedStudents] = useState<Student[]>([]);
@@ -49,7 +51,8 @@ export default function ParentReportsPage() {
       .then((students) => {
         if (!active) return;
         setLinkedStudents(students);
-        const firstStudent = students[0] ?? null;
+        const requestedStudentId = searchParams.get("studentId");
+        const firstStudent = students.find((item) => item.id === requestedStudentId) ?? students[0] ?? null;
         setStudent(firstStudent);
         setSelectedStudentId(firstStudent?.id ?? "");
         if (!firstStudent) setError("No linked student is available for this parent account.");
@@ -64,7 +67,7 @@ export default function ParentReportsPage() {
     return () => {
       active = false;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, searchParams]);
 
   useEffect(() => {
     if (!isAuthenticated || !selectedStudentId) return;
@@ -77,7 +80,17 @@ export default function ParentReportsPage() {
       .then(async (rows) => {
         if (!active) return;
         setHistory(rows);
-        const selectedPeriod = findLatestAvailableReportPeriod(rows, reportTypeRef.current);
+        const requestedYear = searchParams.get("academicYear");
+        const requestedTerm = searchParams.get("term");
+        const requestedType = searchParams.get("reportType") as ReportType | null;
+        const requestedClassId = searchParams.get("classId");
+        const requestedPeriod = rows
+          .filter((session) => !requestedYear || session.academicYear === requestedYear)
+          .flatMap((session) => session.entries.map((entry) => ({ academicYear: session.academicYear, period: entry })))
+          .find((item) => item.period.term === requestedTerm
+            && item.period.reportType === requestedType
+            && (!requestedClassId || item.period.classId === requestedClassId));
+        const selectedPeriod = requestedPeriod ?? findLatestAvailableReportPeriod(rows, reportTypeRef.current);
         applyReportPeriod(selectedPeriod);
         if (!selectedPeriod) {
           setReport(null);
@@ -106,7 +119,7 @@ export default function ParentReportsPage() {
     return () => {
       active = false;
     };
-  }, [isAuthenticated, selectedStudentId]);
+  }, [isAuthenticated, selectedStudentId, searchParams]);
 
   function handleLinkedStudentChange(nextStudentId: string): void {
     const nextStudent = linkedStudents.find((item) => item.id === nextStudentId) ?? null;
