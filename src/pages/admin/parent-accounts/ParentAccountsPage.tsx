@@ -88,11 +88,14 @@ export default function ParentAccountsPage() {
   }, [entries, search, statusFilter]);
 
   async function manageAccount(entry: ParentAccountDirectoryEntry): Promise<void> {
+    if (entry.account_status === "account_conflict" && !window.confirm(`An existing portal account already uses ${entry.contact.email}. Reuse that account for ${entry.students.map(studentDisplayName).join(", ")}? No new invitation will be sent.`)) return;
     setWorkingContactId(entry.contact.id);
     setError("");
 
     try {
-      if (entry.account_status === "account_conflict") {\n        await reuseExistingParentPortalAccount(entry.contact.id);\n      } else if (entry.account_status === "not_created") {
+      if (entry.account_status === "account_conflict") {
+        await reuseExistingParentPortalAccount(entry.contact.id);
+      } else if (entry.account_status === "not_created") {
         await createParentPortalAccount(entry.contact.id);
       } else if (entry.account_status === "account_exists_unlinked" || entry.account_status === "link_missing") {
         await linkExistingParentPortalAccount(entry.contact.id);
@@ -229,7 +232,8 @@ export default function ParentAccountsPage() {
                               title={!entry.contact.email?.trim() ? "Add an email address to this contact before creating or linking an account." : undefined}
                             >
                               {working ? "Working..." :
-                                entry.account_status === "account_conflict" ? "Use existing parent account" :\n                                entry.account_status === "invited" ? "Resend invitation" :
+                                entry.account_status === "account_conflict" ? "Use existing parent account" :
+                                entry.account_status === "invited" ? "Resend invitation" :
                                   entry.account_status === "account_exists_unlinked" ? "Link existing account" :
                                     entry.account_status === "link_missing" ? "Repair child link" :
                                     entry.account_status === "inactive" ? "Restore portal access" :
