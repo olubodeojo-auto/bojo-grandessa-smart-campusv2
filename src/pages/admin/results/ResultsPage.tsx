@@ -2444,7 +2444,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
         <details
           id="all-subject-records"
           className="card"
-          open={Boolean(search.trim() || term !== "All" || session.trim() || classId || reportType !== "All" || status !== "All")}
+          
           style={{ padding: 18, border: "1px solid #dfe7ef", borderRadius: 16, scrollMarginTop: 18 }}
         >
           <summary
@@ -2462,7 +2462,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             <span style={{ display: "grid", gap: 4 }}>
               <span style={{ fontSize: 18, fontWeight: 850 }}>All subject records</span>
               <span style={{ color: "#64748b", fontSize: 13, lineHeight: 1.5 }}>
-                Optional detailed list for finding or editing one subject row. Normal review and publishing happens in the report list below.
+                Advanced subject-by-subject workspace. You do not need to open this for normal pupil report corrections or publishing; use the pupil report cards below.
               </span>
             </span>
             <span style={{ borderRadius: 999, padding: "6px 10px", background: "#f1f5f9", color: "#475569", fontSize: 12, fontWeight: 750 }}>
