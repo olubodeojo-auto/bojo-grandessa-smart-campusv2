@@ -777,7 +777,9 @@ export async function saveReportCardDetails(params: {
 }): Promise<void> {
   const schoolSettings = await getSchoolSettings();
   const periodChanged = params.sourceAcademicYear !== params.academicYear || params.sourceTerm !== params.term;
+  if (!params.academicYear.trim()) throw new Error("Choose an academic year before saving.");
   if (periodChanged) {
+    const assessmentTypes = params.reportType === "Midterm" ? ["CA"] : ["Combined", "Examination"];
     const { data: targetResults, error: targetResultsError } = await supabase
       .from("results")
       .select("id")
@@ -785,20 +787,9 @@ export async function saveReportCardDetails(params: {
       .eq("class_id", params.classId)
       .eq("academic_year", params.academicYear)
       .eq("term", params.term)
-      .eq("assessment_type", params.reportType === "Midterm" ? "CA" : "Combined");
+      .in("assessment_type", assessmentTypes);
     if (targetResultsError) throw new Error(`Unable to check the destination reporting period: ${targetResultsError.message}`);
     if ((targetResults?.length ?? 0) > 0) throw new Error("This pupil already has results in the destination period. Resolve the existing report before moving this one.");
-    const { data: moved, error: moveError } = await supabase
-      .from("results")
-      .update({ academic_year: params.academicYear, term: params.term })
-      .eq("student_id", params.studentId)
-      .eq("class_id", params.classId)
-      .eq("academic_year", params.sourceAcademicYear)
-      .eq("term", params.sourceTerm)
-      .eq("assessment_type", params.reportType === "Midterm" ? "CA" : "Combined")
-      .select("id");
-    if (moveError) throw new Error(`Unable to correct the subject-result reporting period: ${moveError.message}`);
-    if (!moved?.length) throw new Error("No matching subject results were moved. Refresh the report before trying again.");
   }
   const { data: existing, error: lookupError } = await supabase
     .from("report_cards")
@@ -837,6 +828,20 @@ export async function saveReportCardDetails(params: {
     next_term_begins: params.nextTermBegins?.trim() || null,
   };
   const existingId = existing?.[0]?.id as string | undefined;
+  if (periodChanged) {
+    const assessmentTypes = params.reportType === "Midterm" ? ["CA"] : ["Combined", "Examination"];
+    const { data: moved, error: moveError } = await supabase
+      .from("results")
+      .update({ academic_year: params.academicYear, term: params.term })
+      .eq("student_id", params.studentId)
+      .eq("class_id", params.classId)
+      .eq("academic_year", params.sourceAcademicYear)
+      .eq("term", params.sourceTerm)
+      .in("assessment_type", assessmentTypes)
+      .select("id");
+    if (moveError) throw new Error(`Unable to correct the subject-result reporting period: ${moveError.message}`);
+    if (!moved?.length) throw new Error("No matching subject results were moved. Refresh the report before trying again.");
+  }
   if (existingId) {
     const { error } = await supabase.from("report_cards").update(payload).eq("id", existingId);
     if (error) throw error;
