@@ -376,12 +376,12 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
   const initialTerm = searchParams.get("term");
   const initialReportType = searchParams.get("reportType");
   const [term, setTerm] = useState<FilterTerm>(
-    initialTerm === "First" || initialTerm === "Second" || initialTerm === "Third" ? initialTerm : "All",
+    initialTerm === "First" || initialTerm === "Second" || initialTerm === "Third" ? initialTerm : "First",
   );
-  const [session, setSession] = useState<string>(searchParams.get("session") ?? "");
+  const [session, setSession] = useState<string>(searchParams.get("session") ?? "2026/2027");
   const [classId, setClassId] = useState<string>(searchParams.get("classId") ?? "");
   const [reportType, setReportType] = useState<FilterReportType>(
-    initialReportType === "Midterm" || initialReportType === "End-of-Term" ? initialReportType : "All",
+    initialReportType === "Midterm" || initialReportType === "End-of-Term" ? initialReportType : "Midterm",
   );
   const [status, setStatus] = useState<FilterStatus>("All");
 
@@ -605,7 +605,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
       .sort((a, b) => (b.totalScore ?? -1) - (a.totalScore ?? -1));
   }, [results, studentsMap, search, term, status, session, classId, reportType]);
   const academicYears = useMemo(
-    () => [...new Set(results.map((result) => result.academic_year).filter(Boolean))]
+    () => [...new Set(["2026/2027", ...results.map((result) => result.academic_year).filter(Boolean)])]
       .sort((left, right) => right.localeCompare(left)),
     [results],
   );
