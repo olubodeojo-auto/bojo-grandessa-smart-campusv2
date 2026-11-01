@@ -326,10 +326,13 @@ export function getReportCenterResultsWithRecordedMarks(results: Result[]): Resu
   return results.filter((result) => {
     let requiredMarksPresent: boolean;
     if (result.assessment_type === "CA") {
+      // Grandessa Midterm/CA uses a 40-mark scale. Older imported rows may
+      // have the CA mark saved but maximum_score left null; treat that legacy
+      // omission as 40 so valid marks are not silently excluded from publishing.
+      const maximumScore = result.maximum_score ?? 40;
       requiredMarksPresent = result.continuous_assessment !== null
-        && typeof result.maximum_score === "number"
-        && Number.isFinite(result.maximum_score)
-        && result.maximum_score > 0;
+        && Number.isFinite(maximumScore)
+        && maximumScore > 0;
     } else if (result.assessment_type === "Combined") {
       requiredMarksPresent = result.continuous_assessment !== null
         && result.examination !== null
@@ -350,7 +353,7 @@ export function getReportCenterResultsWithRecordedMarks(results: Result[]): Resu
     const errors = validateAssessmentMarks({
       assessment_type: result.assessment_type,
       continuous_assessment: result.continuous_assessment,
-      maximum_score: result.maximum_score ?? null,
+      maximum_score: result.maximum_score ?? (result.assessment_type === "CA" ? 40 : null),
       examination: result.examination,
       total_score: total,
       grade: result.grade ?? "",
@@ -387,7 +390,7 @@ export function getReportCenterCompleteness(
     const errors = validateAssessmentMarks({
       assessment_type: assessmentType,
       continuous_assessment: result.continuous_assessment,
-      maximum_score: result.maximum_score ?? null,
+      maximum_score: result.maximum_score ?? (result.assessment_type === "CA" ? 40 : null),
       examination: result.examination,
       total_score: total,
       grade: result.grade ?? "",
