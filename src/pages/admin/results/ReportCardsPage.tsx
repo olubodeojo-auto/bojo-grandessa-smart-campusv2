@@ -336,8 +336,11 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
 
   const resetReportDetailsFields = useCallback((data: ReportCardData | null): void => {
     setReportCalculationMode(data?.calculationMode ?? "Manual");
-    setEditedAcademicYear(data?.academicYear ?? "");
-    setEditedTerm(data?.term ?? "First");
+    // Old 2025/2026 test reports are being migrated into the live 2026/2027 school year.
+    // When staff open one for correction, preselect the current working period.
+    const isLegacyTestSession = data?.academicYear === "2025/2026";
+    setEditedAcademicYear(isLegacyTestSession ? "2026/2027" : data?.academicYear ?? "2026/2027");
+    setEditedTerm(isLegacyTestSession ? "First" : data?.term ?? "First");
     setEditedTimesPresent(data?.attendance?.timesPresent != null ? String(data.attendance.timesPresent) : "");
     setEditedTimesAbsent(data?.attendance?.timesAbsent != null ? String(data.attendance.timesAbsent) : "");
     setEditedMaximumAttendance(data?.attendance?.maximumAttendance != null ? String(data.attendance.maximumAttendance) : "");
