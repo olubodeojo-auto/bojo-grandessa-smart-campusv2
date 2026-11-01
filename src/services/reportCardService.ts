@@ -778,8 +778,31 @@ export async function saveReportCardDetails(params: {
   const schoolSettings = await getSchoolSettings();
   const periodChanged = params.sourceAcademicYear !== params.academicYear || params.sourceTerm !== params.term;
   if (!params.academicYear.trim()) throw new Error("Choose an academic year before saving.");
+  let destinationTermId: string | null = null;
   if (periodChanged) {
-    const assessmentTypes = params.reportType === "Midterm" ? ["CA"] : ["Combined", "Examination"];
+    const { data: terms, error: termError } = await supabase
+      .from("terms")
+      .select("id, term_name, academic_sessions!inner(session_name)")
+      .eq("term_name", toStoredTermName(params.term))
+      .eq("academic_sessions.session_name", params.academicYear)
+      .limit(2);
+    if (termError) throw new Error(`Unable to find the selected report term: ${termError.message}`);
+    destinationTermId = resolveReportTermId((terms ?? []) as AcademicTermMatch[], params.academicYear, params.term);
+    const { data: destinationReport, error: destinationReportError } = await supabase
+      .from("report_cards")
+      .select("id")
+      .eq("school_id", schoolSettings.school_id)
+      .eq("student_id", params.studentId)
+      .eq("class_id", params.classId)
+      .eq("academic_year", params.academicYear)
+      .eq("term", params.term)
+      .eq("report_type", params.reportType)
+      .limit(1);
+    if (destinationReportError) throw new Error(`Unable to check the destination report details: ${destinationReportError.message}`);
+    if (destinationReport?.length) throw new Error("A report detail record already exists in the destination period. Resolve it before moving this report.");
+  }
+  if (periodChanged) {
+    const assessmentTypes: Result["assessment_type"][] = params.reportType === "Midterm" ? ["CA"] : ["Combined", "Examination"];
     const { data: targetResults, error: targetResultsError } = await supabase
       .from("results")
       .select("id")
@@ -812,6 +835,7 @@ export async function saveReportCardDetails(params: {
     class_id: params.classId,
     academic_year: params.academicYear,
     term: params.term,
+    ...(destinationTermId ? { term_id: destinationTermId } : {}),
     report_type: params.reportType,
     calculation_mode: params.calculationMode,
     class_teacher_name: params.classTeacherName.trim() || null,
