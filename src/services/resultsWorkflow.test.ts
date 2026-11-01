@@ -693,7 +693,7 @@ describe("end-of-term report metrics", () => {
 });
 
 describe("Report Center period discovery and readiness", () => {
-  it("discovers Midterm CA separately and does not mark missing subject maxima ready to publish", () => {
+  it("uses Grandessa's 40-mark Midterm scale when a legacy CA row has no saved maximum", () => {
     const midterm = result({
       id: "trixie-ca",
       student_id: "trixie",
@@ -711,10 +711,10 @@ describe("Report Center period discovery and readiness", () => {
     expect(period).toMatchObject({ studentId: "trixie", academicYear: "2025/2026", term: "First", reportType: "Midterm" });
     expect(getReportCenterPeriodStatus(period)).toBe("Draft");
     expect(getReportCenterCompleteness(period)).toMatchObject({
-      complete: false,
-      reason: "No complete subject-result rows are available for publication. Add at least one subject with complete marks.",
+      complete: true,
+      reason: "1 subject result(s) have complete marks. Incomplete subject rows will remain drafts.",
     });
-    expect(canPublishReportCenterPeriod(period)).toBe(false);
+    expect(canPublishReportCenterPeriod(period)).toBe(true);
   });
 
 
