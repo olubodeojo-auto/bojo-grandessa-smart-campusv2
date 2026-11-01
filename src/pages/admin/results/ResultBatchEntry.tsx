@@ -77,9 +77,9 @@ export default function ResultBatchEntry({
 }: ResultBatchEntryProps) {
   const [draft, setDraft] = useState<BatchDraft>(() => ({
     studentId: students[0]?.id ?? "",
-    academicYear: academicYears[0] ?? "",
-    term: "",
-    reportType: "End-of-Term",
+    academicYear: academicYears.includes("2026/2027") ? "2026/2027" : academicYears[0] ?? "2026/2027",
+    term: "First",
+    reportType: "Midterm",
     calculationMode: "Manual",
     entries: {},
   }));
