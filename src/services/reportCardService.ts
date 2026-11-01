@@ -755,6 +755,8 @@ export async function buildStudentReportCard(
 
 export async function saveReportCardDetails(params: {
   studentId: string;
+  sourceAcademicYear: string;
+  sourceTerm: ReportTerm;
   academicYear: string;
   term: ReportTerm;
   classId: string;
@@ -774,14 +776,38 @@ export async function saveReportCardDetails(params: {
   nextTermBegins: string | null;
 }): Promise<void> {
   const schoolSettings = await getSchoolSettings();
+  const periodChanged = params.sourceAcademicYear !== params.academicYear || params.sourceTerm !== params.term;
+  if (periodChanged) {
+    const { data: targetResults, error: targetResultsError } = await supabase
+      .from("results")
+      .select("id")
+      .eq("student_id", params.studentId)
+      .eq("class_id", params.classId)
+      .eq("academic_year", params.academicYear)
+      .eq("term", params.term)
+      .eq("assessment_type", params.reportType === "Midterm" ? "CA" : "Combined");
+    if (targetResultsError) throw new Error(`Unable to check the destination reporting period: ${targetResultsError.message}`);
+    if ((targetResults?.length ?? 0) > 0) throw new Error("This pupil already has results in the destination period. Resolve the existing report before moving this one.");
+    const { data: moved, error: moveError } = await supabase
+      .from("results")
+      .update({ academic_year: params.academicYear, term: params.term })
+      .eq("student_id", params.studentId)
+      .eq("class_id", params.classId)
+      .eq("academic_year", params.sourceAcademicYear)
+      .eq("term", params.sourceTerm)
+      .eq("assessment_type", params.reportType === "Midterm" ? "CA" : "Combined")
+      .select("id");
+    if (moveError) throw new Error(`Unable to correct the subject-result reporting period: ${moveError.message}`);
+    if (!moved?.length) throw new Error("No matching subject results were moved. Refresh the report before trying again.");
+  }
   const { data: existing, error: lookupError } = await supabase
     .from("report_cards")
     .select("id")
     .eq("school_id", schoolSettings.school_id)
     .eq("student_id", params.studentId)
     .eq("class_id", params.classId)
-    .eq("academic_year", params.academicYear)
-    .eq("term", params.term)
+    .eq("academic_year", periodChanged ? params.sourceAcademicYear : params.academicYear)
+    .eq("term", periodChanged ? params.sourceTerm : params.term)
     .eq("report_type", params.reportType)
     .limit(2);
   if (lookupError) throw new Error(`Unable to find the selected report details: ${lookupError.message}`);
