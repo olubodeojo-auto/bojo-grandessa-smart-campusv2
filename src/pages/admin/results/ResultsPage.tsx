@@ -1945,6 +1945,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
           },
           reportDetails: {
             studentId,
+            sourceAcademicYear: entry.academicYear,
+            sourceTerm: entry.term,
             academicYear: entry.academicYear,
             term: entry.term,
             classId: reportClassId,
