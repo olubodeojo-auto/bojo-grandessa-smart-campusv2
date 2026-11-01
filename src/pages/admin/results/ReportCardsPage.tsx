@@ -2037,7 +2037,16 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
               <FormField label="Academic year">
                 <select style={inputStyle} value={editedAcademicYear} onChange={(event) => setEditedAcademicYear(event.target.value)}>
-                  {academicSessions.map((session) => <option key={session.id} value={session.session_name}>{session.session_name}</option>)}
+                  {[...academicSessions].sort((left, right) => {
+                    const leftCurrent = left.session_name === "2026/2027" || left.is_current;
+                    const rightCurrent = right.session_name === "2026/2027" || right.is_current;
+                    return Number(rightCurrent) - Number(leftCurrent)
+                      || right.session_name.localeCompare(left.session_name);
+                  }).map((session) => (
+                    <option key={session.id} value={session.session_name}>
+                      {session.session_name}{session.session_name === "2026/2027" ? " · Current school year" : " · Historical"}
+                    </option>
+                  ))}
                   {!academicSessions.some((session) => session.session_name === editedAcademicYear) && editedAcademicYear ? <option value={editedAcademicYear}>{editedAcademicYear}</option> : null}
                 </select>
               </FormField>
@@ -2065,12 +2074,7 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
               <FormField label="Class teacher">
                 <input style={inputStyle} value={editedClassTeacherName} onChange={(event) => setEditedClassTeacherName(event.target.value)} />
               </FormField>
-              <FormField label="Term ending on">
-                <input style={inputStyle} type="date" value={editedTermEnding} onChange={(event) => setEditedTermEnding(event.target.value)} />
-              </FormField>
-              <FormField label="Next term begins">
-                <input style={inputStyle} type="date" value={editedNextTermBegins} onChange={(event) => setEditedNextTermBegins(event.target.value)} />
-              </FormField>
+
               <FormField label="Maximum attendance">
                 <input style={inputStyle} type="number" min={0} value={editedMaximumAttendance} onChange={(event) => setEditedMaximumAttendance(event.target.value)} />
               </FormField>
