@@ -280,6 +280,8 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
   const [editedTotalMarksObtainable, setEditedTotalMarksObtainable] = useState<string>("");
   const [editedStudentPercentage, setEditedStudentPercentage] = useState<string>("");
   const [reportCalculationMode, setReportCalculationMode] = useState<"Manual" | "Automatic">("Manual");
+  const [editedAcademicYear, setEditedAcademicYear] = useState("");
+  const [editedTerm, setEditedTerm] = useState<ReportTerm>("First");
   const isAdministrator = roles.some((role) =>
     administratorRoles.some((name) => role.name.trim().toLowerCase() === name.toLowerCase()));
   const refreshSavedReportCards = useCallback(async (): Promise<void> => {
@@ -334,6 +336,8 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
 
   const resetReportDetailsFields = useCallback((data: ReportCardData | null): void => {
     setReportCalculationMode(data?.calculationMode ?? "Manual");
+    setEditedAcademicYear(data?.academicYear ?? "");
+    setEditedTerm(data?.term ?? "First");
     setEditedTimesPresent(data?.attendance?.timesPresent != null ? String(data.attendance.timesPresent) : "");
     setEditedTimesAbsent(data?.attendance?.timesAbsent != null ? String(data.attendance.timesAbsent) : "");
     setEditedMaximumAttendance(data?.attendance?.maximumAttendance != null ? String(data.attendance.maximumAttendance) : "");
@@ -360,10 +364,14 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
     setEditedTotalMarksObtainable,
     setEditedTotalMarksObtained,
     setReportCalculationMode,
+    setEditedAcademicYear,
+    setEditedTerm,
   ]);
 
   const reportDetailsDirty = Boolean(report && (
     reportCalculationMode !== report.calculationMode
+    || editedAcademicYear.trim() !== report.academicYear
+    || editedTerm !== report.term
     || editedTimesPresent !== (report.attendance?.timesPresent != null ? String(report.attendance.timesPresent) : "")
     || editedTimesAbsent !== (report.attendance?.timesAbsent != null ? String(report.attendance.timesAbsent) : "")
     || editedMaximumAttendance !== (report.attendance?.maximumAttendance != null ? String(report.attendance.maximumAttendance) : "")
@@ -1036,8 +1044,10 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
       setSuccess("");
       await saveReportCardDetails({
         studentId: report.student.id,
-        academicYear: report.academicYear,
-        term: report.term,
+        sourceAcademicYear: report.academicYear,
+        sourceTerm: report.term,
+        academicYear: editedAcademicYear.trim(),
+        term: editedTerm,
         classId: report.classId,
         reportType: report.reportType,
         calculationMode: reportCalculationMode,
@@ -1054,7 +1064,7 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
         termEnding: editedTermEnding,
         nextTermBegins: editedNextTermBegins,
       });
-      const refreshed = await buildStudentReportCard(report.student.id, report.academicYear, report.term, {
+      const refreshed = await buildStudentReportCard(report.student.id, editedAcademicYear.trim(), editedTerm, {
         reportType: report.reportType,
         classId: report.classId,
         includeUnpublished: isAdministrator,
@@ -2022,6 +2032,20 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
               maxHeight="calc(100dvh - 190px)"
             >
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
+              <FormField label="Academic year">
+                <select style={inputStyle} value={editedAcademicYear} onChange={(event) => setEditedAcademicYear(event.target.value)}>
+                  {academicSessions.map((session) => <option key={session.id} value={session.session_name}>{session.session_name}</option>)}
+                  {!academicSessions.some((session) => session.session_name === editedAcademicYear) && editedAcademicYear ? <option value={editedAcademicYear}>{editedAcademicYear}</option> : null}
+                </select>
+              </FormField>
+              <FormField label="Term">
+                <select style={inputStyle} value={editedTerm} onChange={(event) => setEditedTerm(event.target.value as ReportTerm)}>
+                  {TERMS.map((term) => <option key={term} value={term}>{term} Term</option>)}
+                </select>
+              </FormField>
+              <FormField label="Assessment type">
+                <input style={inputStyle} value={report.reportType === "Midterm" ? "Midterm (CA)" : "End-of-Term"} readOnly />
+              </FormField>
               <FormField label="Calculation mode">
                 <select
                   style={inputStyle}
