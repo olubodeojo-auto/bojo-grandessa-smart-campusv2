@@ -1457,8 +1457,11 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
                         </summary>
                         <div style={{ display: "grid", gap: 7, marginTop: 8, padding: 12, border: "1px solid #dbe3ec", borderRadius: 12, background: "#fff", boxShadow: "0 6px 18px rgba(23,43,77,0.07)" }}>
                           <Button type="button" variant="secondary" onClick={() => void openReportPeriod(period, true)} disabled={period.results.length === 0 || !isAdministrator} title={!isAdministrator ? "Only an administrator can edit report-card details." : period.results.length === 0 ? "Subject results are required to open report-card details." : undefined}>
-                            Edit report details
+                            Correct whole report session / details
                           </Button>
+                          <p style={{ margin: '0 2px', color: '#64748b', fontSize: 12, lineHeight: 1.45 }}>
+                            Applies to this pupil's complete report and all its subject results together. No row-by-row edits.
+                          </p>
                           <Button type="button" variant="secondary" onClick={() => navigateToResults(period)} disabled={period.results.length === 0} title={period.results.length === 0 ? "No subject results are available to edit." : undefined}>
                             Edit subject marks
                           </Button>
