@@ -505,6 +505,26 @@ describe("report-card session resolution and presentation", () => {
     });
   });
 
+  it("shows a Midterm percentage only when the school supplied one", () => {
+    const calculatedMarks = reportCard({
+      totalMarksObtained: 522,
+      totalMarksObtainable: 560,
+      studentPercentage: 93.21,
+      reportStudentPercentage: null,
+    });
+    expect(getReportSummaryValues(calculatedMarks).studentPercentage).toBeNull();
+
+    const suppliedPercentage = 93.2142857142857;
+    expect(getReportSummaryValues({
+      ...calculatedMarks,
+      reportStudentPercentage: suppliedPercentage,
+    }).studentPercentage).toBe(suppliedPercentage);
+    expect(getReportSummaryValues({
+      ...calculatedMarks,
+      reportStudentPercentage: 0,
+    }).studentPercentage).toBe(0);
+  });
+
   it("keeps parent report eligibility separate for Midterm and End-of-Term assessments", () => {
     const target = { studentId: "student-1", classId: "class-1", academicYear: "2025/2026", term: "First" };
     const publishedCa = result({ status: "Published", assessment_type: "CA", term: "First" });
@@ -674,7 +694,7 @@ describe("end-of-term report metrics", () => {
   });
 
   describe("midterm report metrics", () => {
-    it("uses each published CA maximum and withholds a percentage for incomplete marks", () => {
+    it("summarizes published CA marks but never derives a Midterm percentage", () => {
       const metrics = calculateMidtermMetrics([
         result({ id: "target-mark", assessment_type: "CA", status: "Published", continuous_assessment: 30, maximum_score: 40, examination: null, total_score: null }),
         result({ id: "target-blank", assessment_type: "CA", status: "Published", subject_id: "subject-2", continuous_assessment: null, maximum_score: 20, examination: null, total_score: null }),
@@ -688,13 +708,13 @@ describe("end-of-term report metrics", () => {
       });
     });
 
-    it("preserves a genuine zero midterm score", () => {
+    it("does not turn a zero or complete set of CA marks into an invented percentage", () => {
       expect(calculateMidtermMetrics([
         result({ assessment_type: "CA", status: "Published", continuous_assessment: 0, maximum_score: 40, examination: null, total_score: null }),
       ], "student-1", "class-1", "2025/2026", "Third")).toMatchObject({
         totalMarksObtained: 0,
         totalMarksObtainable: 40,
-        studentPercentage: 0,
+        studentPercentage: null,
       });
     });
 
@@ -704,7 +724,7 @@ describe("end-of-term report metrics", () => {
       ], "student-1", "class-1", "2025/2026", "Third")).toEqual({
         totalMarksObtained: 34,
         totalMarksObtainable: 40,
-        studentPercentage: 85,
+        studentPercentage: null,
       });
     });
   });
