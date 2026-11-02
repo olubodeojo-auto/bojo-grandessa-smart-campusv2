@@ -747,7 +747,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
     .map((entry) => [[entry.academicYear.trim(), entry.term].join("|"), {
       academicYear: entry.academicYear.trim(),
       term: entry.term!,
-    }])).values()];
+    }] as const)).values()];
   const repairableImportPeriod = confirmedImportPeriods.length === 1
     && includedImportEntries.every((entry) => entry.academicYear.trim() && entry.term)
     ? confirmedImportPeriods[0]
