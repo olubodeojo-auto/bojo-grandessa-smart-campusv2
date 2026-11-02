@@ -313,6 +313,7 @@
 
   #report-card-preview .report-card-results table {
     width: 100% !important;
+    min-width: 0;
     min-width: 0 !important;
     border-collapse: collapse !important;
   }
