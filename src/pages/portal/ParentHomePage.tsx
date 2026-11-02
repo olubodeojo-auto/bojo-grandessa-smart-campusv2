@@ -150,6 +150,10 @@ export default function ParentHomePage() {
                                     ));
                                   })}
                                 </div>
+                                {entries.some((entry) => entry.reportType === "Midterm")
+                                  && !entries.some((entry) => entry.reportType === "End-of-Term") ? (
+                                    <p className="parent-dashboard-no-results">End-of-Term results will appear here when the school publishes them.</p>
+                                  ) : null}
                               </div>
                             );
                           })}
