@@ -766,7 +766,8 @@ export async function buildStudentReportCard(
     classAverage: reportCardRecord?.class_average ?? null,
     reportTotalMarksObtained: isMidterm ? metrics.totalMarksObtained : reportCardRecord?.total_marks_obtained ?? null,
     reportTotalMarksObtainable: isMidterm ? metrics.totalMarksObtainable : reportCardRecord?.total_marks_obtainable ?? null,
-    reportStudentPercentage: isMidterm ? metrics.studentPercentage : reportCardRecord?.student_percentage ?? null,
+    // Midterm percentage is optional school-provided information. Never derive it from CA marks.
+    reportStudentPercentage: reportCardRecord?.student_percentage ?? null,
     classTeacherComment: reportCardRecord?.class_teacher_comment ?? reportCardRecord?.teacher_comment ?? "",
     headTeacherComment: reportCardRecord?.head_teacher_comment ?? reportCardRecord?.principal_comment ?? "",
     attendance,

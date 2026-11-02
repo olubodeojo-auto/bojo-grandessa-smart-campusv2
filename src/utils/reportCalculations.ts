@@ -14,11 +14,6 @@ export type MidtermMetrics = {
   studentPercentage: number | null;
 };
 
-function subjectKey(result: Result): string | null {
-  const value = result.subject_id?.trim() || result.subject_name?.trim();
-  return value ? value.toLowerCase() : null;
-}
-
 function round(value: number): number {
   return Number(value.toFixed(2));
 }
@@ -87,20 +82,15 @@ export function calculateMidtermMetrics(
     : null;
   const allTargetRowsHaveMaxima = targetRows.length > 0
     && targetRows.every((result) => (result.maximum_score ?? 40) > 0);
-  const allTargetMarksPresent = targetRows.length > 0
-    && targetRows.every((result) => result.continuous_assessment !== null);
-  const targetHasUniqueSubjects = new Set(targetRows.map(subjectKey).filter(Boolean)).size === targetRows.length;
   const totalMarksObtainable = allTargetRowsHaveMaxima
     ? round(targetRows.reduce((sum, result) => sum + (result.maximum_score ?? 40), 0))
     : null;
-  const studentPercentage = allTargetMarksPresent && allTargetRowsHaveMaxima
-    && targetHasUniqueSubjects && totalMarksObtained !== null && totalMarksObtainable !== null
-    ? round((totalMarksObtained / totalMarksObtainable) * 100)
-    : null;
-
+  // Midterm percentages are school-supplied report details, not a derived value.
+  // Keep this calculation limited to the marks summary; callers must read the
+  // percentage from the saved report-card record when the school supplied one.
   return {
     totalMarksObtained,
     totalMarksObtainable,
-    studentPercentage,
+    studentPercentage: null,
   };
 }

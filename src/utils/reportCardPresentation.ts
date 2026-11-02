@@ -41,9 +41,16 @@ export function getReportSummaryValues(
     totalMarksObtainable: report.totalMarksObtainable,
     studentPercentage: report.studentPercentage,
   };
-  // Midterm is always a CA/40 calculation. Older saved manual report details
-  // can contain stale 100-point totals, so never let them override the marks.
-  if (report.reportType === "Midterm" || report.calculationMode === "Automatic") {
+  // Midterm totals may be shown from the CA marks, but the percentage is
+  // optional school-provided information. A blank saved value stays blank.
+  if (report.reportType === "Midterm") {
+    return {
+      totalMarksObtained: calculated.totalMarksObtained,
+      totalMarksObtainable: calculated.totalMarksObtainable,
+      studentPercentage: report.reportStudentPercentage ?? null,
+    };
+  }
+  if (report.calculationMode === "Automatic") {
     return calculated;
   }
   return {
