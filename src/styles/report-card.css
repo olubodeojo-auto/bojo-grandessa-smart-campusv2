@@ -265,6 +265,42 @@
     outline: 2px solid #2e7d32;
     outline-offset: 2px;
   }
+
+  /* Midterm reports have four columns; keep every score visible on phones. */
+  .report-card--midterm .report-card-results {
+    overflow-x: visible;
+  }
+
+  .report-card--midterm .report-card-results table {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    table-layout: fixed;
+  }
+
+  .report-card--midterm .report-card-results th:nth-child(1),
+  .report-card--midterm .report-card-results td:nth-child(1) {
+    width: 44%;
+    text-align: left;
+  }
+
+  .report-card--midterm .report-card-results th:nth-child(2),
+  .report-card--midterm .report-card-results td:nth-child(2),
+  .report-card--midterm .report-card-results th:nth-child(3),
+  .report-card--midterm .report-card-results td:nth-child(3),
+  .report-card--midterm .report-card-results th:nth-child(4),
+  .report-card--midterm .report-card-results td:nth-child(4) {
+    width: 18.66%;
+    text-align: center;
+  }
+
+  .report-card--midterm .report-card-results th,
+  .report-card--midterm .report-card-results td {
+    padding: 4px 3px;
+    font-size: 9px;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
 }
 
 @media print {
