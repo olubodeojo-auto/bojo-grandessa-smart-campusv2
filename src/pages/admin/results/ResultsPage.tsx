@@ -742,6 +742,16 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
     && ((session && selectedSheetMetadata.academicYear !== session)
       || (term !== "All" && !selectedSheetMetadata.terms.includes(term)))
     && !includedEntriesMatchRequestedPeriod);
+  const confirmedImportPeriods = [...new Map(includedImportEntries
+    .filter((entry) => entry.academicYear.trim() && entry.term)
+    .map((entry) => [[entry.academicYear.trim(), entry.term].join("|"), {
+      academicYear: entry.academicYear.trim(),
+      term: entry.term!,
+    }])).values()];
+  const repairableImportPeriod = confirmedImportPeriods.length === 1
+    && includedImportEntries.every((entry) => entry.academicYear.trim() && entry.term)
+    ? confirmedImportPeriods[0]
+    : null;
 
   const handleAdd = (): void => {
     setFormMode("add");
@@ -2775,8 +2785,15 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             </label>
           ) : null}
           {importPeriodConflict ? (
-            <div role="alert" style={{ margin: "4px 0", padding: "7px 10px", borderRadius: 8, background: "#fff7ed", color: "#9a3412", fontSize: 12 }}>
-              This worksheet does not match the requested {session ? `session ${session}` : ""}{session && term !== "All" ? " and " : ""}{term !== "All" ? `${term} Term` : ""}. Choose a worksheet that matches the requested period before importing.
+            <div role="alert" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, margin: "4px 0", padding: "9px 10px", borderRadius: 8, background: "#fff7ed", color: "#9a3412", fontSize: 12 }}>
+              <span>This worksheet does not match the requested {session ? `session ${session}` : ""}{session && term !== "All" ? " and " : ""}{term !== "All" ? `${term} Term` : ""}. {repairableImportPeriod ? "The included pupil reviews agree on another period." : "Check the worksheet period and each pupil's saved period before importing."}</span>
+              {repairableImportPeriod ? (
+                <Button type="button" variant="secondary" onClick={() => {
+                  setSession(repairableImportPeriod.academicYear);
+                  setTerm(repairableImportPeriod.term);
+                  setError("");
+                }}>Fix automatically — use confirmed period</Button>
+              ) : null}
             </div>
           ) : null}
           {error ? (
