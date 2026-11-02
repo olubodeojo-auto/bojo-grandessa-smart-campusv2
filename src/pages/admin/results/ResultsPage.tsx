@@ -115,7 +115,7 @@ function isImportReviewFullyPublished(entry: ResultImportPreviewEntry, results: 
     : entry.reportKind === "End-of-Term / Year Report Card" ? "Combined" : null;
   if (!assessmentType) return false;
   const items = getImportItemsForSave(entry);
-  if (items.length === 0 || items.some((item) => !item.subjectId || !item.classId)) return false;
+  if (items.length === 0 || items.length !== entry.items.length || items.some((item) => !item.subjectId || !item.classId)) return false;
   return items.every((item) => {
     const academicYear = item.academicYear || entry.academicYear;
     const term = item.term ?? entry.term;
@@ -2265,7 +2265,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     : possiblePupil
                       ? undefined
                       : classes.find((candidate) => candidate.id === entry.items.find((item) => item.classId)?.classId);
-                  const progress = getPendingImportPupilStatus(entry);
+                  const isPublishedReview = isImportReviewFullyPublished(entry, results);\n                  const progress = isPublishedReview\n                    ? { label: "Already published", explanation: "All subject results in this pupil\u2019s import are verified as Published. This completed item is hidden from the active queue by default." }\n                    : getPendingImportPupilStatus(entry);
                   const reportTypeLabel = entry.reportKind === "Midterm / Continuous Assessment"
                     ? "Midterm (CA)"
                     : entry.reportKind === "End-of-Term / Year Report Card"
