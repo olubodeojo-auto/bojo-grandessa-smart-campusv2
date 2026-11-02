@@ -726,9 +726,22 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
     return () => window.clearTimeout(timeout);
   }, [activeImportEntry, activeImportEntryKey, isAddingImportStudent, isImportOpen, persistImportDraft]);
   const selectedSheetMetadata = importWorkbookSheets.find((sheet) => sheet.name === selectedImportSheet);
+  // A restored pupil review can carry a confirmed period even when the workbook-level
+  // heading detector could not read the session/term. Trust the explicit, reviewed
+  // pupil and subject periods; do not block a valid pupil because sheet metadata is blank.
+  const includedImportEntries = importEntries.filter((entry) => entry.included !== false);
+  const includedEntriesMatchRequestedPeriod = includedImportEntries.length > 0
+    && includedImportEntries.every((entry) =>
+      entry.academicYear.trim() === session
+      && entry.term === term
+      && entry.items.every((item) =>
+        (!item.academicYear || item.academicYear === session)
+        && (!item.term || item.term === term)),
+    );
   const importPeriodConflict = Boolean(selectedSheetMetadata
     && ((session && selectedSheetMetadata.academicYear !== session)
-      || (term !== "All" && !selectedSheetMetadata.terms.includes(term))));
+      || (term !== "All" && !selectedSheetMetadata.terms.includes(term)))
+    && !includedEntriesMatchRequestedPeriod);
 
   const handleAdd = (): void => {
     setFormMode("add");
