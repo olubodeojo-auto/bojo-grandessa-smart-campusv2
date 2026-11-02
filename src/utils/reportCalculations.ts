@@ -14,11 +14,6 @@ export type MidtermMetrics = {
   studentPercentage: number | null;
 };
 
-function subjectKey(result: Result): string | null {
-  const value = result.subject_id?.trim() || result.subject_name?.trim();
-  return value ? value.toLowerCase() : null;
-}
-
 function round(value: number): number {
   return Number(value.toFixed(2));
 }
