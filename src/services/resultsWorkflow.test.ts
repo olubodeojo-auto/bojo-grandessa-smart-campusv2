@@ -531,7 +531,10 @@ describe("report-card session resolution and presentation", () => {
     const markup = renderToStaticMarkup(createElement(ReportCardDocument, { report }));
 
     expect(markup).toContain("TOTAL MARK OBTAINED");
-    expect(markup).toContain("<td>TOTAL MARK OBTAINED</td><td>35</td>");\n    expect(markup).not.toContain("<td>TOTAL MARK OBTAINED</td><td>28</td>");\n    expect(formatStudentName({ first_name: "Monjolaoluwa Ezekiel", middle_name: "Ezekiel", last_name: "Boge" })).toBe("Monjolaoluwa Ezekiel Boge");\n    expect(formatStudentName({ first_name: "Chimamanda Alexandra", middle_name: "Alexandra", last_name: "Mbadike" })).toBe("Chimamanda Alexandra Mbadike");
+    expect(markup).toContain("<td>TOTAL MARK OBTAINED</td><td>35</td>");
+    expect(markup).not.toContain("<td>TOTAL MARK OBTAINED</td><td>28</td>");
+    expect(formatStudentName({ first_name: "Monjolaoluwa Ezekiel", middle_name: "Ezekiel", last_name: "Boge" })).toBe("Monjolaoluwa Ezekiel Boge");
+    expect(formatStudentName({ first_name: "Chimamanda Alexandra", middle_name: "Alexandra", last_name: "Mbadike" })).toBe("Chimamanda Alexandra Mbadike");
     expect(markup).toContain("Steady progress");
     expect(markup).toContain("Keep it up");
     expect(markup).toContain("AGE: 8");
