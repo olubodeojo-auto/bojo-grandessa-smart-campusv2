@@ -3643,6 +3643,13 @@ describe("results workflow migration contract", () => {
     expect(resultsPage).toContain("workbook.ownerId === requestedOwnerId");
   });
 
+  it("trusts confirmed pupil periods when workbook-level period headings are unavailable", () => {
+    expect(resultsPage).toContain("includedEntriesMatchRequestedPeriod");
+    expect(resultsPage).toContain("entry.academicYear.trim() === session");
+    expect(resultsPage).toContain("entry.term === term");
+    expect(resultsPage).toContain("!includedEntriesMatchRequestedPeriod");
+  });
+
   it("marks already imported workbook pupils and separates published results from drafts", () => {
     expect(importWorkflowStatusMigration).toContain("mark_result_import_review_draft_status_v2");
     expect(importWorkflowStatusMigration).toContain("target_workflow_status not in ('published', 'imported_draft')");
