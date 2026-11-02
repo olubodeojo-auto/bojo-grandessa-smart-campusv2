@@ -8,6 +8,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   collapseDuplicatePendingImportPupils,
   getImportScoreWarnings,
+  getBlockingImportWarnings,
+  getInformationalImportNotices,
+  getInformationalImportWarnings,
   getImportItemsForSave,
   isImportItemSkippableForMissingMarks,
   areImportedResultValuesEquivalent,
@@ -1571,7 +1574,7 @@ describe("result workbook import preview", () => {
   const actualWorkbookTest = actualWorkbookPath && rosterFixturePath ? it : it.skip;
   const availableWorkbookTest = actualWorkbookPath ? it : it.skip;
 
-  it("uses Makeba's confirmed pupil period for all 17 mapped CA rows despite stale workbook metadata", () => {
+  it("uses Makeba's confirmed pupil period for 17 mapped CA rows despite stale metadata and guardian notices", () => {
     const makebaEntry: ResultImportPreviewEntry = {
       index: 0,
       studentKey: "makeba-gds-0033",
@@ -1589,6 +1592,7 @@ describe("result workbook import preview", () => {
       warnings: [
         "Select an academic session before import.",
         "Select a term before import.",
+        "TEMPORARY GUARDIAN CONTACT: Grandessa School contact is used until the school verifies and replaces the guardian details.",
       ],
       notices: [],
       items: Array.from({ length: 17 }, (_unused, index) => ({
@@ -1617,11 +1621,25 @@ describe("result workbook import preview", () => {
     const firstNormalizedItem = normalizedEntry.items[0];
     if (!firstNormalizedItem) throw new Error("The Makeba fixture must include mapped subjects.");
 
-    expect(refreshedEntry.warnings).toEqual([]);
+    expect(refreshedEntry.warnings).toEqual([
+      "TEMPORARY GUARDIAN CONTACT: Grandessa School contact is used until the school verifies and replaces the guardian details.",
+    ]);
+    expect(getInformationalImportWarnings(makebaEntry)).toEqual([
+      "TEMPORARY GUARDIAN CONTACT: Grandessa School contact is used until the school verifies and replaces the guardian details.",
+    ]);
+    expect(getInformationalImportNotices(makebaEntry)).toEqual(getInformationalImportWarnings(makebaEntry));
+    expect(getBlockingImportWarnings(makebaEntry)).toEqual([]);
     expect(isImportEntryReady(makebaEntry)).toBe(true);
     expect(normalizedEntry.items).toHaveLength(17);
     expect(normalizedEntry.items.every((item) =>
       item.subjectId && item.academicYear === "2026/2027" && item.term === "First",
+    )).toBe(true);
+    expect(normalizedEntry.items.every((item) =>
+      item.assessmentType === "CA"
+      && item.maximumScore === 40
+      && item.continuousAssessment !== null
+      && item.continuousAssessment >= 0
+      && item.continuousAssessment <= 40,
     )).toBe(true);
     expect(buildReviewedImportResultValues({
       studentId: "test-student-makeba",
@@ -1639,6 +1657,7 @@ describe("result workbook import preview", () => {
       assessment_type: "CA",
       maximum_score: 40,
     });
+
     expect(hasImportPeriodConflict(
       { academicYear: "", terms: [] },
       "2026/2027",
@@ -1651,6 +1670,60 @@ describe("result workbook import preview", () => {
       "First",
       [makebaEntry],
     )).toBe(false);
+  });
+
+  it("keeps all genuine import validation errors blocking despite informational guardian notices", () => {
+    const guardianWarning = "TEMPORARY GUARDIAN CONTACT: Grandessa School contact is used until the school verifies and replaces the guardian details.";
+    const validEntry: ResultImportPreviewEntry = {
+      index: 0,
+      studentKey: "makeba-gds-0033-blockers",
+      studentName: "Makeba Ogunjimi",
+      admissionNumber: "GDS-0033",
+      academicYear: "2026/2027",
+      term: "First",
+      assessmentType: "CA",
+      reportKind: "Midterm / Continuous Assessment",
+      className: "Basic 2",
+      teacherName: "Class Teacher",
+      matchStatus: "matched",
+      selectedStudentId: "test-student-makeba",
+      warnings: [guardianWarning],
+      notices: [],
+      items: Array.from({ length: 17 }, (_unused, index) => ({
+        assessmentType: "CA" as const,
+        calculationMode: "Manual" as const,
+        reportKind: "Midterm / Continuous Assessment" as const,
+        subjectName: `Subject ${index + 1}`,
+        subjectId: `subject-${index + 1}`,
+        className: "Basic 2",
+        classId: "class-basic-2",
+        teacherName: "Class Teacher",
+        academicYear: "2026/2027",
+        term: "First" as const,
+        continuousAssessment: 25,
+        maximumScore: 40,
+        examination: null,
+        totalScore: null,
+        grade: null,
+        remark: null,
+        notices: [],
+      })),
+    };
+
+    expect(isImportEntryReady(validEntry)).toBe(true);
+    const blockedEntries: ResultImportPreviewEntry[] = [
+      { ...validEntry, warnings: [guardianWarning, "No exact admission-number or safe name match found; select the correct student manually."] },
+      { ...validEntry, warnings: [guardianWarning, "Worksheet class is Basic 2; school record class is Basic 4. Check the pupil and class record before publishing."] },
+      { ...validEntry, warnings: [guardianWarning, "Duplicate selected result: Mathematics has more than one row for this student, session, term and assessment type."] },
+      { ...validEntry, academicYear: "", warnings: [guardianWarning] },
+      { ...validEntry, term: null, warnings: [guardianWarning] },
+      { ...validEntry, items: validEntry.items.map((item, index) => index === 0 ? { ...item, subjectId: undefined } : item) },
+      { ...validEntry, items: validEntry.items.map((item) => ({ ...item, continuousAssessment: null })) },
+      { ...validEntry, items: validEntry.items.map((item, index) => index === 0 ? { ...item, continuousAssessment: 41, invalidMarks: ["CA"] } : item) },
+      { ...validEntry, matchStatus: "manual-review", selectedStudentId: undefined },
+    ];
+
+    expect(blockedEntries.every((entry) => !isImportEntryReady(entry))).toBe(true);
   });
 
   it("reconciles resolved period warnings when restoring a saved pupil review", () => {
@@ -4126,6 +4199,11 @@ describe("pupil matching is a direct registered-record confirmation", () => {
     expect(resultsPage).toContain("Blank-mark subject rows are intentionally omitted");
     expect(resultsPage).toContain("Rows with no required marks are skipped and must not raise duplicate-result blockers");
     expect(resultsPage).toContain("a true class-number mismatch stays in draft");
+    expect(resultsPage).toContain("getBlockingImportWarnings(entry)");
+    expect(reportCardsPage).toContain("getBlockingImportWarnings(entry)");
+    expect(resultsPage).toContain("getInformationalImportWarnings(entry)");
+    expect(resultsPage).toContain("Continue — save valid CA results");
+    expect(resultsPage).toContain("disabled={importSubmitting || !isImportEntryReady(entry)}");
     expect(reportCardsPage).toContain("Ready to save");
     expect(reportCardsPage).toContain("Enter marks");
   });

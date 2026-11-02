@@ -13,7 +13,16 @@ import SectionCard from "../../../components/ui/SectionCard";
 import Button from "../../../components/ui/Button";
 import { type AcademicCalendarConfig } from "../../../config/grandessaCalendar";
 import { buildStudentReportCard, deleteReportCard, getImportReviewDrafts, getImportReviewWorkbooks, getSavedReportCards, markImportReviewDraftStatus, saveReportCardDetails, type SavedReportCard } from "../../../services/reportCardService";
-import { collapseDuplicatePendingImportPupils, getImportScoreWarnings, getImportItemsForSave, isImportItemSkippableForMissingMarks, reconcileSavedImportStudentMatches, type ResultImportPreviewEntry } from "../../../services/resultImportService";
+import {
+  collapseDuplicatePendingImportPupils,
+  getBlockingImportWarnings,
+  getInformationalImportNotices,
+  getImportScoreWarnings,
+  getImportItemsForSave,
+  isImportItemSkippableForMissingMarks,
+  reconcileSavedImportStudentMatches,
+  type ResultImportPreviewEntry,
+} from "../../../services/resultImportService";
 import { getAcademicSessionSetups, saveAcademicSessionSetup } from "../../../services/academicSessionService";
 import { getClasses } from "../../../services/classService";
 import { deleteResult, getResultPublicationEvidence, getResults, publishResult, reviewResult } from "../../../services/resultService";
@@ -111,8 +120,9 @@ function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingIm
   if (scoreWarnings.length > 0 || itemsToSave.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
     return { label: "Check marks", explanation: "One or more scores needs correcting. Open the pupil review and jump to the subject row." };
   }
-  if (entry.warnings.length > 0) {
-    return { label: "Resolve import issue", explanation: entry.warnings[0] };
+  const blockingWarnings = getBlockingImportWarnings(entry);
+  if (blockingWarnings.length > 0) {
+    return { label: "Resolve import issue", explanation: blockingWarnings[0] };
   }
   const skippedItems = [...(entry.skippedItems ?? []), ...entry.items.filter(isImportItemSkippableForMissingMarks)];
   if (skippedItems.length > 0) {
@@ -1669,6 +1679,7 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
                         ? `${confirmedPupil.first_name} ${confirmedPupil.last_name}`.trim()
                         : worksheetName;
                       const progress = getPendingImportPupilStatus(entry);
+                      const informationalNotices = getInformationalImportNotices(entry);
                       const reportTypeLabel = entry.reportKind === "Midterm / Continuous Assessment"
                         ? "Midterm (CA)"
                         : entry.reportKind === "End-of-Term / Year Report Card"
@@ -1700,6 +1711,11 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
                             <span style={{ ...statusBadgeStyle(progress.label), flexShrink: 0 }}>{progress.label}</span>
                           </div>
                           <p style={{ margin: 0, color: "#475569", fontSize: 13 }}>{progress.explanation}</p>
+                          {informationalNotices.length > 0 ? (
+                            <div role="status" style={{ padding: 8, borderRadius: 8, background: "#eff6ff", color: "#1e40af", fontSize: 12 }}>
+                              {informationalNotices.map((notice) => <div key={notice}>{notice}</div>)}
+                            </div>
+                          ) : null}
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                             <Button type="button" onClick={() => navigate(`/admin/results?${params.toString()}`)}>Open pupil review</Button>
                           </div>

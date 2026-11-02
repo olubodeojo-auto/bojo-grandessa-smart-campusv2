@@ -497,6 +497,25 @@ export function applyConfirmedImportPeriod(entry: ResultImportPreviewEntry): Res
   });
 }
 
+export function isInformationalImportWarning(warning: string): boolean {
+  return warning.startsWith("TEMPORARY GUARDIAN CONTACT:");
+}
+
+export function getBlockingImportWarnings(entry: ResultImportPreviewEntry): string[] {
+  return refreshImportPeriodWarnings(entry).warnings.filter((warning) => !isInformationalImportWarning(warning));
+}
+
+export function getInformationalImportWarnings(entry: ResultImportPreviewEntry): string[] {
+  return entry.warnings.filter(isInformationalImportWarning);
+}
+
+export function getInformationalImportNotices(entry: ResultImportPreviewEntry): string[] {
+  return [...new Set([
+    ...entry.notices,
+    ...getInformationalImportWarnings(entry),
+  ])];
+}
+
 export function isImportEntryReady(entry: ResultImportPreviewEntry): boolean {
   const validatedEntry = refreshImportPeriodWarnings(entry);
   if (validatedEntry.workflowStatus) return false;
@@ -507,7 +526,7 @@ export function isImportEntryReady(entry: ResultImportPreviewEntry): boolean {
     && validatedEntry.reportKind !== "Unclear"
     && validatedEntry.academicYear.trim()
     && validatedEntry.term
-    && validatedEntry.warnings.length === 0
+    && getBlockingImportWarnings(validatedEntry).length === 0
     && itemsToSave.length > 0
     && itemsToSave.every((item) => Boolean(item.classId && item.subjectId))
     && getImportScoreWarnings({ ...validatedEntry, items: itemsToSave }).length === 0);

@@ -24,6 +24,8 @@ import {
 } from "../../../services/reportCardService";
 import {
   collapseDuplicatePendingImportPupils,
+  getBlockingImportWarnings,
+  getInformationalImportWarnings,
   getImportReportDateErrors,
   getImportScoreWarnings,
   getImportItemsForSave,
@@ -177,8 +179,9 @@ function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingIm
   if (scoreWarnings.length > 0 || itemsToSave.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
     return { label: "Check marks", explanation: "One or more scores needs correcting. Use the action below to jump to the subject row." };
   }
-  if (entry.warnings.length > 0) {
-    return { label: "Resolve import issue", explanation: entry.warnings[0] };
+  const blockingWarnings = getBlockingImportWarnings(entry);
+  if (blockingWarnings.length > 0) {
+    return { label: "Resolve import issue", explanation: blockingWarnings[0] };
   }
   const skippedItems = [...(entry.skippedItems ?? []), ...entry.items.filter(isImportItemSkippableForMissingMarks)];
   if (skippedItems.length > 0) {
@@ -2977,6 +2980,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
               );
               const needsPupilMatch = entry.matchStatus !== "matched" || !entry.selectedStudentId;
               const hasSkippableSubjectRows = [...(entry.skippedItems ?? []), ...entry.items.filter(isImportItemSkippableForMissingMarks)].length > 0;
+              const informationalImportWarnings = getInformationalImportWarnings(entry);
+              const blockingImportWarnings = getBlockingImportWarnings(entry);
               const subjectRowsNeedingAction = getImportSubjectRowsNeedingAction(entry);
               const importScoreWarnings = getImportScoreWarnings({ ...entry, items: getImportItemsForSave(entry) });
               const hasNoCompleteSubjectMarks = entry.items.length === 0 || getImportItemsForSave(entry).length === 0;
@@ -3275,6 +3280,11 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                   </div>
                   <section aria-label={`Save actions for ${entry.studentName || "this pupil"}`} style={{ border: "1px solid #e2e8f0", borderRadius: 9, padding: "8px 10px", marginBottom: 10, background: "#f8fafc" }}>
                     <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>Save options for {entry.studentName || "this pupil"}</div>
+                    {informationalImportWarnings.length > 0 ? (
+                      <div role="status" style={{ margin: "8px 0", padding: 8, borderRadius: 8, background: "#eff6ff", color: "#1e40af", fontSize: 12 }}>
+                        {informationalImportWarnings.map((warning) => <div key={warning}>{warning}</div>)}
+                      </div>
+                    ) : null}
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       <Button type="button" size="sm" variant="secondary" onClick={() => void handleSaveProgress()}>
                         {draftSaveStates[entry.studentKey]?.state === "saving" ? "Saving…" : "Save progress"}
@@ -3286,7 +3296,9 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                         onClick={() => void handleConfirmImport(false, entry.studentKey)}
                         disabled={importSubmitting || !isImportEntryReady(entry)}
                       >
-                        Save marks as draft
+                        {informationalImportWarnings.length > 0 && isImportEntryReady(entry)
+                          ? "Continue — save valid CA results"
+                          : "Save marks as draft"}
                       </Button>
                       {isAdmin && !(isImportEntryReady(entry) && !hasClassConflict) ? (
                         <Button
@@ -3480,13 +3492,13 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     )}
                   </section>
 
-                  {entry.warnings.length > 0 || importScoreWarnings.length > 0 ? (
+                  {blockingImportWarnings.length > 0 || importScoreWarnings.length > 0 ? (
                     <details style={{ marginBottom: 10, border: "1px solid #e2e8f0", borderRadius: 8, padding: "8px 10px", background: "#fff" }}>
                       <summary style={{ cursor: "pointer", color: "#475569", fontSize: 12, fontWeight: 600 }}>
-                        Additional notes ({new Set([...entry.warnings, ...importScoreWarnings]).size})
+                        Additional notes ({new Set([...blockingImportWarnings, ...importScoreWarnings]).size})
                       </summary>
                       <div style={{ display: "grid", gap: 4, marginTop: 8, color: "#64748b", fontSize: 12, overflowWrap: "anywhere" }}>
-                        {[...new Set([...entry.warnings, ...importScoreWarnings])].filter((warning) =>
+                        {[...new Set([...blockingImportWarnings, ...importScoreWarnings])].filter((warning) =>
                           !/selected student is not currently|worksheet says|workbook class differs|class differs|worksheet class/i.test(warning),
                         ).map((warning) => <div key={warning}>{warning}</div>)}
                       </div>
