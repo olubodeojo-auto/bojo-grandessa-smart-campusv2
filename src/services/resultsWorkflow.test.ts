@@ -3930,3 +3930,13 @@ describe("pupil review keeps the important context visible and advanced settings
     expect(resultsPage).not.toContain('aria-label={`Class for ${item.subjectName}`}');
   });
 });
+
+describe("published import queue cleanup", () => {
+  it("hides only fully verified published pupil reviews and keeps a way to inspect completed imports", () => {
+    expect(resultsPage).toContain("function isImportReviewFullyPublished");
+    expect(resultsPage).toContain("matches.length === 1 && matches[0].status === \"Published\"");
+    expect(resultsPage).toContain("outstandingImportPupils");
+    expect(resultsPage).toContain("Show\" : \"Hide");
+    expect(resultsPage).toContain("Already published");
+  });
+});
