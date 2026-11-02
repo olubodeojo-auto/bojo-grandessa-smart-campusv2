@@ -10,7 +10,7 @@ export default function ReportCardDocument({ report }: { report: ReportCardData 
   const classDisplay = report.className?.trim() || "";
 
   return (
-    <article className="report-card" id="report-card-preview">
+    <article className={`report-card${report.reportType === "Midterm" ? " report-card--midterm" : ""}`} id="report-card-preview">
       <header className="report-card-header official-header">
         {report.schoolSettings.logo_url ? (
           <img className="school-logo" src={report.schoolSettings.logo_url} alt="School Logo" />
