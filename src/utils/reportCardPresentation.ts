@@ -27,7 +27,6 @@ export interface ReportSummaryValues {
 
 export function getReportSummaryValues(
   report: Pick<ReportCardData,
-    | "reportType"
     | "calculationMode"
     | "totalMarksObtained"
     | "totalMarksObtainable"
@@ -35,7 +34,7 @@ export function getReportSummaryValues(
     | "reportTotalMarksObtained"
     | "reportTotalMarksObtainable"
     | "reportStudentPercentage"
-  >,
+  > & Partial<Pick<ReportCardData, "reportType">>,
 ): ReportSummaryValues {
   const calculated = {
     totalMarksObtained: report.totalMarksObtained,
