@@ -10,7 +10,7 @@ export function formatStudentName(
 ): string {
   const seen = new Set<string>();
   const parts = [student.first_name, student.middle_name, student.last_name];
-  const tokens = parts.flatMap((part) => (part ?? "").trim().split(/\\s+/).filter(Boolean));
+  const tokens = parts.flatMap((part) => (part ?? "").trim().split(/\s+/).filter(Boolean));
   return tokens.filter((token) => {
     const key = token.toLocaleLowerCase();
     if (seen.has(key)) return false;
@@ -27,7 +27,8 @@ export interface ReportSummaryValues {
 
 export function getReportSummaryValues(
   report: Pick<ReportCardData,
-    | "reportType"\n    | "calculationMode"
+    | "reportType"
+    | "calculationMode"
     | "totalMarksObtained"
     | "totalMarksObtainable"
     | "studentPercentage"
