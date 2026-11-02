@@ -469,7 +469,7 @@ describe("report-card session resolution and presentation", () => {
     expect(validateAcademicSessionSetup({ ...setup, isCurrent: false })).toMatch(/current term/);
   });
 
-  it("uses saved manual report summaries, calculated automatic summaries, and preserves blank values", () => {
+  it("uses saved End-of-Term manual summaries and falls back to calculated values when missing", () => {
     const values = {
       reportType: "End-of-Term" as const,
       calculationMode: "Manual" as const,
@@ -499,9 +499,9 @@ describe("report-card session resolution and presentation", () => {
       reportTotalMarksObtainable: null,
       reportStudentPercentage: null,
     })).toEqual({
-      totalMarksObtained: null,
-      totalMarksObtainable: null,
-      studentPercentage: null,
+      totalMarksObtained: 35,
+      totalMarksObtainable: 50,
+      studentPercentage: 70,
     });
   });
 
