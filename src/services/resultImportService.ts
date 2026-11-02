@@ -114,6 +114,23 @@ export type SavedImportReviewVersion = {
 export type CollapsedImportReviewVersion<T extends SavedImportReviewVersion = SavedImportReviewVersion> =
   T & { duplicateCount: number; duplicateWorkbookCount: number; olderVersions: T[] };
 
+export function hasImportPeriodConflict(
+  sheetMetadata: Pick<ResultWorkbookSheet, "academicYear" | "terms"> | undefined,
+  requestedAcademicYear: string,
+  requestedTerm: "All" | Result["term"],
+  entries: ResultImportPreviewEntry[],
+): boolean {
+  if (!sheetMetadata) return false;
+  const metadataConflicts = Boolean(
+    (requestedAcademicYear && sheetMetadata.academicYear !== requestedAcademicYear)
+    || (requestedTerm !== "All" && !sheetMetadata.terms.includes(requestedTerm)),
+  );
+  if (!metadataConflicts) return false;
+  const includedEntries = entries.filter((entry) => entry.included !== false);
+  return includedEntries.length === 0
+    || !includedEntries.every((entry) => entry.academicYear.trim() && entry.term);
+}
+
 function normalizePendingImportValue(value: string | undefined): string {
   return (value ?? "")
     .normalize("NFKD")
@@ -458,13 +475,42 @@ export function getImportItemsForSave(entry: ResultImportPreviewEntry): ResultIm
   return entry.items.filter((item) => !isImportItemSkippableForMissingMarks(item));
 }
 
+export function refreshImportPeriodWarnings(entry: ResultImportPreviewEntry): ResultImportPreviewEntry {
+  const warnings = entry.warnings.filter((warning) =>
+    !warning.startsWith("Choose a report type before import.")
+    && !warning.startsWith("Select an academic session before import.")
+    && !warning.startsWith("Select a term before import."),
+  );
+  if (entry.reportKind === "Unclear") warnings.push("Choose a report type before import.");
+  if (!entry.academicYear.trim()) warnings.push("Select an academic session before import.");
+  if (!entry.term) warnings.push("Select a term before import.");
+  return { ...entry, warnings: [...new Set(warnings)] };
+}
+
+export function applyConfirmedImportPeriod(entry: ResultImportPreviewEntry): ResultImportPreviewEntry {
+  const academicYear = entry.academicYear.trim();
+  if (!academicYear || !entry.term) return entry;
+  return refreshImportPeriodWarnings({
+    ...entry,
+    academicYear,
+    items: entry.items.map((item) => ({ ...item, academicYear, term: entry.term })),
+  });
+}
+
 export function isImportEntryReady(entry: ResultImportPreviewEntry): boolean {
-  if (entry.workflowStatus) return false;
-  const itemsToSave = getImportItemsForSave(entry);
-  return Boolean(entry.included !== false && entry.selectedStudentId && entry.warnings.length === 0
+  const validatedEntry = refreshImportPeriodWarnings(entry);
+  if (validatedEntry.workflowStatus) return false;
+  const itemsToSave = getImportItemsForSave(validatedEntry);
+  return Boolean(validatedEntry.included !== false
+    && validatedEntry.matchStatus === "matched"
+    && validatedEntry.selectedStudentId
+    && validatedEntry.reportKind !== "Unclear"
+    && validatedEntry.academicYear.trim()
+    && validatedEntry.term
+    && validatedEntry.warnings.length === 0
     && itemsToSave.length > 0
     && itemsToSave.every((item) => Boolean(item.classId && item.subjectId))
-    && getImportScoreWarnings({ ...entry, items: itemsToSave }).length === 0);
+    && getImportScoreWarnings({ ...validatedEntry, items: itemsToSave }).length === 0);
 }
 
 export function getImportableResultEntries(
@@ -515,6 +561,36 @@ export function buildReviewedImportResultValues(params: {
     remark: isMidterm ? null : calculated ? calculated.remark : params.item.remark,
     status: "Draft",
   };
+}
+
+export function getImportedResultStatusVerificationError(
+  resultIds: string[],
+  workflowStatus: "published" | "imported_draft",
+  results: Result[],
+): string | null {
+  if (resultIds.length === 0) return "The save did not return any subject-result IDs.";
+  if (new Set(resultIds).size !== resultIds.length) {
+    return "The save returned a duplicate subject-result ID. Refresh the pupil review before retrying.";
+  }
+  const resultsById = new Map(results.map((result) => [result.id, result]));
+  const missingIds = resultIds.filter((id) => !resultsById.has(id));
+  if (missingIds.length > 0) {
+    return `${missingIds.length} saved subject result(s) could not be found after refresh. Check Results before retrying.`;
+  }
+  const savedResults = resultIds.flatMap((id) => {
+    const result = resultsById.get(id);
+    return result ? [result] : [];
+  });
+  if (savedResults.some((result) => result.status !== "Draft" && result.status !== "Published")) {
+    return "One or more saved subject results is not a Draft or Published record. Review its status before continuing.";
+  }
+  if (workflowStatus === "published" && savedResults.some((result) => result.status !== "Published")) {
+    return "The import was marked published, but one or more refreshed subject results are not Published.";
+  }
+  if (workflowStatus === "imported_draft" && !savedResults.some((result) => result.status === "Draft")) {
+    return "The import was marked as a draft, but no refreshed subject result is in Draft status.";
+  }
+  return null;
 }
 
 type WorkbookRow = Record<string, unknown>;
@@ -1521,7 +1597,7 @@ export function reconcileSavedImportStudentMatches(
     const sourceStudentName = getSourceStudentName(savedEntry);
     // Normalize saved numeric strings and old assessment types, but never turn a blank
     // source mark into zero. The confirmed report type controls the subject input fields.
-    const normalizedEntry = normalizeSavedImportEntry(savedEntry);
+    const normalizedEntry = refreshImportPeriodWarnings(normalizeSavedImportEntry(savedEntry));
     const entry: ResultImportPreviewEntry = { ...normalizedEntry, sourceStudentName };
     const retainedWarnings = entry.warnings.filter((warning) =>
       !mappingWarningPrefixes.some((prefix) => warning.startsWith(prefix))

@@ -1,8 +1,19 @@
 import { supabase } from "../lib/supabase";
 import type { Announcement, AnnouncementCreatePayload, AnnouncementUpdatePayload } from "../types/announcement";
 
+type AnnouncementRow = Pick<Announcement, "id" | "title" | "message" | "created_at" | "updated_at"> & {
+  is_active: boolean | null;
+};
+
+type AnnouncementDatabaseUpdate = {
+  title?: string;
+  message?: string;
+  audience?: NonNullable<AnnouncementCreatePayload["audience"]>;
+  is_active?: boolean;
+};
+
 // Helper to map DB rows (which use is_active) to frontend Announcement shape (which expects `published`).
-function mapRowToAnnouncement(row: any): Announcement {
+function mapRowToAnnouncement(row: AnnouncementRow): Announcement {
   return {
     id: row.id,
     title: row.title,
@@ -18,12 +29,12 @@ export async function createAnnouncement(
   payload: AnnouncementCreatePayload
 ): Promise<Announcement> {
   // use a valid production audience default; keep any supplied valid audience unchanged
-  const providedAudience = (payload as any).audience;
-  const audience = typeof providedAudience === "string" && ["All", "Teachers", "Students", "Contacts"].includes(providedAudience.trim())
-    ? providedAudience.trim()
+  const providedAudience = payload.audience;
+  const audience = providedAudience && ["All", "Teachers", "Students", "Contacts"].includes(providedAudience)
+    ? providedAudience
     : "All";
 
-  const dbPayload: any = {
+  const dbPayload: AnnouncementDatabaseUpdate = {
     title: payload.title,
     message: payload.message,
     audience,
@@ -68,11 +79,12 @@ export async function updateAnnouncement(
   payload: AnnouncementUpdatePayload
 ): Promise<Announcement> {
   // Map any published flag in payload to the database's is_active.
-  const dbPayload: any = { ...payload };
-  if (typeof dbPayload.published !== "undefined") {
-    dbPayload.is_active = dbPayload.published;
-    delete dbPayload.published;
-  }
+  const dbPayload: AnnouncementDatabaseUpdate = {
+    ...(payload.title === undefined ? {} : { title: payload.title }),
+    ...(payload.message === undefined ? {} : { message: payload.message }),
+    ...(payload.audience === undefined ? {} : { audience: payload.audience }),
+    ...(payload.published === undefined ? {} : { is_active: payload.published }),
+  };
 
   // Ensure we don't accidentally send unsupported fields like `published`.
   const { data, error } = await supabase

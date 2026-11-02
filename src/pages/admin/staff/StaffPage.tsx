@@ -89,11 +89,11 @@ export default function StaffPage() {
   const [editingMember, setEditingMember] = useState<StaffUser | null>(null);
   const [form, setForm] = useState<FormState>(initialForm);
 
-  const loadStaff = useCallback(async (): Promise<void> => {
-    setLoading(true);
+  const fetchStaff = useCallback(() => getStaffUsers(), []);
 
+  const loadStaff = useCallback(async (): Promise<void> => {
     try {
-      setStaff(await getStaffUsers());
+      setStaff(await fetchStaff());
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to load staff users.";
       console.error(message);
@@ -101,11 +101,28 @@ export default function StaffPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchStaff]);
 
   useEffect(() => {
-    void loadStaff();
-  }, [loadStaff]);
+    let active = true;
+    void fetchStaff()
+      .then((data) => {
+        if (active) setStaff(data);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          const message = error instanceof Error ? error.message : "Unable to load staff users.";
+          console.error(message);
+          setStaff([]);
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [fetchStaff]);
 
   const filteredStaff = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -212,6 +229,7 @@ export default function StaffPage() {
 
       setIsFormOpen(false);
       setEditingMember(null);
+      setLoading(true);
       await loadStaff();
     } catch (error) {
       const message = error instanceof Error ? error.message : editingMember ? "Unable to update staff user." : "Unable to create staff user.";
@@ -230,6 +248,7 @@ export default function StaffPage() {
     try {
       await resendStaffInvitation(member.id);
       alert(`Invitation resent to ${member.email}.`);
+      setLoading(true);
       await loadStaff();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to resend the invitation.";
@@ -242,6 +261,7 @@ export default function StaffPage() {
 
     try {
       await toggleStaffStatus(member.id, nextStatus);
+      setLoading(true);
       await loadStaff();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to update staff status.";
@@ -256,6 +276,7 @@ export default function StaffPage() {
 
     try {
       await deleteStaffUser(member.id);
+      setLoading(true);
       await loadStaff();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to delete staff member.";

@@ -60,23 +60,38 @@ export default function ParentAccountsPage() {
   const [workingContactId, setWorkingContactId] = useState("");
   const [error, setError] = useState("");
 
-  const loadDirectory = useCallback(async (): Promise<void> => {
-    setLoading(true);
-    setError("");
+  const fetchDirectory = useCallback(() => getParentAccountDirectory(), []);
 
+  const loadDirectory = useCallback(async (): Promise<void> => {
     try {
-      setEntries(await getParentAccountDirectory());
+      setEntries(await fetchDirectory());
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load parent accounts.");
       setEntries([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchDirectory]);
 
   useEffect(() => {
-    void loadDirectory();
-  }, [loadDirectory]);
+    let active = true;
+    void fetchDirectory()
+      .then((data) => {
+        if (active) setEntries(data);
+      })
+      .catch((loadError: unknown) => {
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : "Unable to load parent accounts.");
+          setEntries([]);
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [fetchDirectory]);
 
   const filteredEntries = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -104,6 +119,7 @@ export default function ParentAccountsPage() {
       } else if (entry.account_status === "inactive") {
         await createParentPortalAccount(entry.contact.id);
       }
+      setLoading(true);
       await loadDirectory();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "Unable to manage this parent account.");

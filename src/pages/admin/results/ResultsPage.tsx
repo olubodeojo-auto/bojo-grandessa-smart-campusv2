@@ -34,7 +34,9 @@ import {
   getImportSubjectRowKey,
   getNextUnresolvedImportSubjectIndex,
   getImportableResultEntries,
+  hasImportPeriodConflict,
   isImportEntryReady,
+  applyConfirmedImportPeriod,
   inspectResultWorkbook,
   parseResultWorkbook,
   reconcileSavedImportStudentMatches,
@@ -49,7 +51,9 @@ import {
   mergeSavedImportReviewDrafts,
   parseImportReviewCursor,
   normalizeImportDate,
+  refreshImportPeriodWarnings,
   saveImportEntriesIndependently,
+  getImportedResultStatusVerificationError,
   serializeImportReviewCursor,
   summarizeImportPreview,
   type ResultImportItem,
@@ -173,16 +177,21 @@ function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingIm
   if (scoreWarnings.length > 0 || itemsToSave.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
     return { label: "Check marks", explanation: "One or more scores needs correcting. Use the action below to jump to the subject row." };
   }
-
+  if (entry.warnings.length > 0) {
+    return { label: "Resolve import issue", explanation: entry.warnings[0] };
+  }
   const skippedItems = [...(entry.skippedItems ?? []), ...entry.items.filter(isImportItemSkippableForMissingMarks)];
   if (skippedItems.length > 0) {
     const names = [...new Set(skippedItems.map((item) => item.subjectName).filter(Boolean))].join(", ");
     return {
-      label: "Ready — some marks left blank",
-      explanation: `Complete subjects can be published now. Blank subjects (${names || "shown below"}) will be left out and can be completed later.`,
+      label: "Ready to save",
+      explanation: `Complete subjects can be saved as drafts. Blank subjects (${names || "shown below"}) will be left out and can be completed later.`,
     };
   }
-  return { label: "Ready to publish", explanation: "All entered subjects have complete marks." };
+  return {
+    label: "Ready to save",
+    explanation: "All entered subjects have complete marks. Save them as drafts; publication readiness is checked against the saved results.",
+  };
 }
 
 function importItemKey(entry: ResultImportPreviewEntry, itemIndex: number): string {
@@ -640,7 +649,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
   const activeWorkbookDraftKey = importWorkbookKey && selectedImportSheet
     ? `${importWorkbookKey}:${selectedImportSheet}`
     : "";
-  const readReviewCursor = (workbookKey: string): { entryKey: string; subjectRowKey?: string | null } | null => {
+  const readReviewCursor = useCallback((workbookKey: string): { entryKey: string; subjectRowKey?: string | null } | null => {
     if (!user || !importDraftSchoolId) return null;
     try {
       return parseImportReviewCursor(
@@ -650,7 +659,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
       setSavedWorkbookError("The saved active pupil position could not be read from this browser.");
       return null;
     }
-  };
+  }, [importDraftSchoolId, user]);
   const studentOptions = useMemo(
     () => [...students].sort((left, right) => {
       const nameOf = (student: Student): string =>
@@ -753,18 +762,12 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
   // heading detector could not read the session/term. Trust the explicit, reviewed
   // pupil and subject periods; do not block a valid pupil because sheet metadata is blank.
   const includedImportEntries = importEntries.filter((entry) => entry.included !== false);
-  const includedEntriesMatchRequestedPeriod = includedImportEntries.length > 0
-    && includedImportEntries.every((entry) =>
-      entry.academicYear.trim() === session
-      && entry.term === term
-      && entry.items.every((item) =>
-        (!item.academicYear || item.academicYear === session)
-        && (!item.term || item.term === term)),
-    );
-  const importPeriodConflict = Boolean(selectedSheetMetadata
-    && ((session && selectedSheetMetadata.academicYear !== session)
-      || (term !== "All" && !selectedSheetMetadata.terms.includes(term)))
-    && !includedEntriesMatchRequestedPeriod);
+  const importPeriodConflict = hasImportPeriodConflict(
+    selectedSheetMetadata,
+    session,
+    term,
+    includedImportEntries,
+  );
   const confirmedImportPeriods = [...new Map(includedImportEntries
     .filter((entry) => entry.academicYear.trim() && entry.term)
     .map((entry) => [[entry.academicYear.trim(), entry.term].join("|"), {
@@ -969,7 +972,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
     }
   };
 
-  const handleResumeSavedWorkbook = async (workbookKeyOverride?: string, ownerIdOverride?: string, entryKeyOverride?: string): Promise<void> => {
+  const handleResumeSavedWorkbook = useCallback(async (workbookKeyOverride?: string, ownerIdOverride?: string, entryKeyOverride?: string): Promise<void> => {
     const selected = workbookKeyOverride
       ? savedImportWorkbooks.find((workbook) =>
           workbook.workbookKey === workbookKeyOverride && (!ownerIdOverride || workbook.ownerId === ownerIdOverride))
@@ -1043,7 +1046,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to reopen the saved workbook draft.");
     }
-  };
+  }, [classes, readReviewCursor, savedImportWorkbooks, selectedSavedWorkbookKey, students]);
 
   useEffect(() => {
     const requestedWorkbookKey = searchParams.get("resumeWorkbook");
@@ -1177,10 +1180,10 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
     if (!entry.term || entry.items.some((item) => !item.term && !entry.term)) {
       warnings.push("Select a term before import.");
     }
-    return {
+    return refreshImportPeriodWarnings({
       ...entry,
       warnings: [...new Set(warnings)],
-    };
+    });
   }
 
   function getExistingImportMatches(
@@ -1188,13 +1191,13 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
     item: ResultImportPreviewEntry["items"][number],
     resultRows: Result[] = results,
   ): Result[] {
-    if (!entry.selectedStudentId || !item.classId || !item.subjectId || !(item.term ?? entry.term)) return [];
+    if (!entry.selectedStudentId || !item.classId || !item.subjectId || !entry.term || !entry.academicYear.trim()) return [];
     return resultRows.filter((result) =>
       result.student_id === entry.selectedStudentId
       && result.class_id === item.classId
       && result.subject_id === item.subjectId
-      && result.academic_year === (item.academicYear || entry.academicYear)
-      && result.term === (item.term ?? entry.term)
+      && result.academic_year === entry.academicYear.trim()
+      && result.term === entry.term
       && (item.assessmentType === "CA"
         ? result.assessment_type === "CA"
         : result.assessment_type === "Combined" || result.assessment_type === "Examination")
@@ -1843,9 +1846,9 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
   };
 
   const handleConfirmImport = async (publishAfterSave = false, targetStudentKey?: string): Promise<void> => {
-    const selectedEntries = targetStudentKey
+    const selectedEntries = (targetStudentKey
       ? readyImportEntries.filter((entry) => entry.studentKey === targetStudentKey)
-      : readyImportEntries;
+      : readyImportEntries).map(applyConfirmedImportPeriod);
     if (selectedEntries.length === 0) {
       if (targetStudentKey) {
         setError("This pupil is not ready to save. Complete the highlighted pupil, subject and mark issues first.");
@@ -1864,8 +1867,8 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
       setError(`Correct the report-card dates before importing: ${invalidReportDates.join(" ")}`);
       return;
     }
-    if (importPeriodConflict) {
-      setError("Choose a worksheet that matches the requested session and term before importing.");
+    if (hasImportPeriodConflict(selectedSheetMetadata, session, term, selectedEntries)) {
+      setError("Confirm the session and term for each pupil before importing. Worksheet-level period text is not enough to assign a result period.");
       return;
     }
     if (publishAfterSave && !isAdmin) {
@@ -1911,7 +1914,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             subjectName: subject.subject_name,
             teacherId: classEntity.class_teacher_id ?? undefined,
             teacherName: entry.teacherName.trim(),
-            academicYear: item.academicYear || entry.academicYear,
+            academicYear: entry.academicYear,
             term: resultTerm,
             item,
           });
@@ -2012,6 +2015,14 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             nextTermBegins: nextTermBegins.value,
           },
         });
+        const refreshedResults = await getResults();
+        const statusVerificationError = getImportedResultStatusVerificationError(
+          saveOutcome.resultIds,
+          saveOutcome.workflowStatus,
+          refreshedResults,
+        );
+        if (statusVerificationError) throw new Error(statusVerificationError);
+        setResults(refreshedResults);
 
         let wasPublished = saveOutcome.workflowStatus === "published";
         let publicationError = "";
@@ -2265,7 +2276,14 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                     : possiblePupil
                       ? undefined
                       : classes.find((candidate) => candidate.id === entry.items.find((item) => item.classId)?.classId);
-                  const isPublishedReview = isImportReviewFullyPublished(entry, results);\n                  const progress = isPublishedReview\n                    ? { label: "Already published", explanation: "All subject results in this pupil\u2019s import are verified as Published. This completed item is hidden from the active queue by default." }\n                    : getPendingImportPupilStatus(entry);
+                  const isPublishedReview = isImportReviewFullyPublished(entry, results);
+                  const progress = isPublishedReview
+                    ? {
+                        label: "Already published",
+                        explanation:
+                          "All subject results in this pupil\u2019s import are verified as Published. This completed item is hidden from the active queue by default.",
+                      }
+                    : getPendingImportPupilStatus(entry);
                   const reportTypeLabel = entry.reportKind === "Midterm / Continuous Assessment"
                     ? "Midterm (CA)"
                     : entry.reportKind === "End-of-Term / Year Report Card"

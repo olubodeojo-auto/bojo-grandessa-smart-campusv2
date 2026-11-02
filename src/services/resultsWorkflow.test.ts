@@ -22,7 +22,11 @@ import {
   getImportReportDateErrors,
   getUnresolvedIncludedResultEntries,
   isImportEntryReady,
+  applyConfirmedImportPeriod,
+  getImportedResultStatusVerificationError,
+  hasImportPeriodConflict,
   mergeSavedImportReviewDrafts,
+  refreshImportPeriodWarnings,
   reconcileSavedImportStudentMatches,
   resolveImportStudentMatch,
   resolveImportStudentAssignment,
@@ -147,6 +151,11 @@ const reportCardDateFixMigrationFiles = import.meta.glob<string>(
   { eager: true, query: "?raw", import: "default" },
 );
 const reportCardDateFixMigration = Object.values(reportCardDateFixMigrationFiles)[0] ?? "";
+const optionalReportTermMigrationFiles = import.meta.glob<string>(
+  "../../supabase/migrations/20261102090000_allow_imported_reports_without_term_setup.sql",
+  { eager: true, query: "?raw", import: "default" },
+);
+const optionalReportTermMigration = Object.values(optionalReportTermMigrationFiles)[0] ?? "";
 const academicSessionMigrationFiles = import.meta.glob<string>(
   "../../supabase/migrations/20261015000000_academic_session_term_admin_access.sql",
   { eager: true, query: "?raw", import: "default" },
@@ -693,6 +702,50 @@ describe("end-of-term report metrics", () => {
 });
 
 describe("Report Center period discovery and readiness", () => {
+  it("verifies saved drafts before exposing them as ready for publication", async () => {
+    const savedDraft = result({
+      id: "makeba-ca-math",
+      student_id: "test-student-makeba",
+      class_id: "class-basic-2",
+      class_name: "Basic 2",
+      subject_id: "subject-math",
+      subject_name: "Mathematics",
+      academic_year: "2026/2027",
+      term: "First",
+      assessment_type: "CA",
+      continuous_assessment: 25,
+      maximum_score: 40,
+      examination: null,
+      total_score: null,
+      status: "Draft",
+    });
+    const [saveOutcome] = (await saveImportEntriesIndependently(
+      ["Makeba Ogunjimi"],
+      async () => ({ resultIds: [savedDraft.id], workflowStatus: "imported_draft" as const }),
+    )).saved;
+
+    expect(getImportedResultStatusVerificationError(
+      saveOutcome.value.resultIds,
+      saveOutcome.value.workflowStatus,
+      [savedDraft],
+    )).toBeNull();
+    const [period] = discoverReportCenterPeriods([savedDraft], []);
+    expect(getReportCenterPublishBlockReason(period, [savedDraft], true)).toBe("");
+
+    let refreshedResults = [savedDraft];
+    const published = await publishReportResultsAndVerify(
+      [savedDraft],
+      async (resultId) => {
+        refreshedResults = refreshedResults.map((item) =>
+          item.id === resultId ? { ...item, status: "Published" } : item,
+        );
+      },
+      async () => refreshedResults,
+    );
+    expect(published.publishedResultIds).toEqual([savedDraft.id]);
+    expect(published.refreshedResults?.[0].status).toBe("Published");
+  });
+
   it("uses Grandessa's 40-mark Midterm scale when a legacy CA row has no saved maximum", () => {
     const midterm = result({
       id: "trixie-ca",
@@ -773,7 +826,7 @@ describe("Report Center period discovery and readiness", () => {
       (period) => period.studentId === "target-pupil",
     );
 
-    expect(getReportCenterCompleteness(targetPeriod, referenceRows)).toMatchObject({ complete: true });
+    expect(getReportCenterCompleteness(targetPeriod)).toMatchObject({ complete: true });
     expect(canPublishReportCenterPeriod(targetPeriod, referenceRows, true)).toBe(true);
 
     const referenceWithMath = [
@@ -795,7 +848,7 @@ describe("Report Center period discovery and readiness", () => {
         status: "Published",
       }),
     ];
-    expect(getReportCenterCompleteness(targetPeriod, referenceWithMath)).toMatchObject({ complete: true });
+    expect(getReportCenterCompleteness(targetPeriod)).toMatchObject({ complete: true });
     expect(canPublishReportCenterPeriod(targetPeriod, referenceWithMath, true)).toBe(true);
   });
 
@@ -1132,10 +1185,10 @@ describe("Report Center period discovery and readiness", () => {
     const trixiePeriod = periods.find((period) => period.studentId === "trixie");
 
     expect(omolekanPeriod?.results).toHaveLength(12);
-    expect(getReportCenterCompleteness(omolekanPeriod!, allResults).complete).toBe(true);
+    expect(getReportCenterCompleteness(omolekanPeriod!).complete).toBe(true);
     expect(canPublishReportCenterPeriod(omolekanPeriod!, allResults, true)).toBe(true);
     expect(canPublishReportCenterPeriod(omolekanPeriod!, allResults, false)).toBe(false);
-    expect(getReportCenterCompleteness(trixiePeriod!, allResults).complete).toBe(true);
+    expect(getReportCenterCompleteness(trixiePeriod!).complete).toBe(true);
     expect(getReportCenterPublishBlockReason(trixiePeriod!, allResults, true)).toBe("");
     expect(canPublishReportCenterPeriod(trixiePeriod!, allResults, true)).toBe(true);
   });
@@ -1266,6 +1319,8 @@ describe("Report Center period discovery and readiness", () => {
   it("keeps result publication email-free and scopes parent notifications to fully published periods", () => {
     expect(reportCardsPage).toContain("This does not send emails.");
     expect(reportCardsPage).not.toContain("sendCommunication(");
+    expect(resultsPage).not.toContain("sendCommunication(");
+    expect(resultsPage).toContain("publishReportResultsAndVerify(pendingResults, publishResult, getResults)");
     expect(communicationsPage).toContain('value: "parents_published_results"');
     expect(communicationsPage).toContain("Published report period");
     expect(communicationsPage).toContain("previewCommunication(target)");
@@ -1516,6 +1571,138 @@ describe("result workbook import preview", () => {
   const actualWorkbookTest = actualWorkbookPath && rosterFixturePath ? it : it.skip;
   const availableWorkbookTest = actualWorkbookPath ? it : it.skip;
 
+  it("uses Makeba's confirmed pupil period for all 17 mapped CA rows despite stale workbook metadata", () => {
+    const makebaEntry: ResultImportPreviewEntry = {
+      index: 0,
+      studentKey: "makeba-gds-0033",
+      studentName: "Makeba Ogunjimi",
+      admissionNumber: "GDS-0033",
+      academicYear: "2026/2027",
+      term: "First",
+      assessmentType: "CA",
+      reportKind: "Midterm / Continuous Assessment",
+      className: "Basic 2",
+      teacherName: "Class Teacher",
+      matchStatus: "matched",
+      selectedStudentId: "test-student-makeba",
+      included: true,
+      warnings: [
+        "Select an academic session before import.",
+        "Select a term before import.",
+      ],
+      notices: [],
+      items: Array.from({ length: 17 }, (_unused, index) => ({
+        assessmentType: "CA",
+        calculationMode: "Manual",
+        reportKind: "Midterm / Continuous Assessment",
+        subjectName: `Subject ${index + 1}`,
+        subjectId: `subject-${index + 1}`,
+        className: "Basic 2",
+        classId: "class-basic-2",
+        teacherName: "Class Teacher",
+        academicYear: "2025/2026",
+        term: "Third",
+        continuousAssessment: 20 + (index % 20),
+        maximumScore: 40,
+        examination: null,
+        totalScore: null,
+        grade: null,
+        remark: null,
+        notices: [],
+      })),
+    };
+
+    const refreshedEntry = refreshImportPeriodWarnings(makebaEntry);
+    const normalizedEntry = applyConfirmedImportPeriod(refreshedEntry);
+    const firstNormalizedItem = normalizedEntry.items[0];
+    if (!firstNormalizedItem) throw new Error("The Makeba fixture must include mapped subjects.");
+
+    expect(refreshedEntry.warnings).toEqual([]);
+    expect(isImportEntryReady(makebaEntry)).toBe(true);
+    expect(normalizedEntry.items).toHaveLength(17);
+    expect(normalizedEntry.items.every((item) =>
+      item.subjectId && item.academicYear === "2026/2027" && item.term === "First",
+    )).toBe(true);
+    expect(buildReviewedImportResultValues({
+      studentId: "test-student-makeba",
+      classId: "class-basic-2",
+      className: "Basic 2",
+      subjectId: "subject-1",
+      subjectName: "Subject 1",
+      teacherName: "Class Teacher",
+      academicYear: normalizedEntry.academicYear,
+      term: "First",
+      item: firstNormalizedItem,
+    })).toMatchObject({
+      academic_year: "2026/2027",
+      term: "First",
+      assessment_type: "CA",
+      maximum_score: 40,
+    });
+    expect(hasImportPeriodConflict(
+      { academicYear: "", terms: [] },
+      "2026/2027",
+      "First",
+      [makebaEntry],
+    )).toBe(false);
+    expect(hasImportPeriodConflict(
+      { academicYear: "2025/2026", terms: ["Third"] },
+      "2026/2027",
+      "First",
+      [makebaEntry],
+    )).toBe(false);
+  });
+
+  it("reconciles resolved period warnings when restoring a saved pupil review", () => {
+    const savedEntry: ResultImportPreviewEntry = {
+      index: 0,
+      studentKey: "makeba-gds-0033",
+      studentName: "Makeba Ogunjimi",
+      admissionNumber: "GDS-0033",
+      academicYear: "2026/2027",
+      term: "First",
+      assessmentType: "CA",
+      reportKind: "Midterm / Continuous Assessment",
+      className: "Basic 2",
+      teacherName: "",
+      matchStatus: "matched",
+      selectedStudentId: "test-student-makeba",
+      included: true,
+      warnings: [
+        "Select an academic session before import.",
+        "Select a term before import.",
+      ],
+      notices: [],
+      items: [{
+        assessmentType: "CA",
+        calculationMode: "Manual",
+        reportKind: "Midterm / Continuous Assessment",
+        subjectName: "Mathematics",
+        subjectId: "subject-math",
+        className: "Basic 2",
+        classId: "class-basic-2",
+        teacherName: "",
+        academicYear: "2025/2026",
+        term: "Third",
+        continuousAssessment: 25,
+        maximumScore: 40,
+        examination: null,
+        totalScore: null,
+        grade: null,
+        remark: null,
+        notices: [],
+      }],
+    };
+    const [restoredEntry] = reconcileSavedImportStudentMatches(
+      [savedEntry],
+      [student("test-student-makeba", "Makeba Ogunjimi", "GDS-0033", "Basic 2")],
+    );
+
+    expect(restoredEntry.warnings).not.toContain("Select an academic session before import.");
+    expect(restoredEntry.warnings).not.toContain("Select a term before import.");
+    expect(isImportEntryReady(restoredEntry)).toBe(true);
+  });
+
   actualWorkbookTest("parses each student block in the school's workbook without losing unresolved identities", async () => {
     const workbookBuffer = readFileSync(actualWorkbookPath!);
     const roster = fixtureRoster(rosterFixturePath!);
@@ -1669,6 +1856,7 @@ describe("result workbook import preview", () => {
     expect(resolveExistingResultImportDecision([existing])).toEqual({ action: "skip" });
     expect(resolveExistingResultImportDecision([existing], existing.id)).toEqual({ action: "update", result: existing });
     expect(resolveExistingResultImportDecision([existing], "unmatched-id")).toEqual({ action: "skip" });
+    expect(resolveExistingResultImportDecision([existing, { ...existing, id: "duplicate-result" }])).toEqual({ action: "skip" });
   });
 
   it("automatically accepts a unique normalized name match", async () => {
@@ -2588,6 +2776,10 @@ describe("result workbook import preview", () => {
     expect(getImportReportDateErrors(entry)).toEqual([
       expect.stringContaining("Term ending"),
     ]);
+    expect(getImportReportDateErrors({
+      ...entry,
+      reportDetails: { ...entry.reportDetails!, termEnding: "", nextTermBegins: "" },
+    })).toEqual([]);
   });
 
   it("advances subject mapping to the next unresolved row and never marks unresolved work complete", () => {
@@ -3492,6 +3684,7 @@ describe("results workflow migration contract", () => {
         "i",
       ));
     });
+
     expect(reportMigration).toContain("revoke all on public.report_cards from public, anon, authenticated");
     expect(reportMigration).toContain("grant select, insert, update, delete on public.report_cards to authenticated");
     expect(reportMigration).toContain("create policy \"Report cards administrators manage\"");
@@ -3522,6 +3715,21 @@ describe("results workflow migration contract", () => {
     expect(reportCardService).toContain("if (lines.length === 0 && !reportCardRecord) return null;");
   });
 
+  it("allows imported result reports without inventing academic-session or attendance dates", () => {
+    expect(optionalReportTermMigration).toContain("alter column term_id drop not null");
+    expect(optionalReportTermMigration).toContain("if new.term_id is null then");
+    expect(optionalReportTermMigration).toContain("if matching_terms > 1 then");
+    expect(optionalReportTermMigration).toContain("if matching_terms = 1 then");
+    expect(optionalReportTermMigration).toContain("and r.status = 'Draft'");
+    expect(optionalReportTermMigration).toContain("Published or changed results cannot be overwritten by an import");
+    expect(optionalReportTermMigration).not.toContain("must resolve to exactly one saved term.");
+    expect(optionalReportTermMigration).not.toMatch(/insert into public\.(academic_sessions|terms)/i);
+    expect(optionalReportTermMigration).not.toContain("start_date");
+    expect(optionalReportTermMigration).not.toContain("end_date");
+    expect(reportCardDateFixMigration).toContain("term_ending date");
+    expect(reportCardDateFixMigration).toContain("next_term_begins date");
+  });
+
   it("wires discovered report periods to preview, edit, result review, and eligible publication", () => {
     const reviewFunction = resultsMigration.match(/create or replace function public\.review_result[\s\S]*?\$\$;/)?.[0] ?? "";
     const adminReviewFunction = adminRepublishMigration.match(/create or replace function public\.review_result[\s\S]*?\$\$;/)?.[0] ?? "";
@@ -3544,6 +3752,9 @@ describe("results workflow migration contract", () => {
     expect(reportCardsPage).toContain("Publish all ready reports");
     expect(reportCardsPage).toContain('aria-labelledby="results-progress-heading"');
     expect(reportCardsPage).toContain("Imports to review");
+    expect(reportCardsPage).toContain("collapseDuplicatePendingImportPupils(");
+    expect(resultsPage).toContain("collapseDuplicatePendingImportPupils(");
+    expect(reportCardsPage).not.toContain("Complete subjects can be published now.");
     expect(reportCardsPage).toContain("All pupil reports in this workspace are published.");
     expect(reportCardsPage).toContain('navigate("/admin/results")');
     expect(reportCardsPage).toContain("async function publishAllReadyReports()");
@@ -3644,10 +3855,8 @@ describe("results workflow migration contract", () => {
   });
 
   it("trusts confirmed pupil periods when workbook-level period headings are unavailable", () => {
-    expect(resultsPage).toContain("includedEntriesMatchRequestedPeriod");
-    expect(resultsPage).toContain("entry.academicYear.trim() === session");
-    expect(resultsPage).toContain("entry.term === term");
-    expect(resultsPage).toContain("!includedEntriesMatchRequestedPeriod");
+    expect(resultsPage).toContain("hasImportPeriodConflict");
+    expect(resultsPage).toContain("Worksheet-level period text is not enough");
   });
 
   it("marks already imported workbook pupils and separates published results from drafts", () => {
@@ -3917,7 +4126,7 @@ describe("pupil matching is a direct registered-record confirmation", () => {
     expect(resultsPage).toContain("Blank-mark subject rows are intentionally omitted");
     expect(resultsPage).toContain("Rows with no required marks are skipped and must not raise duplicate-result blockers");
     expect(resultsPage).toContain("a true class-number mismatch stays in draft");
-    expect(reportCardsPage).toContain("Ready — some marks left blank");
+    expect(reportCardsPage).toContain("Ready to save");
     expect(reportCardsPage).toContain("Enter marks");
   });
 });

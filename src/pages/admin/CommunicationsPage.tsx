@@ -113,14 +113,14 @@ export default function CommunicationsPage() {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [showTestModal, setShowTestModal] = useState(false);
-  const [testEmail, setTestEmail] = useState(() => user?.email ?? "");
+  const [testEmail, setTestEmail] = useState("");
+  const [testEmailEdited, setTestEmailEdited] = useState(false);
   const [testSending, setTestSending] = useState(false);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const [preview, setPreview] = useState<CommunicationPreview | null>(null);
   const [loading, setLoading] = useState(true);
-  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewState, setPreviewState] = useState<{ targetKey: string; preview: CommunicationPreview | null } | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -149,6 +149,11 @@ export default function CommunicationsPage() {
       report_type: selectedPublishedResultsPeriod.report_type,
     } : {}),
   }), [audience, classId, customRecipients, people, selectedPublishedResultsPeriod]);
+
+  const previewTargetKey = JSON.stringify(target);
+  const skipPreview = audience === "parents_published_results" && !selectedPublishedResultsPeriod;
+  const preview = previewState?.targetKey === previewTargetKey ? previewState.preview : null;
+  const previewLoading = !skipPreview && previewState?.targetKey !== previewTargetKey;
 
   const suggestions = useMemo(() => {
     const query = recipientInput.trim().toLowerCase();
@@ -242,10 +247,6 @@ export default function CommunicationsPage() {
     return "";
   }, [audience, classId, customEmails, error, loading, message, people.length, preview, previewLoading, selectedPublishedResultsPeriod, subject]);
 
-  useEffect(() => {
-    if (!testEmail && user?.email) setTestEmail(user.email);
-  }, [testEmail, user?.email]);
-
   useLayoutEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
@@ -275,7 +276,6 @@ export default function CommunicationsPage() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
     void getCommunicationDirectory()
       .then((data) => {
         if (active) setDirectory(data);
@@ -292,35 +292,26 @@ export default function CommunicationsPage() {
   }, []);
 
   useEffect(() => {
-    if (audience === "parents_published_results" && !selectedPublishedResultsPeriod) {
-      setPreview(null);
-      setPreviewLoading(false);
-      setError("");
-      return;
-    }
+    if (skipPreview) return;
 
     let active = true;
-    setPreviewLoading(true);
     void previewCommunication(target)
       .then((data) => {
         if (active) {
-          setPreview(data);
+          setPreviewState({ targetKey: previewTargetKey, preview: data });
           setError("");
         }
       })
       .catch((previewError) => {
         if (active) {
-          setPreview(null);
+          setPreviewState({ targetKey: previewTargetKey, preview: null });
           setError(previewError instanceof Error ? previewError.message : "Unable to preview recipients.");
         }
-      })
-      .finally(() => {
-        if (active) setPreviewLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [audience, selectedPublishedResultsPeriod, target]);
+  }, [previewTargetKey, skipPreview, target]);
 
   function handleAudienceChange(nextAudience: CommunicationAudience): void {
     setAudience(nextAudience);
@@ -367,7 +358,7 @@ export default function CommunicationsPage() {
     try {
       const latestPreview = await previewCommunication(target);
       const recipientListChanged = latestPreview.recipient_count !== preview.recipient_count || latestPreview.missing_email_count !== preview.missing_email_count || JSON.stringify(latestPreview.recipients) !== JSON.stringify(preview.recipients);
-      setPreview(latestPreview);
+      setPreviewState({ targetKey: previewTargetKey, preview: latestPreview });
       if (recipientListChanged) {
         setSuccess("The recipient list changed. Review the updated count and confirm again.");
         setShowConfirmationModal(true);
@@ -379,7 +370,9 @@ export default function CommunicationsPage() {
       setSuccess(result.duplicate ? "This message was already submitted." : `${result.accepted} email${result.accepted === 1 ? "" : "s"} accepted by the email provider.`);
       sessionStorage.removeItem(COMMUNICATION_DRAFT_KEY);
       setDirectory((current) => current ? { ...current, usage: result.usage } : current);
-      setPreview((current) => current ? { ...current, usage: result.usage } : current);
+      setPreviewState((current) => current?.targetKey === previewTargetKey && current.preview
+        ? { ...current, preview: { ...current.preview, usage: result.usage } }
+        : current);
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "The message could not be sent. Please try again.");
     } finally {
@@ -390,7 +383,7 @@ export default function CommunicationsPage() {
   async function handleTestSend(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (testSending) return;
-    const normalizedEmail = testEmail.trim().toLowerCase();
+    const normalizedEmail = (testEmailEdited ? testEmail : testEmail || user?.email || "").trim().toLowerCase();
     if (!emailPattern.test(normalizedEmail)) {
       setError("Enter a valid test email address.");
       return;
@@ -407,7 +400,9 @@ export default function CommunicationsPage() {
       setSuccess(result.duplicate ? "This test message was already submitted." : `Test email accepted for ${normalizedEmail}.`);
       setShowTestModal(false);
       setDirectory((current) => current ? { ...current, usage: result.usage } : current);
-      setPreview((current) => current ? { ...current, usage: result.usage } : current);
+      setPreviewState((current) => current?.targetKey === previewTargetKey && current.preview
+        ? { ...current, preview: { ...current.preview, usage: result.usage } }
+        : current);
     } catch (testError) {
       setError(testError instanceof Error ? testError.message : "The test email could not be sent.");
     } finally {
@@ -644,7 +639,7 @@ export default function CommunicationsPage() {
           <form onSubmit={(event) => void handleTestSend(event)} style={{ width: "min(480px, 100%)", background: "#fff", borderRadius: 16, padding: 24, color: "#243424", boxShadow: "0 24px 60px rgba(15,23,42,.25)" }}>
             <h2 id="communication-test-title">Send test email</h2>
             <p style={{ color: "#64748b", marginTop: 8 }}>Send the current message to one address only. It will not be sent to the selected audience.</p>
-            <label htmlFor="communication-test-email" style={{ display: "grid", gap: 6, marginTop: 18 }}>Test email address<input id="communication-test-email" type="email" value={testEmail} onChange={(event) => setTestEmail(event.target.value)} required /></label>
+            <label htmlFor="communication-test-email" style={{ display: "grid", gap: 6, marginTop: 18 }}>Test email address<input id="communication-test-email" type="email" value={testEmailEdited ? testEmail : testEmail || user?.email || ""} onChange={(event) => { setTestEmail(event.target.value); setTestEmailEdited(true); }} required /></label>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
               <button type="button" className="admin-preview-secondary-action" onClick={() => setShowTestModal(false)} disabled={testSending}>Cancel</button>
               <button type="submit" className="admin-preview-primary-action" disabled={testSending}>{testSending ? "Sending..." : "Send test email"}</button>

@@ -69,22 +69,51 @@ export default function AssignmentsPage() {
 
   const schoolId = useMemo(() => window.localStorage.getItem("activeSchoolId")?.trim() || import.meta.env.VITE_SCHOOL_ID?.toString().trim() || FALLBACK_SCHOOL_ID, []);
 
+  const loadAssignmentData = useCallback(async () => {
+    const [assignmentsData, classRows, subjectsData] = await Promise.all([getAssignmentsForStaff(), getClasses(), getSubjects()]);
+    const notificationStatusData = await getAssignmentNotificationStatuses(assignmentsData.map((assignment) => assignment.id));
+    return {
+      assignmentsData,
+      classRows,
+      subjectsData,
+      notificationStatusData,
+    };
+  }, []);
+
   const load = useCallback(async (): Promise<void> => {
-    setLoading(true);
     try {
-      const [assignmentRows, classRows, subjectRows] = await Promise.all([getAssignmentsForStaff(), getClasses(), getSubjects()]);
-      setAssignments(assignmentRows);
-      setClasses(classRows.filter((item) => item.status !== "Inactive"));
-      setSubjects(subjectRows);
-      setNotificationStatuses(await getAssignmentNotificationStatuses(assignmentRows.map((assignment) => assignment.id)));
+      const data = await loadAssignmentData();
+      setAssignments(data.assignmentsData);
+      setClasses(data.classRows.filter((item) => item.status !== "Inactive"));
+      setSubjects(data.subjectsData);
+      setNotificationStatuses(data.notificationStatusData);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load assignments.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadAssignmentData]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    void loadAssignmentData()
+      .then((data) => {
+        if (!active) return;
+        setAssignments(data.assignmentsData);
+        setClasses(data.classRows.filter((item) => item.status !== "Inactive"));
+        setSubjects(data.subjectsData);
+        setNotificationStatuses(data.notificationStatusData);
+      })
+      .catch((loadError: unknown) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : "Unable to load assignments.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [loadAssignmentData]);
 
   function resetForm(): void {
     setForm(EMPTY_FORM);
@@ -130,6 +159,7 @@ export default function AssignmentsPage() {
       }
       setOpen(false);
       resetForm();
+      setLoading(true);
       await load();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Unable to save assignment.");

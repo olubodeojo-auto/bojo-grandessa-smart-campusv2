@@ -365,7 +365,6 @@ export function getReportCenterResultsWithRecordedMarks(results: Result[]): Resu
 
 export function getReportCenterCompleteness(
   period: ReportCenterPeriod,
-  _allResults: Result[] = period.results,
 ): { complete: boolean; reason: string } {
   const recordedResults = getReportCenterResultsWithRecordedMarks(period.results);
   if (recordedResults.length === 0) {
@@ -408,9 +407,10 @@ export function getReportCenterPublishBlockReason(
   isAdministrator: boolean,
   publicationEvidence: ReadonlyMap<string, ResultPublicationEvidence> = new Map(),
 ): string {
+  void allResults;
   const publishableResults = getReportCenterResultsWithRecordedMarks(period.results);
   const publishablePeriod = { ...period, results: publishableResults };
-  const completeness = getReportCenterCompleteness(publishablePeriod, allResults);
+  const completeness = getReportCenterCompleteness(publishablePeriod);
   if (!completeness.complete) return completeness.reason;
   const unpublished = publishableResults.filter((result) => result.status !== "Published");
   if (unpublished.length === 0) return "All complete subject results in this report period are already published. Incomplete subject rows remain drafts.";

@@ -15,21 +15,34 @@ export default function GalleryPage() {
   const [title, setTitle] = useState("");
   const [caption, setCaption] = useState("");
 
+  const fetchImages = useCallback(() => getGalleryImages(), []);
+
   const loadImages = useCallback(async () => {
-    setLoading(true);
     try {
-      const data = await getGalleryImages();
-      setImages(data);
+      setImages(await fetchImages());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load gallery");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchImages]);
 
   useEffect(() => {
-    void loadImages();
-  }, [loadImages]);
+    let active = true;
+    void fetchImages()
+      .then((data) => {
+        if (active) setImages(data);
+      })
+      .catch((err: unknown) => {
+        if (active) setError(err instanceof Error ? err.message : "Failed to load gallery");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [fetchImages]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.currentTarget;
@@ -45,14 +58,9 @@ export default function GalleryPage() {
       setSuccess("Image uploaded successfully!");
       setTitle("");
       setCaption("");
-      // Null-safe reset of the file input (avoid using the pooled event after await)
-      try {
-        if (input) input.value = "";
-      } catch (resetErr) {
-        // ignore reset errors — not critical for functionality
-        // keep silent to avoid exposing DOM quirks to users
-      }
+      input.value = "";
       // Refresh gallery list after successful upload
+      setLoading(true);
       await loadImages();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -67,6 +75,7 @@ export default function GalleryPage() {
     try {
       setError("");
       await deleteGalleryImage(id);
+      setLoading(true);
       await loadImages();
       setSuccess("Image deleted successfully!");
     } catch (err) {

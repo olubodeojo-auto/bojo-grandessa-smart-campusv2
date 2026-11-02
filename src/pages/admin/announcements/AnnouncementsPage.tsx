@@ -25,20 +25,34 @@ export default function AnnouncementsPage() {
   const [success, setSuccess] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
-  const loadAnnouncements = useCallback(async () => {
+  const loadAnnouncements = useCallback(() => getAnnouncements(), []);
+
+  useEffect(() => {
+    let active = true;
+    void loadAnnouncements()
+      .then((data) => {
+        if (active) setAnnouncements(data);
+      })
+      .catch((err: unknown) => {
+        if (active) setError(err instanceof Error ? err.message : "Failed to load announcements");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [loadAnnouncements]);
+
+  const refreshAnnouncements = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
-      const data = await getAnnouncements();
-      setAnnouncements(data);
+      setAnnouncements(await loadAnnouncements());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load announcements");
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    void loadAnnouncements();
   }, [loadAnnouncements]);
 
   const openAddForm = () => {
@@ -98,7 +112,7 @@ export default function AnnouncementsPage() {
       }
 
       closeForm();
-      await loadAnnouncements();
+      await refreshAnnouncements();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save announcement");
     } finally {
@@ -112,7 +126,7 @@ export default function AnnouncementsPage() {
     try {
       setError("");
       await deleteAnnouncement(id);
-      await loadAnnouncements();
+      await refreshAnnouncements();
       setSuccess("Announcement deleted!");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed");
@@ -125,7 +139,7 @@ export default function AnnouncementsPage() {
       await updateAnnouncement(announcement.id, {
         published: !announcement.published,
       });
-      await loadAnnouncements();
+      await refreshAnnouncements();
       setSuccess(announcement.published ? "Announcement unpublished" : "Announcement published!");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update");

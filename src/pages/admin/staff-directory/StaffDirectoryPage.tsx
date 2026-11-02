@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { ArrowDown, ArrowUp, ImagePlus, PencilLine, Trash2, Users } from "lucide-react";
 
 import {
@@ -46,22 +46,34 @@ export default function StaffDirectoryPage() {
 
   const totalCount = useMemo(() => entries.length, [entries]);
 
-  const loadEntries = async () => {
-    setLoading(true);
-    setError("");
+  const fetchEntries = useCallback(() => listStaffDirectoryEntries(), []);
 
+  const loadEntries = useCallback(async () => {
     try {
-      setEntries(await listStaffDirectoryEntries());
+      setEntries(await fetchEntries());
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load team profiles.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchEntries]);
 
   useEffect(() => {
-    void loadEntries();
-  }, []);
+    let active = true;
+    void fetchEntries()
+      .then((data) => {
+        if (active) setEntries(data);
+      })
+      .catch((loadError: unknown) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : "Unable to load team profiles.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [fetchEntries]);
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -119,6 +131,8 @@ export default function StaffDirectoryPage() {
       }
 
       clearForm();
+      setLoading(true);
+      setError("");
       await loadEntries();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to save profile.");

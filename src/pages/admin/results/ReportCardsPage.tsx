@@ -13,7 +13,7 @@ import SectionCard from "../../../components/ui/SectionCard";
 import Button from "../../../components/ui/Button";
 import { type AcademicCalendarConfig } from "../../../config/grandessaCalendar";
 import { buildStudentReportCard, deleteReportCard, getImportReviewDrafts, getImportReviewWorkbooks, getSavedReportCards, markImportReviewDraftStatus, saveReportCardDetails, type SavedReportCard } from "../../../services/reportCardService";
-import { getImportScoreWarnings, getImportItemsForSave, isImportItemSkippableForMissingMarks, reconcileSavedImportStudentMatches, type ResultImportPreviewEntry } from "../../../services/resultImportService";
+import { collapseDuplicatePendingImportPupils, getImportScoreWarnings, getImportItemsForSave, isImportItemSkippableForMissingMarks, reconcileSavedImportStudentMatches, type ResultImportPreviewEntry } from "../../../services/resultImportService";
 import { getAcademicSessionSetups, saveAcademicSessionSetup } from "../../../services/academicSessionService";
 import { getClasses } from "../../../services/classService";
 import { deleteResult, getResultPublicationEvidence, getResults, publishResult, reviewResult } from "../../../services/resultService";
@@ -111,15 +111,21 @@ function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingIm
   if (scoreWarnings.length > 0 || itemsToSave.some((item) => (item.invalidMarks?.length ?? 0) > 0)) {
     return { label: "Check marks", explanation: "One or more scores needs correcting. Open the pupil review and jump to the subject row." };
   }
+  if (entry.warnings.length > 0) {
+    return { label: "Resolve import issue", explanation: entry.warnings[0] };
+  }
   const skippedItems = [...(entry.skippedItems ?? []), ...entry.items.filter(isImportItemSkippableForMissingMarks)];
   if (skippedItems.length > 0) {
     const names = [...new Set(skippedItems.map((item) => item.subjectName).filter(Boolean))].join(", ");
     return {
-      label: "Ready — some marks left blank",
-      explanation: `Complete subjects can be published now. Blank subjects (${names || "shown in the subject table"}) will be left out and can be completed later.`,
+      label: "Ready to save",
+      explanation: `Complete subjects can be saved as drafts. Blank subjects (${names || "shown in the subject table"}) will be left out and can be completed later.`,
     };
   }
-  return { label: "Ready to publish", explanation: "All entered subjects have complete marks." };
+  return {
+    label: "Ready to save",
+    explanation: "All entered subjects have complete marks. Save them as drafts; publication readiness is checked against the saved results.",
+  };
 }
 
 function statusBadgeStyle(status: string): React.CSSProperties {
@@ -297,35 +303,35 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
     setLoadingImportWorkbooks(true);
     setImportWorkbooksError("");
     try {
-      const [workbooks, roster] = await Promise.all([getImportReviewWorkbooks(), getStudents()]);
+      const [workbooks, roster, schoolClasses] = await Promise.all([
+        getImportReviewWorkbooks(),
+        getStudents(),
+        getClasses(),
+      ]);
       const workbookEntries = await Promise.all(workbooks.map(async (workbook) => {
         const entries = await getImportReviewDrafts(workbook.workbookKey, workbook.ownerId);
         const completedResultIds = entries.filter((entry) => Boolean(entry.workflowStatus))
           .flatMap((entry) => entry.importedResultIds ?? []);
-        const pendingEntries = reconcileSavedImportStudentMatches(
-          entries.filter((entry) => !entry.workflowStatus && entry.included !== false),
-          roster,
-        );
+        const reviewEntries = reconcileSavedImportStudentMatches(entries, roster, schoolClasses);
         const separatorIndex = workbook.workbookKey.indexOf(":");
         const sheetName = separatorIndex >= 0
           ? workbook.workbookKey.slice(separatorIndex + 1)
           : "Saved worksheet";
         return {
           completedResultIds,
-          pendingEntries: pendingEntries.map((entry) => ({
+          reviewEntries: reviewEntries.map((entry) => ({
             workbookKey: workbook.workbookKey,
             ownerId: workbook.ownerId,
             ownerName: workbook.ownerName,
             sheetName,
+            savedAt: entry.savedAt || workbook.updatedAt,
             entry,
           })),
         };
       }));
       setImportedResultIds(new Set(workbookEntries.flatMap((item) => item.completedResultIds)));
-      setPendingImportPupils(workbookEntries.flatMap((item) => item.pendingEntries).sort((left, right) =>
-        left.entry.studentName.localeCompare(right.entry.studentName)
-        || left.entry.academicYear.localeCompare(right.entry.academicYear)
-        || (left.entry.term ?? "").localeCompare(right.entry.term ?? ""),
+      setPendingImportPupils(collapseDuplicatePendingImportPupils(
+        workbookEntries.flatMap((item) => item.reviewEntries),
       ));
     } catch (err) {
       setImportWorkbooksError(err instanceof Error ? err.message : "Unable to load outstanding pupil imports.");
@@ -561,13 +567,18 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
     () => filteredReportPeriods.filter((period) => getReportCenterPeriodStatus(period) === "Published"),
     [filteredReportPeriods],
   );
+  const getPublicationEvidenceErrorForPeriod = useCallback(function getPublicationEvidenceErrorForPeriod(period: ReportCenterPeriod): string {
+    return period.results.some((result) => result.status === "Returned" && !result.published_at)
+      ? publicationEvidenceError
+      : "";
+  }, [publicationEvidenceError]);
   const publishableReportPeriods = useMemo(
     () => needsAttentionReportPeriods.filter((period) =>
       isAdministrator
       && !getPublicationEvidenceErrorForPeriod(period)
       && !getReportCenterPublishBlockReason(period, results, isAdministrator, publicationEvidence),
     ),
-    [needsAttentionReportPeriods, isAdministrator, results, publicationEvidence, publicationEvidenceError],
+    [needsAttentionReportPeriods, isAdministrator, results, publicationEvidence, getPublicationEvidenceErrorForPeriod],
   );
   const filteredPendingImportPupils = useMemo(() => pendingImportPupils.filter((review) => {
     const originalName = (review.entry as ResultImportPreviewEntry & { sourceStudentName?: string }).sourceStudentName
@@ -657,12 +668,6 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
       search: student ? `${student.first_name} ${student.last_name}`.trim() : "",
     });
     navigate(`/admin/results?${params.toString()}`);
-  }
-
-  function getPublicationEvidenceErrorForPeriod(period: ReportCenterPeriod): string {
-    return period.results.some((result) => result.status === "Returned" && !result.published_at)
-      ? publicationEvidenceError
-      : "";
   }
 
   async function markPublishedImportEntry(
@@ -1387,7 +1392,7 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
                 const sourceLabel = period.results.length > 0 && period.results.every((result) => importedResultIds.has(result.id))
                   ? "Imported"
                   : period.results.some((result) => importedResultIds.has(result.id)) ? "Mixed" : "Manual";
-                const completeness = getReportCenterCompleteness(period, results);
+                const completeness = getReportCenterCompleteness(period);
                 const periodEvidenceError = getPublicationEvidenceErrorForPeriod(period);
                 const publishBlockReason = periodEvidenceError
                   || getReportCenterPublishBlockReason(period, results, isAdministrator, publicationEvidence);
