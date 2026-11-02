@@ -44,6 +44,10 @@ export default function ReportCardDocument({ report }: { report: ReportCardData 
         </div>
       </section>
 
+      <p className="report-card-subject-count" role="note">
+        Published subject results: {report.lines.length}
+      </p>
+
       <section
         className="report-card-results official-results"
         role="region"
