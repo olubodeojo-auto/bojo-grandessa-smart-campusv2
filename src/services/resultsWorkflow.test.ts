@@ -55,7 +55,7 @@ import { defaultSchoolSettings } from "./schoolSettingsService";
 import ReportCardDocument from "../components/reports/ReportCardDocument";
 import { calculateResult, transitionAssessmentType, validateAssessmentMarks } from "../utils/resultCalculations";
 import { calculateEndOfTermMetrics, calculateMidtermMetrics } from "../utils/reportCalculations";
-import { calculateAgeFromDateOfBirth, getReportSummaryValues, isMatchingPublishedReportResult } from "../utils/reportCardPresentation";
+import { calculateAgeFromDateOfBirth, formatStudentName, getReportSummaryValues, isMatchingPublishedReportResult } from "../utils/reportCardPresentation";
 import { getResultBatchDraftResume, getSavedResultDrafts, groupSavedResultDrafts } from "../utils/resultDraftRecovery";
 import {
   acquireReportPublishLock,
@@ -469,8 +469,9 @@ describe("report-card session resolution and presentation", () => {
     expect(validateAcademicSessionSetup({ ...setup, isCurrent: false })).toMatch(/current term/);
   });
 
-  it("uses saved manual report summaries, calculated automatic summaries, and preserves blank values", () => {
+  it("uses saved End-of-Term manual summaries and falls back to calculated values when missing", () => {
     const values = {
+      reportType: "End-of-Term" as const,
       calculationMode: "Manual" as const,
       totalMarksObtained: 35,
       totalMarksObtainable: 50,
@@ -498,9 +499,9 @@ describe("report-card session resolution and presentation", () => {
       reportTotalMarksObtainable: null,
       reportStudentPercentage: null,
     })).toEqual({
-      totalMarksObtained: null,
-      totalMarksObtainable: null,
-      studentPercentage: null,
+      totalMarksObtained: 35,
+      totalMarksObtainable: 50,
+      studentPercentage: 70,
     });
   });
 
@@ -515,7 +516,7 @@ describe("report-card session resolution and presentation", () => {
     expect(isMatchingPublishedReportResult(publishedCa, { ...target, reportType: "End-of-Term" })).toBe(false);
     expect(isMatchingPublishedReportResult(publishedCombined, { ...target, reportType: "End-of-Term" })).toBe(true);
     expect(isMatchingPublishedReportResult(publishedExam, { ...target, reportType: "End-of-Term" })).toBe(true);
-    expect(isMatchingPublishedReportResult({ ...publishedCa, status: "Approved" }, { ...target, reportType: "Midterm" })).toBe(false);
+    expect(isMatchingPublishedReportResult({ ...publishedCa, status: "Approved" }, { ...target, reportType: "Midterm" })).toBe(true);
     expect(isMatchingPublishedReportResult({ ...publishedCa, class_id: "class-2" }, { ...target, reportType: "Midterm" })).toBe(false);
   });
 
@@ -531,7 +532,10 @@ describe("report-card session resolution and presentation", () => {
     const markup = renderToStaticMarkup(createElement(ReportCardDocument, { report }));
 
     expect(markup).toContain("TOTAL MARK OBTAINED");
-    expect(markup).toContain("<td>TOTAL MARK OBTAINED</td><td>28</td>");
+    expect(markup).toContain("<td>TOTAL MARK OBTAINED</td><td>35</td>");
+    expect(markup).not.toContain("<td>TOTAL MARK OBTAINED</td><td>28</td>");
+    expect(formatStudentName({ first_name: "Monjolaoluwa Ezekiel", middle_name: "Ezekiel", last_name: "Boge" })).toBe("Monjolaoluwa Ezekiel Boge");
+    expect(formatStudentName({ first_name: "Chimamanda Alexandra", middle_name: "Alexandra", last_name: "Mbadike" })).toBe("Chimamanda Alexandra Mbadike");
     expect(markup).toContain("Steady progress");
     expect(markup).toContain("Keep it up");
     expect(markup).toContain("AGE: 8");
@@ -691,6 +695,16 @@ describe("end-of-term report metrics", () => {
         totalMarksObtained: 0,
         totalMarksObtainable: 40,
         studentPercentage: 0,
+      });
+    });
+
+    it("uses the standard CA/40 maximum when a published Midterm row has no stored maximum", () => {
+      expect(calculateMidtermMetrics([
+        result({ assessment_type: "CA", status: "Published", continuous_assessment: 34, maximum_score: null, examination: null, total_score: null }),
+      ], "student-1", "class-1", "2025/2026", "Third")).toEqual({
+        totalMarksObtained: 34,
+        totalMarksObtainable: 40,
+        studentPercentage: 85,
       });
     });
   });

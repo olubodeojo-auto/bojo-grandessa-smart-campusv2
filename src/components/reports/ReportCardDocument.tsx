@@ -1,10 +1,10 @@
 import type { ReportCardData } from "../../types/reportCard";
-import { calculateAgeFromDateOfBirth, getReportSummaryValues } from "../../utils/reportCardPresentation";
+import { calculateAgeFromDateOfBirth, formatStudentName, getReportSummaryValues } from "../../utils/reportCardPresentation";
 
 export default function ReportCardDocument({ report }: { report: ReportCardData }) {
   const schoolName = report.schoolSettings.school_name || "";
   const schoolLevel = "KINDERGARTEN AND ELEMENTARY SCHOOL";
-  const pupilName = `${report.student.first_name} ${report.student.last_name}`.trim();
+  const pupilName = formatStudentName(report.student);
   const age = calculateAgeFromDateOfBirth(report.student.date_of_birth);
   const summary = getReportSummaryValues(report);
   const classDisplay = report.className?.trim() || "";
@@ -43,6 +43,10 @@ export default function ReportCardDocument({ report }: { report: ReportCardData 
           <p>TIME ABSENT: {report.attendance.timesAbsent ?? ""}</p>
         </div>
       </section>
+
+      <p className="report-card-subject-count" role="note">
+        Published subject results: {report.lines.length}
+      </p>
 
       <section
         className="report-card-results official-results"

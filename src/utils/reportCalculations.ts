@@ -1,5 +1,6 @@
 import type { Result } from "../types/result";
 import { calculateResult } from "./resultCalculations";
+import { isParentVisibleReportStatus } from "./reportCardPresentation";
 
 export type EndOfTermMetrics = {
   totalMarksObtained: number | null;
@@ -38,7 +39,7 @@ export function calculateEndOfTermMetrics(
   includeUnpublished = false,
 ): EndOfTermMetrics {
   const endOfTermRows = results.filter((result) =>
-    (includeUnpublished || result.status === "Published")
+    (includeUnpublished || isParentVisibleReportStatus(result.status))
     && result.class_id === classId
     && result.academic_year === academicYear
     && result.term === term
@@ -73,7 +74,7 @@ export function calculateMidtermMetrics(
   includeUnpublished = false,
 ): MidtermMetrics {
   const rows = results.filter((result) =>
-    (includeUnpublished || result.status === "Published")
+    (includeUnpublished || isParentVisibleReportStatus(result.status))
     && result.assessment_type === "CA"
     && result.class_id === classId
     && result.academic_year === academicYear
@@ -85,14 +86,12 @@ export function calculateMidtermMetrics(
     ? round(markedRows.reduce((sum, result) => sum + (result.continuous_assessment ?? 0), 0))
     : null;
   const allTargetRowsHaveMaxima = targetRows.length > 0
-    && targetRows.every((result) => result.maximum_score !== null
-      && result.maximum_score !== undefined
-      && result.maximum_score > 0);
+    && targetRows.every((result) => (result.maximum_score ?? 40) > 0);
   const allTargetMarksPresent = targetRows.length > 0
     && targetRows.every((result) => result.continuous_assessment !== null);
   const targetHasUniqueSubjects = new Set(targetRows.map(subjectKey).filter(Boolean)).size === targetRows.length;
   const totalMarksObtainable = allTargetRowsHaveMaxima
-    ? round(targetRows.reduce((sum, result) => sum + (result.maximum_score ?? 0), 0))
+    ? round(targetRows.reduce((sum, result) => sum + (result.maximum_score ?? 40), 0))
     : null;
   const studentPercentage = allTargetMarksPresent && allTargetRowsHaveMaxima
     && targetHasUniqueSubjects && totalMarksObtained !== null && totalMarksObtainable !== null
