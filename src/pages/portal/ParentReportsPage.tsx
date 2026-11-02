@@ -13,6 +13,7 @@ import { buildStudentReportCard, getReportHistoryByStudent } from "../../service
 import { getStudentByAccessCode, getParentStudents } from "../../services/studentService";
 import { useAuth } from "../../hooks/useAuth";
 import { findLatestAvailableReportPeriod } from "../../utils/resultPresentation";
+import { formatStudentName } from "../../utils/reportCardPresentation";
 import type { ReportCardData, ReportHistoryBySession, ReportTerm, ReportType } from "../../types/reportCard";
 import type { Student } from "../../types/student";
 
@@ -366,7 +367,7 @@ export default function ParentReportsPage() {
     () => selectedYearEntries.filter((entry) => entry.term === term),
     [selectedYearEntries, term],
   );
-  const studentName = student ? [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ") : "";
+  const studentName = student ? formatStudentName(student) : "";
   const fileStudentName = studentName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "Student";
 
   return (
