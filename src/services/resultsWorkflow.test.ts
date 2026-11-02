@@ -3936,7 +3936,7 @@ describe("published import queue cleanup", () => {
     expect(resultsPage).toContain("function isImportReviewFullyPublished");
     expect(resultsPage).toContain("matches.length === 1 && matches[0].status === \"Published\"");
     expect(resultsPage).toContain("outstandingImportPupils");
-    expect(resultsPage).toContain("Show\" : \"Hide");
+    expect(resultsPage).toContain('showPublishedImportReviews ? "Hide" : "Show"');
     expect(resultsPage).toContain("Already published");
   });
 });
