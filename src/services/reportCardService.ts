@@ -799,7 +799,9 @@ export async function saveReportCardDetails(params: {
       .eq("report_type", params.reportType)
       .limit(1);
     if (destinationReportError) throw new Error(`Unable to check the destination report details: ${destinationReportError.message}`);
-    if (destinationReport?.length) throw new Error("A report detail record already exists in the destination period. Resolve it before moving this report.");
+    if ((destinationReport?.length ?? 0) > 1) {
+      throw new Error("More than one report detail record already exists in the destination period. Ask an administrator to reconcile those duplicate report details before moving this report.");
+    }
   }
   if (periodChanged) {
     const assessmentTypes: Result["assessment_type"][] = params.reportType === "Midterm" ? ["CA"] : ["Combined", "Examination"];
@@ -812,7 +814,9 @@ export async function saveReportCardDetails(params: {
       .eq("term", params.term)
       .in("assessment_type", assessmentTypes);
     if (targetResultsError) throw new Error(`Unable to check the destination reporting period: ${targetResultsError.message}`);
-    if ((targetResults?.length ?? 0) > 0) throw new Error("This pupil already has results in the destination period. Resolve the existing report before moving this one.");
+    if ((targetResults?.length ?? 0) > 0) {
+      throw new Error(`The pupil already has ${targetResults.length} subject result(s) in ${params.academicYear}, ${params.term} Term. Nothing was moved or overwritten. Open that destination report and compare its subjects before retrying; do not delete the existing results.`);
+    }
   }
   const { data: existing, error: lookupError } = await supabase
     .from("report_cards")
@@ -851,7 +855,8 @@ export async function saveReportCardDetails(params: {
     term_ending: params.termEnding?.trim() || null,
     next_term_begins: params.nextTermBegins?.trim() || null,
   };
-  const existingId = existing?.[0]?.id as string | undefined;
+  const destinationReportId = periodChanged ? (destinationReport?.[0]?.id as string | undefined) : undefined;
+  const existingId = destinationReportId ?? (existing?.[0]?.id as string | undefined);
   if (periodChanged) {
     const assessmentTypes = params.reportType === "Midterm" ? ["CA"] : ["Combined", "Examination"];
     const { data: moved, error: moveError } = await supabase
