@@ -109,6 +109,25 @@ type PublishSavedPeriodParams = {
 
 type PendingImportPupilStatus = { label: string; explanation: string };
 
+function isImportReviewFullyPublished(entry: ResultImportPreviewEntry, results: Result[]): boolean {
+  if (!entry.selectedStudentId || !entry.academicYear.trim() || !entry.term) return false;
+  const assessmentType = entry.reportKind === "Midterm / Continuous Assessment" ? "CA"
+    : entry.reportKind === "End-of-Term / Year Report Card" ? "Combined" : null;
+  if (!assessmentType) return false;
+  const items = getImportItemsForSave(entry);
+  if (items.length === 0 || items.some((item) => !item.subjectId || !item.classId)) return false;
+  return items.every((item) => {
+    const academicYear = item.academicYear || entry.academicYear;
+    const term = item.term ?? entry.term;
+    if (!academicYear || !term || !item.subjectId || !item.classId) return false;
+    const matches = results.filter((result) => result.student_id === entry.selectedStudentId
+      && result.class_id === item.classId && result.subject_id === item.subjectId
+      && result.academic_year === academicYear && result.term === term
+      && (assessmentType === "CA" ? result.assessment_type === "CA"
+        : result.assessment_type === "Combined" || result.assessment_type === "Examination"));
+    return matches.length === 1 && matches[0].status === "Published";
+  });
+}
 function getPendingImportPupilStatus(entry: ResultImportPreviewEntry): PendingImportPupilStatus {
   const classWarning = entry.warnings.find((warning) =>
     /selected student is not currently|worksheet says|workbook class differs|class differs|worksheet class/i.test(warning),
@@ -349,6 +368,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
   const [selectedImportSheet, setSelectedImportSheet] = useState<string>("");
   const [savedImportWorkbooks, setSavedImportWorkbooks] = useState<ImportReviewWorkbook[]>([]);
   const [pendingImportPupils, setPendingImportPupils] = useState<PendingImportPupil[]>([]);
+  const [showPublishedImportReviews, setShowPublishedImportReviews] = useState<boolean>(false);
   const [loadingPendingImportPupils, setLoadingPendingImportPupils] = useState<boolean>(true);
   const [pendingImportPupilsError, setPendingImportPupilsError] = useState<string>("");
   const [selectedSavedWorkbookKey, setSelectedSavedWorkbookKey] = useState<string>("");
@@ -537,6 +557,9 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
     return () => { cancelled = true; };
   }, [isAdmin, user, loading, loadingSavedWorkbooks, savedImportWorkbooks, students, classes]);
 
+  const publishedImportPupils = useMemo(() => pendingImportPupils.filter((review) => isImportReviewFullyPublished(review.entry, results)), [pendingImportPupils, results]);
+  const outstandingImportPupils = useMemo(() => pendingImportPupils.filter((review) => !isImportReviewFullyPublished(review.entry, results)), [pendingImportPupils, results]);
+  const visibleImportPupils = showPublishedImportReviews ? [...outstandingImportPupils, ...publishedImportPupils] : outstandingImportPupils;
   const studentsMap = useMemo(() => {
     const map = new Map<string, Student>();
     students.forEach((student) => map.set(student.id, student));
@@ -2194,7 +2217,7 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <h2 id="imports-awaiting-reconciliation-results" style={{ margin: 0 }}>Imports awaiting reconciliation</h2>
                   <span style={{ borderRadius: 999, background: pendingImportPupils.length > 0 ? "#fef3c7" : "#dcfce7", color: pendingImportPupils.length > 0 ? "#92400e" : "#166534", padding: "4px 9px", fontSize: 12, fontWeight: 700 }}>
-                    {loadingPendingImportPupils ? "Checking…" : `${pendingImportPupils.length} pupil review(s)`}
+                    {loadingPendingImportPupils ? "Checking…" : `${outstandingImportPupils.length} outstanding`}
                   </span>
                 </div>
                 <p style={{ color: "#475569", margin: "6px 0 0" }}>
@@ -2202,6 +2225,11 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
                 </p>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {publishedImportPupils.length > 0 ? (
+                  <Button type="button" variant="secondary" onClick={() => setShowPublishedImportReviews((current) => !current)}>
+                    {showPublishedImportReviews ? "Hide" : "Show"} published ({publishedImportPupils.length})
+                  </Button>
+                ) : null}
                 <Button type="button" variant="secondary" onClick={() => void handleRefreshSavedWorkbooks()} disabled={loadingSavedWorkbooks || loadingPendingImportPupils}>
                   Refresh imports
                 </Button>
@@ -2216,13 +2244,13 @@ export default function ResultsPage({ embedded = false }: { embedded?: boolean }
             ) : null}
             {loadingPendingImportPupils ? (
               <p role="status" style={{ color: "#64748b", margin: "14px 0 0" }}>Loading outstanding pupil imports…</p>
-            ) : pendingImportPupils.length === 0 ? (
+            ) : visibleImportPupils.length === 0 ? (
               <p style={{ color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 10, padding: 12, margin: "14px 0 0" }}>
-                {pendingImportPupilsError ? "Outstanding imports could not be confirmed. Refresh to retry." : "No outstanding imports to reconcile."}
+                {pendingImportPupilsError ? "Outstanding imports could not be confirmed. Refresh to retry." : publishedImportPupils.length > 0 ? "All pupil imports are complete. Published reviews are hidden from the work queue." : "No outstanding imports to reconcile."}
               </p>
             ) : (
               <div style={{ display: "grid", gap: 10, marginTop: 14, maxHeight: 520, overflowY: "auto", paddingRight: 4 }}>
-                {pendingImportPupils.map((review) => {
+                {visibleImportPupils.map((review) => {
                   const entry = review.entry;
                   const entryWithSource = entry as ResultImportPreviewEntry & { sourceStudentName?: string };
                   const worksheetName = entryWithSource.sourceStudentName?.trim() || entry.studentName;
