@@ -9,7 +9,7 @@ import { getParentStudents, getStudents } from "./studentService";
 import { getSubjects } from "./subjectService";
 import { calculateResult, computeTotal, gradeFromTotal, remarkFromGrade } from "../utils/resultCalculations";
 import { calculateEndOfTermMetrics, calculateMidtermMetrics } from "../utils/reportCalculations";
-import { isMatchingPublishedReportResult } from "../utils/reportCardPresentation";
+import { isMatchingPublishedReportResult, isParentVisibleReportStatus } from "../utils/reportCardPresentation";
 import { resolveReportTermId, toStoredTermName, type AcademicTermMatch } from "../utils/reportTermResolution";
 import { resolveTemplateForClass } from "./reportTemplateEngine";
 import type { ReportCardData, ReportHistoryBySession, ReportHistoryItem, ReportTerm, ReportType, SubjectReportLine } from "../types/reportCard";
@@ -565,63 +565,85 @@ async function getReportCardRecord(
   return (data?.[0] as ReportCardRecord | undefined) ?? null;
 }
 
-export async function getReportHistoryByStudent(studentId: string, options: { parentScoped?: boolean } = {}): Promise<ReportHistoryBySession[]> {
-  const { results: allResults, classes } = await loadReportDependencies(options.parentScoped);
+export async function getReportHistoriesByStudents(
+  studentIds: string[],
+  options: { parentScoped?: boolean } = {},
+): Promise<Record<string, ReportHistoryBySession[]>> {
+  const uniqueStudentIds = [...new Set(studentIds.filter(Boolean))];
+  if (uniqueStudentIds.length === 0) return {};
+
+  const [parentStudents, classes, allResults] = await Promise.all([
+    options.parentScoped ? getParentStudents() : Promise.resolve(null),
+    getClasses(),
+    getResults(),
+  ]);
+  const selectedIds = new Set(uniqueStudentIds);
+  const parentAllowedIds = parentStudents ? new Set(parentStudents.map((student) => student.id)) : null;
   const classMap = new Map(classes.map((item) => [item.id, { class_name: item.class_name }]));
+  const periodsByStudent = new Map<string, Map<string, ReportHistoryItem>>();
 
-  const rows = allResults
-    .filter((result) => result.student_id === studentId && result.status === "Published")
-    .filter((result) => result.assessment_type === "CA"
-      || result.assessment_type === "Combined"
-      || result.assessment_type === "Examination")
-    .reduce<Map<string, ReportHistoryItem>>((acc, row) => {
-      const reportType: ReportType = row.assessment_type === "CA" ? "Midterm" : "End-of-Term";
-      const classId = row.class_id ?? row.class_name ?? "";
-      const key = `${row.academic_year}|${row.term}|${classId}|${reportType}`;
-      const existing = acc.get(key);
+  for (const row of allResults) {
+    if (!selectedIds.has(row.student_id)
+      || (parentAllowedIds && !parentAllowedIds.has(row.student_id))
+      || !isParentVisibleReportStatus(row.status)
+      || !["CA", "Combined", "Examination"].includes(row.assessment_type)) {
+      continue;
+    }
 
-      if (existing) {
-        existing.resultCount += 1;
-        existing.publishedCount += row.status === "Published" ? 1 : 0;
-        if (new Date(row.updated_at).getTime() > new Date(existing.latestUpdatedAt).getTime()) {
-          existing.latestUpdatedAt = row.updated_at;
-        }
-      } else {
-        acc.set(key, {
-          academicYear: row.academic_year,
-          term: normalizeTerm(row.term),
-          classId,
-          className: classLabel(row, classMap),
-          reportType,
-          resultCount: 1,
-          publishedCount: row.status === "Published" ? 1 : 0,
-          latestUpdatedAt: row.updated_at,
-        });
+    const reportType: ReportType = row.assessment_type === "CA" ? "Midterm" : "End-of-Term";
+    const classId = row.class_id ?? row.class_name ?? "";
+    const key = `${row.academic_year}|${row.term}|${classId}|${reportType}`;
+    const periods = periodsByStudent.get(row.student_id) ?? new Map<string, ReportHistoryItem>();
+    const existing = periods.get(key);
+
+    if (existing) {
+      existing.resultCount += 1;
+      existing.publishedCount += 1;
+      if (new Date(row.updated_at).getTime() > new Date(existing.latestUpdatedAt).getTime()) {
+        existing.latestUpdatedAt = row.updated_at;
       }
-
-      return acc;
-    }, new Map())
-    .values();
-
-  const sessionsMap = new Map<string, ReportHistoryItem[]>();
-
-  Array.from(rows).forEach((item) => {
-    const list = sessionsMap.get(item.academicYear) ?? [];
-    list.push(item);
-    sessionsMap.set(item.academicYear, list);
-  });
+    } else {
+      periods.set(key, {
+        academicYear: row.academic_year,
+        term: normalizeTerm(row.term),
+        classId,
+        className: classLabel(row, classMap),
+        reportType,
+        resultCount: 1,
+        publishedCount: 1,
+        latestUpdatedAt: row.updated_at,
+      });
+    }
+    periodsByStudent.set(row.student_id, periods);
+  }
 
   const orderedTerms: ReportTerm[] = ["First", "Second", "Third"];
+  return Object.fromEntries(uniqueStudentIds.map((studentId) => {
+    const sessionsMap = new Map<string, ReportHistoryItem[]>();
+    for (const item of (periodsByStudent.get(studentId) ?? new Map()).values()) {
+      const entries = sessionsMap.get(item.academicYear) ?? [];
+      entries.push(item);
+      sessionsMap.set(item.academicYear, entries);
+    }
+    const history = Array.from(sessionsMap.entries())
+      .map(([academicYear, entries]) => ({
+        academicYear,
+        entries: [...entries].sort((a, b) =>
+          orderedTerms.indexOf(a.term) - orderedTerms.indexOf(b.term)
+          || a.className.localeCompare(b.className)
+          || a.reportType.localeCompare(b.reportType)),
+      }))
+      .sort((a, b) => b.academicYear.localeCompare(a.academicYear));
+    return [studentId, history];
+  }));
+}
 
-  return Array.from(sessionsMap.entries())
-    .map(([academicYear, entries]) => ({
-      academicYear,
-      entries: [...entries].sort((a, b) =>
-        orderedTerms.indexOf(a.term) - orderedTerms.indexOf(b.term)
-        || a.className.localeCompare(b.className)
-        || a.reportType.localeCompare(b.reportType)),
-    }))
-    .sort((a, b) => b.academicYear.localeCompare(a.academicYear));
+export async function getReportHistoryByStudent(
+  studentId: string,
+  options: { parentScoped?: boolean } = {},
+): Promise<ReportHistoryBySession[]> {
+  const histories = await getReportHistoriesByStudents([studentId], options);
+  return histories[studentId] ?? [];
 }
 
 export async function buildStudentReportCard(
@@ -647,7 +669,7 @@ export async function buildStudentReportCard(
     (result) => result.student_id === studentId
       && result.academic_year === academicYear
       && result.term === term
-      && (options.includeUnpublished || result.status === "Published")
+      && (options.includeUnpublished || isParentVisibleReportStatus(result.status))
       && (isMidterm
         ? result.assessment_type === "CA"
         : result.assessment_type === "Combined" || result.assessment_type === "Examination")
@@ -693,7 +715,7 @@ export async function buildStudentReportCard(
         subjectName: subject?.subject_name ?? result.subject_name ?? "Unknown Subject",
         subjectCode: subject?.subject_code ?? "",
         continuousAssessment: result.continuous_assessment,
-        maximumScore: result.maximum_score ?? null,
+        maximumScore: result.maximum_score ?? (isMidterm ? 40 : null),
         examination: isMidterm ? null : result.examination,
         totalScore: automatic ? automatic.total : result.total_score,
         grade: automatic ? automatic.grade : result.grade,
@@ -742,9 +764,9 @@ export async function buildStudentReportCard(
     totalMarksObtainable: metrics.totalMarksObtainable,
     studentPercentage: metrics.studentPercentage,
     classAverage: reportCardRecord?.class_average ?? null,
-    reportTotalMarksObtained: reportCardRecord?.total_marks_obtained ?? null,
-    reportTotalMarksObtainable: reportCardRecord?.total_marks_obtainable ?? null,
-    reportStudentPercentage: reportCardRecord?.student_percentage ?? null,
+    reportTotalMarksObtained: isMidterm ? metrics.totalMarksObtained : reportCardRecord?.total_marks_obtained ?? null,
+    reportTotalMarksObtainable: isMidterm ? metrics.totalMarksObtainable : reportCardRecord?.total_marks_obtainable ?? null,
+    reportStudentPercentage: isMidterm ? metrics.studentPercentage : reportCardRecord?.student_percentage ?? null,
     classTeacherComment: reportCardRecord?.class_teacher_comment ?? reportCardRecord?.teacher_comment ?? "",
     headTeacherComment: reportCardRecord?.head_teacher_comment ?? reportCardRecord?.principal_comment ?? "",
     attendance,
