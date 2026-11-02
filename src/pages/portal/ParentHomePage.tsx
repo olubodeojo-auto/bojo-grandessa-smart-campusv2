@@ -144,7 +144,7 @@ export default function ParentHomePage() {
                                         to={reportLink(student.id, session.academicYear, term, type, entry.classId)}
                                       >
                                         <BookOpen size={15} />
-                                        <span>{type === "Midterm" ? "Midterm (CA)" : "End-of-Term"}</span>
+                                        <span>{type === "Midterm" ? `Midterm (CA) · ${entry.resultCount} subjects` : `End-of-Term · ${entry.resultCount} published rows`}</span>
                                         <ArrowRight size={14} />
                                       </Link>
                                     ));
