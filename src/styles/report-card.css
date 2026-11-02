@@ -273,34 +273,62 @@
     margin: 12mm;
   }
 
+  html,
   body {
     background: #ffffff !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
-  .card,
-  .report-toolbar,
-  button {
+  body * {
+    visibility: hidden !important;
+  }
+
+  #report-card-preview,
+  #report-card-preview * {
+    visibility: visible !important;
+  }
+
+  #report-card-preview {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 4mm !important;
+    border: 1px solid #374151 !important;
+    border-top: 4px solid #2e7d32 !important;
+    border-radius: 0 !important;
     box-shadow: none !important;
+    overflow: visible !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
   }
 
-  .report-card {
-    width: 100%;
-    max-width: 186mm;
-    border: 1px solid #374151;
-    border-top: 4px solid #2e7d32;
-    box-shadow: none;
-    border-radius: 0;
-    padding: 4mm;
-    margin: 0;
-    page-break-inside: avoid;
-    page-break-after: avoid;
+  #report-card-preview .report-card-results {
+    overflow: visible !important;
+    max-height: none !important;
   }
 
-  .report-card-results {
-    overflow: visible;
+  #report-card-preview .report-card-results table {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-collapse: collapse !important;
   }
 
-  .report-card-results table {
-    min-width: 0;
+  #report-card-preview tr,
+  #report-card-preview th,
+  #report-card-preview td {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  #report-card-preview thead {
+    display: table-header-group;
+  }
+
+  #report-card-preview tfoot {
+    display: table-footer-group;
   }
 }
