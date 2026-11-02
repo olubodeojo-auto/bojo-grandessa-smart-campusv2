@@ -471,6 +471,7 @@ describe("report-card session resolution and presentation", () => {
 
   it("uses saved manual report summaries, calculated automatic summaries, and preserves blank values", () => {
     const values = {
+      reportType: "End-of-Term" as const,
       calculationMode: "Manual" as const,
       totalMarksObtained: 35,
       totalMarksObtainable: 50,
