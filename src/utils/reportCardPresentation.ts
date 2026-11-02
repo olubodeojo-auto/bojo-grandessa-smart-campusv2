@@ -27,7 +27,7 @@ export interface ReportSummaryValues {
 
 export function getReportSummaryValues(
   report: Pick<ReportCardData,
-    | "calculationMode"
+    | "reportType"\n    | "calculationMode"
     | "totalMarksObtained"
     | "totalMarksObtainable"
     | "studentPercentage"
