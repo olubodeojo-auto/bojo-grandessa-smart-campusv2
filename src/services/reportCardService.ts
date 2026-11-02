@@ -586,7 +586,7 @@ export async function getReportHistoriesByStudents(
     if (!selectedIds.has(row.student_id)
       || (parentAllowedIds && !parentAllowedIds.has(row.student_id))
       || !isParentVisibleReportStatus(row.status)
-      || !["CA", "Combined", "Examination"].includes(row.assessment_type)) {
+      || (row.assessment_type !== "CA" && row.assessment_type !== "Combined" && row.assessment_type !== "Examination")) {
       continue;
     }
 
