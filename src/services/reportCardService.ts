@@ -779,6 +779,7 @@ export async function saveReportCardDetails(params: {
   const periodChanged = params.sourceAcademicYear !== params.academicYear || params.sourceTerm !== params.term;
   if (!params.academicYear.trim()) throw new Error("Choose an academic year before saving.");
   let destinationTermId: string | null = null;
+  let destinationReportId: string | undefined;
   if (periodChanged) {
     const { data: terms, error: termError } = await supabase
       .from("terms")
@@ -802,6 +803,7 @@ export async function saveReportCardDetails(params: {
     if ((destinationReport?.length ?? 0) > 1) {
       throw new Error("More than one report detail record already exists in the destination period. Ask an administrator to reconcile those duplicate report details before moving this report.");
     }
+    destinationReportId = destinationReport?.[0]?.id as string | undefined;
   }
   if (periodChanged) {
     const assessmentTypes: Result["assessment_type"][] = params.reportType === "Midterm" ? ["CA"] : ["Combined", "Examination"];
@@ -855,8 +857,8 @@ export async function saveReportCardDetails(params: {
     term_ending: params.termEnding?.trim() || null,
     next_term_begins: params.nextTermBegins?.trim() || null,
   };
-  const destinationReportId = periodChanged ? (destinationReport?.[0]?.id as string | undefined) : undefined;
-  const existingId = destinationReportId ?? (existing?.[0]?.id as string | undefined);
+  const sourceReportId = existing?.[0]?.id as string | undefined;
+  const existingId = destinationReportId ?? sourceReportId;
   if (periodChanged) {
     const assessmentTypes = params.reportType === "Midterm" ? ["CA"] : ["Combined", "Examination"];
     const { data: moved, error: moveError } = await supabase
@@ -874,6 +876,12 @@ export async function saveReportCardDetails(params: {
   if (existingId) {
     const { error } = await supabase.from("report_cards").update(payload).eq("id", existingId);
     if (error) throw error;
+    if (periodChanged && destinationReportId && sourceReportId && sourceReportId !== destinationReportId) {
+      const { error: deleteSourceError } = await supabase.from("report_cards").delete().eq("id", sourceReportId);
+      if (deleteSourceError) {
+        throw new Error(`The subject results and destination report details were saved, but the old report-detail record could not be cleaned up: ${deleteSourceError.message}. Refresh before retrying.`);
+      }
+    }
     return;
   }
 
