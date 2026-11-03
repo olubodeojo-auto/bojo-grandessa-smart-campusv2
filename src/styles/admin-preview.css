@@ -1468,3 +1468,71 @@
     -webkit-overflow-scrolling: touch;
   }
 }
+
+
+/* Mobile admin layout: keep the page inside the device viewport.
+   Horizontal scrolling belongs to wide tables/panels, not the whole workspace. */
+@media (max-width: 640px) {
+  .admin-preview-shell,
+  .admin-preview-frame,
+  .admin-preview-main,
+  .admin-preview-content {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .admin-preview-shell {
+    overflow-x: clip;
+  }
+
+  .admin-preview-main,
+  .admin-preview-content {
+    overflow-x: clip;
+  }
+
+  .admin-preview-topbar {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .admin-preview-topbar__left,
+  .admin-preview-topbar__right {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .admin-preview-topbar__right {
+    justify-content: flex-start;
+  }
+
+  .admin-preview-topbar__right > button {
+    margin-left: 0 !important;
+  }
+
+  .admin-preview-content {
+    padding: 12px;
+  }
+
+  .admin-preview-content > *,
+  .admin-preview-content :where(main, section, article, .card, .results-workspace-root) {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .admin-preview-page-header,
+  .admin-preview-section-head {
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+}
