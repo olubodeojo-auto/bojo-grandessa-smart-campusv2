@@ -369,3 +369,121 @@
     display: table-footer-group;
   }
 }
+
+
+/* Mobile on-screen report preview: fit the document to the phone viewport.
+   Keep wide End-of-Term score columns scrollable inside their own table region. */
+@media screen and (max-width: 640px) {
+  #report-card-preview.report-card {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 12px;
+    border-radius: 4px;
+    overflow: visible;
+  }
+
+  #report-card-preview .report-card-header {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 0 0 8px;
+    text-align: center;
+  }
+
+  #report-card-preview .report-card-header h1 {
+    font-size: clamp(17px, 5vw, 24px);
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
+  #report-card-preview .report-card-header h2,
+  #report-card-preview .report-card-header h3 {
+    font-size: clamp(10px, 3vw, 13px);
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  #report-card-preview .school-logo {
+    width: 52px;
+    height: 44px;
+    max-width: 52px;
+    max-height: 44px;
+    margin: 0 auto 5px;
+  }
+
+  #report-card-preview .official-meta,
+  #report-card-preview .report-card-subject-count,
+  #report-card-preview .official-comments,
+  #report-card-preview .report-card-footer {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  #report-card-preview .meta-row,
+  #report-card-preview .attendance-inline {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  #report-card-preview .meta-row p {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-align: left;
+  }
+
+  #report-card-preview .report-card-subject-count {
+    font-size: 13px;
+    text-align: center;
+  }
+
+  #report-card-preview .report-card-results {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  #report-card-preview.report-card--midterm .report-card-results {
+    overflow-x: visible;
+  }
+
+  #report-card-preview.report-card--midterm .report-card-results table {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    table-layout: fixed;
+  }
+
+  #report-card-preview.report-card--midterm .report-card-results th,
+  #report-card-preview.report-card--midterm .report-card-results td {
+    padding: 4px 3px;
+    font-size: 9px;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  #report-card-preview:not(.report-card--midterm) .report-card-results {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #report-card-preview .official-comments > div {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  #report-card-preview .official-footer {
+    font-size: 8px;
+    line-height: 1.35;
+  }
+
+  #report-card-preview .official-footer p span {
+    margin: 2px 4px;
+    overflow-wrap: anywhere;
+  }
+}
