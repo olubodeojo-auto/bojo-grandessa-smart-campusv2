@@ -487,3 +487,29 @@
     overflow-wrap: anywhere;
   }
 }
+
+
+/* The report preview is a document, not a horizontally pannable workspace.
+   Resetting the region per pupil prevents a previous table's scroll offset
+   from opening the next report halfway across the screen. */
+@media screen and (max-width: 840px) {
+  .report-preview-scroll-region > div:first-child {
+    display: none !important;
+  }
+
+  .report-preview-scroll-region > div:last-child {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    scroll-behavior: auto;
+  }
+
+  .report-preview-scroll-region #report-card-preview {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+}
