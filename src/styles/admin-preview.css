@@ -1447,3 +1447,24 @@
     transition: none;
   }
 }
+
+/* On phones, any bounded region that scrolls vertically must also allow
+   horizontal overflow instead of clipping wide content. */
+@media (max-width: 960px) {
+  .admin-preview-shell .admin-preview-sidebar {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-preview-shell :where(
+    [style*="overflow-y: auto"],
+    [style*="overflow-y: scroll"],
+    [style*="overflow: auto"],
+    [style*="overflow: scroll"]
+  ) {
+    overflow-x: auto !important;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
