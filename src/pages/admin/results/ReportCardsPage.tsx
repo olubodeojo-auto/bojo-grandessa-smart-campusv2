@@ -2158,7 +2158,7 @@ export default function ReportCardsPage({ embedded = false }: { embedded?: boole
           </AppModal>
           : null}
 
-          <ResultsScrollRegion key={`${report.student.id}-${report.academicYear}-${report.term}-${report.reportType}`} className="report-preview-scroll-region" label="Report card preview" maxHeight="min(75vh, 820px)">
+          <ResultsScrollRegion label="Report card preview" maxHeight="min(75vh, 820px)" key={`${report.student.id}-${report.academicYear}-${report.term}-${report.reportType}`} className="report-preview-scroll-region">
             <ReportCardDocument report={report} />
           </ResultsScrollRegion>
         </div>
